@@ -1,0 +1,42 @@
+import { Platform } from "react-native";
+import { colors } from "./colors";
+
+export const shadows = {
+  none: {},
+  card: Platform.select({
+    ios: {
+      shadowColor: colors.text.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.08,
+      shadowRadius: 18
+    },
+    android: {
+      elevation: 2
+    },
+    default: {}
+  }),
+  raised: Platform.select({
+    ios: {
+      shadowColor: colors.text.primary,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.12,
+      shadowRadius: 24
+    },
+    android: {
+      elevation: 4
+    },
+    default: {}
+  }),
+  switchThumb: Platform.select({
+    ios: {
+      shadowColor: colors.text.primary,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.08,
+      shadowRadius: 20
+    },
+    android: {
+      elevation: 2
+    },
+    default: {}
+  })
+} as const;

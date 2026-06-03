@@ -1,0 +1,82 @@
+{
+  "sourceOfTruth": "DESIGN.md",
+  "figmaCollection": "Wise / Trainer Tokens",
+  "themeShape": "theme.*",
+  "colors": {
+    "content": {
+      "primary": "#9FE870",
+      "onPrimary": "#0E0F0C",
+      "primaryActive": "#CDFFAD",
+      "primaryNeutral": "#C5EDAB",
+      "primaryPale": "#E2F6D5",
+      "ink": "#0E0F0C",
+      "inkDeep": "#163300",
+      "body": "#454745",
+      "mute": "#868685",
+      "disabled": "#CFCFCF"
+    },
+    "background": {
+      "canvas": "#FFFFFF",
+      "canvasSoft": "#EDEFEB",
+      "cardDivider": "#F5F4F2"
+    },
+    "status": {
+      "positive": "#2EAD4B",
+      "positiveDeep": "#054D28",
+      "warning": "#FFD11A",
+      "warningDeep": "#F38800",
+      "warningContent": "#4A3B1C",
+      "negative": "#D03238",
+      "negativeDeep": "#A72027",
+      "negativeDarkest": "#A7000D",
+      "negativeBg": "#320707"
+    },
+    "accent": {
+      "orange": "#FFC091",
+      "cyan": "#38C8FF"
+    }
+  },
+  "spacing": {
+    "xxs": 2,
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius": {
+    "none": 0,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "pill": 9999,
+    "full": 9999
+  },
+  "typography": {
+    "display": {
+      "mega": { "fontFamily": "Inter", "fontWeight": "700", "fontSize": 126, "lineHeight": 107.1, "letterSpacing": 0 },
+      "xxl": { "fontFamily": "Inter", "fontWeight": "700", "fontSize": 96, "lineHeight": 81.6, "letterSpacing": 0 },
+      "xl": { "fontFamily": "Inter", "fontWeight": "700", "fontSize": 64, "lineHeight": 54.4, "letterSpacing": 0 },
+      "lg": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 47, "lineHeight": 70.5, "letterSpacing": -0.108 },
+      "md": { "fontFamily": "Inter", "fontWeight": "700", "fontSize": 40, "lineHeight": 34, "letterSpacing": 0 },
+      "sm": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 32, "lineHeight": 38.4, "letterSpacing": -0.96 },
+      "xs": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 24, "lineHeight": 31.2, "letterSpacing": -0.48 }
+    },
+    "body": {
+      "lg": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 20, "lineHeight": 30, "letterSpacing": 0 },
+      "md": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 16, "lineHeight": 24, "letterSpacing": 0 },
+      "mdStrong": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 16, "lineHeight": 20, "letterSpacing": 0 },
+      "sm": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 14, "lineHeight": 20, "letterSpacing": 0 },
+        "smStrong": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 14, "lineHeight": 18, "letterSpacing": 0 },
+        "smCaption": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 12, "lineHeight": 16, "letterSpacing": 0 },
+        "caption": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 10, "lineHeight": 16, "letterSpacing": 0 }
+      },
+      "caption": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 12, "lineHeight": 16, "letterSpacing": 0 },
+      "button": {
+        "md": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 14, "lineHeight": 18, "letterSpacing": 0 }
+      }
+  }
+}

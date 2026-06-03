@@ -1,0 +1,393 @@
+{
+  "version": 1,
+  "sourceOfTruth": "DESIGN.md",
+  "figmaFileKey": "WX5ZEAu5746PYS5ScZlVhW",
+  "themeShape": "theme.*",
+  "components": [
+    {
+      "name": "Action",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Action",
+        "nodeId": "250:1890",
+        "sourceNodeId": "250:1890",
+        "variantProps": {
+          "layout": ["single", "stacked", "inline", "triple"]
+        }
+      },
+      "code": {
+        "component": "Action",
+        "path": "src/components/ui/Action.tsx",
+        "docs": "docs/design-system/components/action.md"
+      }
+    },
+    {
+      "name": "Modal",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Modal",
+        "nodeId": "284:1406",
+        "sourceNodeId": "250:1692",
+        "bodyNodeId": "250:1960",
+        "variantProps": {
+          "action": ["single", "stacked", "inline", "triple"],
+          "Show subline": [true, false],
+          "Subline": "text",
+          "Show body text": [true, false]
+        }
+      },
+      "code": {
+        "component": "Modal",
+        "path": "src/components/ui/Modal.tsx",
+        "docs": "docs/design-system/components/modal.md"
+      }
+    },
+    {
+      "name": "Card",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Card",
+        "nodeId": "295:1313",
+        "sourceNodeId": "295:1313",
+        "variantProps": {
+          "variant": ["dayPlan", "workout", "addWorkout"],
+          "dayPlanState": ["plan", "planNext"],
+          "workoutStatus": ["planned", "inProgress", "completed"],
+          "showAction": [true, false],
+          "showMenu": [true, false]
+        }
+      },
+      "code": {
+        "component": "Card",
+        "path": "src/components/ui/Card.tsx",
+        "docs": "docs/design-system/components/card.md"
+      }
+    },
+    {
+      "name": "CalendarDayStrip",
+      "domain": "calendar",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Day strip",
+        "nodeId": "327:1476",
+        "dayNodeId": "327:1421",
+        "sourceNodeId": "327:1476",
+        "variantProps": {
+          "state": ["past", "default", "selected", "disabled"],
+          "currentDay": [true, false],
+          "paging": ["singleWeek", "multiWeek"]
+        }
+      },
+      "code": {
+        "component": "CalendarDayStrip",
+        "path": "src/components/calendar/CalendarDayStrip.tsx",
+        "docs": "docs/design-system/components/calendar-day-strip.md"
+      }
+    },
+    {
+      "name": "ProgressBar",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "ProgressBar",
+        "nodeId": "295:2261",
+        "sourceNodeId": "295:2261",
+        "variantProps": {
+          "progress": ["0", "16", "33", "50", "66", "83", "100"]
+        }
+      },
+      "code": {
+        "component": "ProgressBar",
+        "path": "src/components/ui/ProgressBar.tsx",
+        "docs": "docs/design-system/components/progress-bar.md"
+      }
+    },
+    {
+      "name": "Approach",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Approach",
+        "nodeId": "387:3810",
+        "sourceNodeId": "387:3810",
+        "stateNodeId": "391:3325",
+        "noteModalNodeId": "453:7464",
+        "variantProps": {
+          "state": ["Default", "Select", "Move"],
+          "Delete": [true, false],
+          "subtitle": [true, false]
+        }
+      },
+      "code": {
+        "component": "Approach",
+        "path": "src/components/ui/Approach.tsx",
+        "docs": "docs/design-system/components/approach.md"
+      }
+    },
+    {
+      "name": "Alert",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Alert",
+        "nodeId": "215:948",
+        "sourceNodeId": "207:836",
+        "variantProps": {
+          "tone": ["neutral", "positive", "negative", "warning"],
+          "layout": ["compact", "expanded", "action"]
+        }
+      },
+      "code": {
+        "component": "Alert",
+        "path": "src/components/ui/Alert.tsx",
+        "docs": "docs/design-system/components/alert.md"
+      }
+    },
+    {
+      "name": "Button",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Button",
+        "nodeId": "137:126",
+        "sourceNodeId": "34:3412",
+        "variantProps": {
+          "type": ["primary", "secondary", "secondary neutral", "destructive", "tertiary"],
+          "size": ["large", "medium", "small", "medium icon", "small icon"],
+          "state": ["active", "disabled", "loading"],
+          "width": ["hug"]
+        }
+      },
+      "code": {
+        "component": "Button",
+        "path": "src/components/ui/Button.tsx",
+        "docs": "docs/design-system/components/button.md"
+      }
+    },
+    {
+      "name": "Loader",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Loader",
+        "nodeId": "146:1134",
+        "variantProps": {
+          "size": ["small", "medium"],
+          "tone": ["brand", "inverse", "negative", "neutral", "canvas"],
+          "state": ["state5", "state4", "state3", "state2", "01"]
+        }
+      },
+      "code": {
+        "component": "Loader",
+        "path": "src/components/ui/Loader.tsx",
+        "docs": "docs/design-system/components/loader.md"
+      }
+    },
+    {
+      "name": "Icon",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Icons",
+        "nodeId": "47:849",
+        "variantProps": {
+          "icon": ["Figma Icons names"]
+        }
+      },
+      "code": {
+        "component": "Icon",
+        "path": "src/components/ui/Icon.tsx",
+        "docs": "docs/design-system/components/icon.md"
+      }
+    },
+    {
+      "name": "Avatar",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Avatar",
+        "nodeId": "200:256",
+        "sourceNodeId": "177:778",
+        "stateNodeId": "34:3129",
+        "variantProps": {
+          "type": ["Icon", "Initials", "Image", "Count", "Pair", "Badge", "Notification"],
+          "size": ["40", "48", "56", "72"]
+        }
+      },
+      "code": {
+        "component": "Avatar",
+        "path": "src/components/ui/Avatar.tsx",
+        "docs": "docs/design-system/components/avatar.md"
+      }
+    },
+    {
+      "name": "List item/Cell",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "List item/Cell",
+        "nodeId": "265:1062",
+        "sourceNodeId": "34:4696",
+        "variantProps": {
+          "state": ["Default", "Pressed", "Disabled"],
+          "leading": ["none", "avatar", "icon"],
+          "trailing": ["none", "button", "checkbox", "radio", "icon", "switch", "badge", "text"],
+          "showEyebrow": ["true", "false"],
+          "showSubtitle": ["true", "false"],
+          "selected": ["true", "false"]
+        }
+      },
+      "code": {
+        "component": "ListItemCell",
+        "path": "src/components/ui/ListItemCell.tsx",
+        "docs": "docs/design-system/components/list-item-cell.md"
+      }
+    },
+    {
+      "name": "Badge",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Badge",
+        "nodeId": "89:596",
+        "variantProps": {
+          "tone": ["error", "info", "success", "warning", "neutral", "negativeSolid", "warningDeep", "primary"],
+          "size": ["md", "sm"],
+          "icon": ["true", "false"]
+        }
+      },
+      "code": {
+        "component": "Badge",
+        "path": "src/components/ui/Badge.tsx",
+        "docs": "docs/design-system/components/badge.md"
+      }
+    },
+    {
+      "name": "Checkbox",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Checkbox",
+        "nodeId": "34:3958",
+        "sourceNodeId": "34:3958",
+        "variantProps": {
+          "selected": ["Yes", "No"],
+          "state": ["Default", "Error", "Disabled"],
+          "size": ["md"],
+          "Show label": ["true", "false"]
+        }
+      },
+      "code": {
+        "component": "Checkbox",
+        "path": "src/components/ui/Checkbox.tsx",
+        "docs": "docs/design-system/components/checkbox.md"
+      }
+    },
+    {
+      "name": "Radio",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Radio",
+        "nodeId": "34:5090",
+        "sourceNodeId": "34:5090",
+        "variantProps": {
+          "selected": ["Yes", "No"],
+          "state": ["Default", "Error", "Disabled"],
+          "size": ["md"],
+          "Show label": ["true", "false"]
+        }
+      },
+      "code": {
+        "component": "Radio",
+        "path": "src/components/ui/Radio.tsx",
+        "docs": "docs/design-system/components/radio.md"
+      }
+    },
+    {
+      "name": "SegmentedControl",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "SegmentedControl",
+        "nodeId": "96:613",
+        "variantProps": {
+          "items": ["Two", "Three"],
+          "selected": ["First", "Second", "Third"],
+          "size": ["md"]
+        }
+      },
+      "code": {
+        "component": "SegmentedControl",
+        "path": "src/components/ui/SegmentedControl.tsx",
+        "docs": "docs/design-system/components/segmented-control.md"
+      }
+    },
+    {
+      "name": "Input",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Input",
+        "nodeId": "103:699",
+        "sourceNodeId": "34:4555",
+        "variantProps": {
+          "layout": ["Single", "Double"],
+          "state": ["Empty", "Default", "Focus", "Error", "Positive", "Warning", "Disabled", "PrefixFocus", "ValueFocus"],
+          "size": ["md"],
+          "Label#111:0": ["true", "false"],
+          "Message#111:13": ["true", "false"]
+        }
+      },
+      "code": {
+        "component": "Input",
+        "path": "src/components/ui/Input.tsx",
+        "docs": "docs/design-system/components/input.md"
+      }
+    },
+    {
+      "name": "TextArea",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "TextArea",
+        "nodeId": "116:678",
+        "sourceNodeId": "34:5221",
+        "variantProps": {
+          "state": ["Empty", "Default", "Focus", "Error", "Disabled"],
+          "size": ["md"],
+          "Label#124:0": ["true", "false"],
+          "Message#124:6": ["true", "false"]
+        }
+      },
+      "code": {
+        "component": "TextArea",
+        "path": "src/components/ui/TextArea.tsx",
+        "docs": "docs/design-system/components/text-area.md"
+      }
+    },
+    {
+      "name": "Switch",
+      "domain": "ui",
+      "status": "ready",
+      "figma": {
+        "componentSet": "Switch",
+        "nodeId": "128:10",
+        "sourceNodeId": "34:5194",
+        "variantProps": {
+          "selected": ["Yes", "No"],
+          "state": ["Default", "Disabled"],
+          "size": ["md"]
+        }
+      },
+      "code": {
+        "component": "Switch",
+        "path": "src/components/ui/Switch.tsx",
+        "docs": "docs/design-system/components/switch.md"
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Trainer App Kit Generator",
+  "id": "trainer-app-kit-generator-local",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "editorType": [
+    "figma"
+  ]
+}

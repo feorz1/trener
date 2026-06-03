@@ -1,0 +1,15 @@
+{
+  "name": "trainer-app-kit-generator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Figma development plugin that generates an editable trainer app design system kit.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "watch": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.109.0",
+    "typescript": "^5.3.3"
+  }
+}

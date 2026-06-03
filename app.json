@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Trainer Foundation",
+    "slug": "trainer-foundation",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "trainer",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#111827"
+      }
+    }
+  }
+}

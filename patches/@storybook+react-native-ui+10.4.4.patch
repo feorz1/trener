@@ -1,0 +1,53 @@
+diff --git a/node_modules/@storybook/react-native-ui/dist/index.js b/node_modules/@storybook/react-native-ui/dist/index.js
+index 754a9d8..648f56b 100644
+--- a/node_modules/@storybook/react-native-ui/dist/index.js
++++ b/node_modules/@storybook/react-native-ui/dist/index.js
+@@ -1565,7 +1565,8 @@ const desktopLogoContainer = {
+ };
+ const mobileContentStyle = {
+ 	flex: 1,
+-	overflow: "hidden"
++	overflow: "hidden",
++	flexDirection: "row"
+ };
+ const placeholderObject = {};
+ const iconFloatRightStyle = { marginLeft: "auto" };
+@@ -1618,9 +1619,10 @@ const Layout = ({ storyHash, story, storyBackgroundColor, children }) => {
+ 		borderRightWidth: 1
+ 	}), [desktopSidebarOpen, theme.appBorderColor]);
+ 	const desktopScrollViewContentContainerStyle = (0, _storybook_react_native_ui_common.useStyle)(() => ({ paddingBottom: insets.bottom }), [insets.bottom]);
+-	const desktopAddonsPanelStyle = (0, _storybook_react_native_ui_common.useStyle)(() => ({
+-		height: desktopAddonsPanelOpen ? 300 : void 0,
+-		borderTopWidth: 1,
++const desktopAddonsPanelStyle = (0, _storybook_react_native_ui_common.useStyle)(() => ({
++		width: desktopAddonsPanelOpen ? 320 : void 0,
++		alignSelf: "stretch",
++		borderLeftWidth: 1,
+ 		borderColor: theme.appBorderColor,
+ 		paddingTop: desktopAddonsPanelOpen ? 4 : 0,
+ 		padding: desktopAddonsPanelOpen ? 0 : 10
+diff --git a/node_modules/@storybook/react-native-ui/src/Layout.tsx b/node_modules/@storybook/react-native-ui/src/Layout.tsx
+index ae808b9..0aa36c4 100644
+--- a/node_modules/@storybook/react-native-ui/src/Layout.tsx
++++ b/node_modules/@storybook/react-native-ui/src/Layout.tsx
+@@ -40,7 +40,7 @@ const desktopLogoContainer = {
+   justifyContent: 'space-between',
+ } satisfies ViewStyle;
+ 
+-const mobileContentStyle = { flex: 1, overflow: 'hidden' } satisfies ViewStyle;
++const mobileContentStyle = { flex: 1, overflow: 'hidden', flexDirection: 'row' } satisfies ViewStyle;
+ 
+ const placeholderObject = {};
+ 
+@@ -142,8 +142,9 @@ export const Layout = ({
+ 
+   const desktopAddonsPanelStyle = useStyle(
+     () => ({
+-      height: desktopAddonsPanelOpen ? 300 : undefined,
+-      borderTopWidth: 1,
++      width: desktopAddonsPanelOpen ? 320 : undefined,
++      alignSelf: 'stretch',
++      borderLeftWidth: 1,
+       borderColor: theme.appBorderColor,
+       paddingTop: desktopAddonsPanelOpen ? 4 : 0,
+       padding: desktopAddonsPanelOpen ? 0 : 10,
