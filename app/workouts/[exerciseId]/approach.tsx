@@ -12,6 +12,11 @@ const DRAG_HANDLE_DELAY_MS = 120;
 
 type ApproachData = Record<string, ApproachCountItem[]>;
 
+function getSetListMinHeight(itemCount: number) {
+  if (itemCount === 0) return theme.spacing[0];
+  return itemCount * theme.sizes.approachCountRowMinHeight + (itemCount - 1) * theme.spacing.sm;
+}
+
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -85,7 +90,9 @@ export default function ExerciseApproachScreen() {
   const exercise = mockExercises.find((item) => item.id === currentExerciseId);
   const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
   const [sets, setSets] = useState(initialExerciseSets);
+  const [activeSetId, setActiveSetId] = useState<string | undefined>();
   const setsRef = useRef(initialExerciseSets);
+  const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
     const normalizedSets = nextSets.map((set, index) => ({ ...set, index: index + 1 }));
@@ -120,13 +127,13 @@ export default function ExerciseApproachScreen() {
     syncSets([...setsRef.current, { id: `set-${Date.now()}`, index: nextIndex, weight: 150, reps: 12 }]);
   };
 
-  const deleteSet = (setId: string) => {
+  const deleteSet = useCallback((setId: string) => {
     syncSets(setsRef.current.filter((set) => set.id !== setId));
-  };
+  }, [syncSets]);
 
-  const updateSet = (setId: string, patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => {
+  const updateSet = useCallback((setId: string, patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => {
     syncSets(setsRef.current.map((set) => (set.id === setId ? { ...set, ...patch } : set)));
-  };
+  }, [syncSets]);
 
   const deleteExercise = () => {
     if (!currentExerciseId) {
@@ -143,6 +150,7 @@ export default function ExerciseApproachScreen() {
 
   const commitSetOrder = useCallback(
     ({ data }: SortableGridDragEndParams<ApproachCountItem>) => {
+      setActiveSetId(undefined);
       const currentSets = setsRef.current;
       const nextSets = data;
 
@@ -156,7 +164,7 @@ export default function ExerciseApproachScreen() {
 
   const renderSet = useCallback(
     ({ index, item }: SortableGridRenderItemInfo<ApproachCountItem>) => (
-      <View style={styles.sortableSetItem}>
+      <View style={[styles.sortableSetItem, activeSetId === item.id && styles.activeSetItem]}>
         <ApproachCount
           item={{ ...item, index: index + 1 }}
           onDelete={() => deleteSet(item.id)}
@@ -169,7 +177,7 @@ export default function ExerciseApproachScreen() {
         />
       </View>
     ),
-    []
+    [activeSetId, deleteSet, updateSet]
   );
 
   return (
@@ -187,9 +195,10 @@ export default function ExerciseApproachScreen() {
             <Badge label={String(sets.length)} tone="neutral" size="s" icon={false} />
           </View>
 
-          <View style={styles.setList}>
+          <View style={setListStyle}>
             <Sortable.Grid
               activeItemScale={1}
+              activeItemShadowOpacity={0.12}
               columns={1}
               customHandle
               data={sets}
@@ -201,7 +210,10 @@ export default function ExerciseApproachScreen() {
               rowGap={theme.spacing.sm}
               strategy="insert"
               onDragEnd={commitSetOrder}
-              onDragStart={() => triggerImpact(Haptics.ImpactFeedbackStyle.Light)}
+              onDragStart={({ key }) => {
+                setActiveSetId(key);
+                triggerImpact(Haptics.ImpactFeedbackStyle.Light);
+              }}
               renderItem={renderSet}
             />
           </View>
@@ -253,6 +265,9 @@ const styles = StyleSheet.create({
   },
   sortableSetItem: {
     minHeight: theme.sizes.approachCountRowMinHeight
+  },
+  activeSetItem: {
+    ...theme.shadows.raised
   },
   dragHandle: {
     width: theme.sizes.approachStatusIcon,
