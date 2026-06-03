@@ -1,10 +1,9 @@
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Platform, ScrollView, StyleSheet, Text, View, type ListRenderItemInfo } from "react-native";
-import { DraxHandle, DraxList, type SortableReorderEvent } from "react-native-drax";
+import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import Sortable, { type SortableGridDragEndParams, type SortableGridRenderItemInfo } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DraxStaticList } from "@/components/DraxStaticList";
 import {
   Badge,
   Button,
@@ -119,10 +118,6 @@ function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
   void Haptics.impactAsync(style).catch(() => undefined);
 }
 
-function getRowHeight(id: string, rowHeights: Record<string, number>) {
-  return rowHeights[id] ?? theme.sizes.listItemGymMinHeight;
-}
-
 export default function NewWorkoutScreen() {
   const { clientId, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     clientId?: string;
@@ -150,10 +145,6 @@ export default function NewWorkoutScreen() {
   const [clientModalVisible, setClientModalVisible] = useState(false);
   const selectedClient = mockClients.find((client) => client.id === selectedClientId);
   const hasExercises = selectedExercises.length > 0;
-  const exerciseListHeight = selectedExercises.reduce<number>(
-    (height, exercise) => height + getRowHeight(exercise.id, exerciseRowHeights),
-    theme.spacing[0]
-  );
   const supersetConnections = useMemo(
     () =>
       selectedExercises.slice(0, -1).map((exercise, index) => {
@@ -258,7 +249,7 @@ export default function NewWorkoutScreen() {
     });
   }, []);
 
-  const commitExerciseOrder = useCallback(({ data }: SortableReorderEvent<WorkoutExercise>) => {
+  const commitExerciseOrder = useCallback(({ data }: SortableGridDragEndParams<WorkoutExercise>) => {
     const currentIds = orderedExerciseIdsRef.current;
     const nextIds = data.map((exercise) => exercise.id);
 
@@ -270,7 +261,7 @@ export default function NewWorkoutScreen() {
   }, []);
 
   const renderExercise = useCallback(
-    ({ item }: ListRenderItemInfo<WorkoutExercise>) => (
+    ({ item }: SortableGridRenderItemInfo<WorkoutExercise>) => (
       <View
         style={styles.exerciseRow}
         onLayout={(event) => updateExerciseRowHeight(item.id, event.nativeEvent.layout.height)}
@@ -286,9 +277,9 @@ export default function NewWorkoutScreen() {
           onAddSetPress={() => openExerciseApproach(item.id)}
           onDelete={() => removeExercise(item.id)}
           trailingSlot={
-            <DraxHandle style={styles.dragHandle}>
+            <Sortable.Handle style={styles.dragHandle}>
               <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.mute} />
-            </DraxHandle>
+            </Sortable.Handle>
           }
         />
       </View>
@@ -330,22 +321,21 @@ export default function NewWorkoutScreen() {
                 />
               ) : null}
               <View style={styles.selectedList}>
-                <DraxList
-                  animationConfig="snappy"
-                  component={DraxStaticList}
-                  containerStyle={[styles.exerciseSortableContainer, { height: exerciseListHeight }]}
+                <Sortable.Grid
+                  activeItemScale={1}
+                  columns={1}
+                  customHandle
                   data={selectedExercises}
-                  itemDraxViewProps={{
-                    dragHandle: true,
-                    hoverStyle: styles.dragHover
-                  }}
+                  dragActivationDelay={DRAG_HANDLE_DELAY_MS}
+                  inactiveItemOpacity={1}
+                  inactiveItemScale={1}
                   keyExtractor={(item) => item.id}
-                  lockToMainAxis
-                  longPressDelay={DRAG_HANDLE_DELAY_MS}
+                  overDrag="vertical"
+                  rowGap={theme.spacing[0]}
+                  strategy="insert"
+                  onDragEnd={commitExerciseOrder}
                   onDragStart={() => triggerImpact(Haptics.ImpactFeedbackStyle.Light)}
-                  onReorder={commitExerciseOrder}
                   renderItem={renderExercise}
-                  style={styles.exerciseSortableList}
                 />
               </View>
             </View>
@@ -476,14 +466,6 @@ const styles = StyleSheet.create({
     minWidth: theme.spacing[0],
     paddingRight: theme.spacing.sm
   },
-  exerciseSortableContainer: {
-    flex: 0,
-    backgroundColor: theme.colors.background.canvas
-  },
-  exerciseSortableList: {
-    flex: 0,
-    backgroundColor: theme.colors.background.canvas
-  },
   exerciseRow: {
     width: "100%"
   },
@@ -492,9 +474,6 @@ const styles = StyleSheet.create({
     height: theme.spacing.xl,
     alignItems: "center",
     justifyContent: "center"
-  },
-  dragHover: {
-    ...(theme.shadows.raised ?? {})
   },
   addAction: {
     padding: theme.spacing.lg

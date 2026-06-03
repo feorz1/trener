@@ -1,15 +1,13 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View, type ListRenderItemInfo } from "react-native";
-import { DraxHandle, DraxList, type SortableReorderEvent } from "react-native-drax";
+import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import Sortable, { type SortableGridDragEndParams, type SortableGridRenderItemInfo } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { DraxStaticList } from "@/components/DraxStaticList";
 import { ApproachCount, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
 import { theme } from "@/theme";
 
-const ROW_SLOT_HEIGHT = theme.sizes.approachCountRowMinHeight + theme.spacing.sm;
 const DRAG_HANDLE_DELAY_MS = 120;
 
 type ApproachData = Record<string, ApproachCountItem[]>;
@@ -88,7 +86,6 @@ export default function ExerciseApproachScreen() {
   const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
   const [sets, setSets] = useState(initialExerciseSets);
   const setsRef = useRef(initialExerciseSets);
-  const setListHeight = Math.max(theme.spacing[0], sets.length * ROW_SLOT_HEIGHT + theme.spacing.sm);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
     const normalizedSets = nextSets.map((set, index) => ({ ...set, index: index + 1 }));
@@ -145,7 +142,7 @@ export default function ExerciseApproachScreen() {
   };
 
   const commitSetOrder = useCallback(
-    ({ data }: SortableReorderEvent<ApproachCountItem>) => {
+    ({ data }: SortableGridDragEndParams<ApproachCountItem>) => {
       const currentSets = setsRef.current;
       const nextSets = data;
 
@@ -158,16 +155,16 @@ export default function ExerciseApproachScreen() {
   );
 
   const renderSet = useCallback(
-    ({ item }: ListRenderItemInfo<ApproachCountItem>) => (
+    ({ index, item }: SortableGridRenderItemInfo<ApproachCountItem>) => (
       <View style={styles.sortableSetItem}>
         <ApproachCount
-          item={item}
+          item={{ ...item, index: index + 1 }}
           onDelete={() => deleteSet(item.id)}
           onValueChange={(patch) => updateSet(item.id, patch)}
           trailingSlot={
-            <DraxHandle style={styles.dragHandle}>
+            <Sortable.Handle style={styles.dragHandle}>
               <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.body} />
-            </DraxHandle>
+            </Sortable.Handle>
           }
         />
       </View>
@@ -190,23 +187,24 @@ export default function ExerciseApproachScreen() {
             <Badge label={String(sets.length)} tone="neutral" size="s" icon={false} />
           </View>
 
-          <DraxList
-            animationConfig="snappy"
-            component={DraxStaticList}
-            containerStyle={[styles.setListContainer, { height: setListHeight }]}
-            data={sets}
-            itemDraxViewProps={{
-              dragHandle: true,
-              hoverStyle: styles.dragHover
-            }}
-            keyExtractor={(item) => item.id}
-            lockToMainAxis
-            longPressDelay={DRAG_HANDLE_DELAY_MS}
-            onDragStart={() => triggerImpact(Haptics.ImpactFeedbackStyle.Light)}
-            onReorder={commitSetOrder}
-            renderItem={renderSet}
-            style={styles.setList}
-          />
+          <View style={styles.setList}>
+            <Sortable.Grid
+              activeItemScale={1}
+              columns={1}
+              customHandle
+              data={sets}
+              dragActivationDelay={DRAG_HANDLE_DELAY_MS}
+              inactiveItemOpacity={1}
+              inactiveItemScale={1}
+              keyExtractor={(item) => item.id}
+              overDrag="vertical"
+              rowGap={theme.spacing.sm}
+              strategy="insert"
+              onDragEnd={commitSetOrder}
+              onDragStart={() => triggerImpact(Haptics.ImpactFeedbackStyle.Light)}
+              renderItem={renderSet}
+            />
+          </View>
 
           <View style={styles.addAction}>
             <Button label="Добавить" type="secondaryNeutral" width="fill" onPress={addSet} />
@@ -247,10 +245,6 @@ const styles = StyleSheet.create({
     ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink
   },
-  setListContainer: {
-    flex: 0,
-    backgroundColor: theme.colors.background.canvas
-  },
   setList: {
     flex: 0,
     paddingHorizontal: theme.spacing.lg,
@@ -258,17 +252,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   sortableSetItem: {
-    height: ROW_SLOT_HEIGHT,
-    paddingBottom: theme.spacing.sm
+    minHeight: theme.sizes.approachCountRowMinHeight
   },
   dragHandle: {
     width: theme.sizes.approachStatusIcon,
     height: theme.sizes.approachStatusIcon,
     alignItems: "center",
     justifyContent: "center"
-  },
-  dragHover: {
-    ...(theme.shadows.raised ?? {})
   },
   addAction: {
     padding: theme.spacing.lg
