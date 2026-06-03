@@ -8,8 +8,8 @@ import {
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, View } from "react-native";
-import { DraxProvider } from "react-native-drax";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import Sortable from "react-native-sortables";
 import { theme } from "@/theme";
 
 export default function RootLayout() {
@@ -30,7 +30,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background.canvasSoft }}>
-      <DraxProvider>
+      <Sortable.PortalProvider>
         <StatusBar style="dark" />
         <Stack
           screenOptions={{
@@ -38,7 +38,7 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: theme.colors.background.canvasSoft }
           }}
         />
-      </DraxProvider>
+      </Sortable.PortalProvider>
     </GestureHandlerRootView>
   );
 }
