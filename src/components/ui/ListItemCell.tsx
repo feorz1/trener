@@ -9,11 +9,18 @@ import {
   type StyleProp,
   type ViewStyle
 } from "react-native";
+import Animated from "react-native-reanimated";
 import { theme } from "@/theme";
 import { Avatar, type AvatarType } from "./Avatar";
 import { Badge, type BadgeTone } from "./Badge";
 import { Button } from "./Button";
 import { Checkbox, type CheckboxState } from "./Checkbox";
+import {
+  getGroupedListItemPosition,
+  getSelectedGroupedListItemPosition,
+  useAnimatedGroupedListItemRadius,
+  type GroupedListItemPosition
+} from "./groupedListItem";
 import { Icon, type IconName } from "./Icon";
 import { Radio, type RadioState } from "./Radio";
 import { Switch } from "./Switch";
@@ -21,6 +28,7 @@ import { Switch } from "./Switch";
 export type ListItemCellState = "default" | "pressed" | "disabled";
 export type ListItemCellLeading = "none" | "avatar" | "icon";
 export type ListItemCellTrailing = "none" | "button" | "checkbox" | "radio" | "icon" | "switch" | "badge" | "text";
+export type ListItemCellGroupPosition = GroupedListItemPosition;
 
 export type ListItemCellProps = Omit<PressableProps, "children" | "disabled" | "style"> & {
   title: string;
@@ -32,6 +40,7 @@ export type ListItemCellProps = Omit<PressableProps, "children" | "disabled" | "
   state?: ListItemCellState;
   disabled?: boolean;
   selected?: boolean;
+  groupPosition?: ListItemCellGroupPosition;
   showEyebrow?: boolean;
   showSubtitle?: boolean;
   avatarType?: AvatarType;
@@ -50,6 +59,18 @@ export type ListItemCellProps = Omit<PressableProps, "children" | "disabled" | "
   style?: StyleProp<ViewStyle>;
 };
 
+export function getListItemCellGroupPosition(index: number, count: number): ListItemCellGroupPosition {
+  return getGroupedListItemPosition(index, count);
+}
+
+export function getListItemCellSelectedGroupPosition(
+  selected: boolean,
+  previousSelected: boolean,
+  nextSelected: boolean
+): ListItemCellGroupPosition {
+  return getSelectedGroupedListItemPosition(selected, previousSelected, nextSelected);
+}
+
 export function ListItemCell({
   title,
   eyebrow,
@@ -60,6 +81,7 @@ export function ListItemCell({
   state = "default",
   disabled,
   selected = false,
+  groupPosition = "single",
   showEyebrow = Boolean(eyebrow),
   showSubtitle = Boolean(subtitle),
   avatarType = "icon",
@@ -82,52 +104,57 @@ export function ListItemCell({
   const isDisabled = disabled || state === "disabled";
   const textColor = isDisabled ? theme.colors.content.mute : theme.colors.content.ink;
   const secondaryColor = isDisabled ? theme.colors.content.mute : theme.colors.content.body;
+  const radiusStyle = useAnimatedGroupedListItemRadius(groupPosition);
 
   return (
-    <Pressable
-      {...pressableProps}
-      accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityRole={pressableProps.onPress ? "button" : undefined}
-      accessibilityState={{ disabled: isDisabled }}
-      disabled={isDisabled}
-      style={({ pressed }) => [
-        styles.root,
-        selected && styles.selected,
-        state === "pressed" && styles.pressed,
-        pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
-        style
-      ]}
-    >
-      {leadingSlot ?? renderLeading({ leading, avatarType, avatarSource, avatarInitials, leadingIconName, isDisabled })}
+    <Animated.View style={[styles.itemShell, radiusStyle, style]}>
+      <Pressable
+        {...pressableProps}
+        accessibilityLabel={accessibilityLabel ?? title}
+        accessibilityRole={pressableProps.onPress ? "button" : undefined}
+        accessibilityState={{ disabled: isDisabled }}
+        disabled={isDisabled}
+        style={({ pressed }) => {
+          const isPressed = state === "pressed" || (pressed && !isDisabled);
 
-      <View style={styles.content}>
-        {showEyebrow && eyebrow ? <Text style={[styles.eyebrow, { color: secondaryColor }]}>{eyebrow}</Text> : null}
-        <Text numberOfLines={1} style={[styles.title, { color: textColor }]}>
-          {title}
-        </Text>
-        {showSubtitle && subtitle ? (
-          <Text numberOfLines={1} style={[styles.subtitle, { color: secondaryColor }]}>
-            {subtitle}
+          return [
+            styles.root,
+            selected && styles.selected,
+            isPressed && (selected ? styles.selectedPressed : styles.pressed),
+            isDisabled && styles.disabled
+          ];
+        }}
+      >
+        {leadingSlot ?? renderLeading({ leading, avatarType, avatarSource, avatarInitials, leadingIconName, isDisabled })}
+
+        <View style={styles.content}>
+          {showEyebrow && eyebrow ? <Text style={[styles.eyebrow, { color: secondaryColor }]}>{eyebrow}</Text> : null}
+          <Text numberOfLines={1} style={[styles.title, { color: textColor }]}>
+            {title}
           </Text>
-        ) : null}
-      </View>
+          {showSubtitle && subtitle ? (
+            <Text numberOfLines={1} style={[styles.subtitle, { color: secondaryColor }]}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
 
-      {trailingSlot ??
-        renderTrailing({
-          trailing,
-          trailingText,
-          trailingIconName,
-          buttonLabel,
-          badgeLabel,
-          badgeTone,
-          selected,
-          isDisabled,
-          checkboxState,
-          radioState,
-          onSelectedChange
-        })}
-    </Pressable>
+        {trailingSlot ??
+          renderTrailing({
+            trailing,
+            trailingText,
+            trailingIconName,
+            buttonLabel,
+            badgeLabel,
+            badgeTone,
+            selected,
+            isDisabled,
+            checkboxState,
+            radioState,
+            onSelectedChange
+          })}
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -196,6 +223,10 @@ function renderTrailing({
 }
 
 const styles = StyleSheet.create({
+  itemShell: {
+    alignSelf: "stretch",
+    overflow: "hidden"
+  },
   root: {
     minHeight: theme.sizes.listItemCellMinHeight,
     alignSelf: "stretch",
@@ -204,7 +235,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
-    borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvas
   },
   pressed: {
@@ -212,6 +242,9 @@ const styles = StyleSheet.create({
   },
   selected: {
     backgroundColor: theme.colors.content.primaryPale
+  },
+  selectedPressed: {
+    opacity: 0.88
   },
   disabled: {
     opacity: 0.62

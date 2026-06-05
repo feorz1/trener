@@ -115,7 +115,8 @@ const styles = StyleSheet.create({
   root: {
     width: theme.sizes.textAreaMdWidth,
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
     gap: theme.spacing.sm
   },
   rootFill: {

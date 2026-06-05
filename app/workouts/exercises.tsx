@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Chip, Divider, ListItemGym, Navigation, Search, StateSelect } from "@/components/ui";
+import { Button, Chip, Divider, ListItemGym, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
 import { theme } from "@/theme";
 
@@ -17,8 +17,10 @@ function getAdjacentConnectionIds(ids: string[]) {
 }
 
 export default function ExerciseSelectionScreen() {
-  const { clientId, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     clientId?: string;
+    clientName?: string;
+    date?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
@@ -28,6 +30,7 @@ export default function ExerciseSelectionScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedFromParams);
   const [search, setSearch] = useState("");
   const normalizedSearch = search.trim().toLowerCase();
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   const filteredExercises = useMemo(() => {
     if (!normalizedSearch) return mockExercises;
@@ -46,6 +49,8 @@ export default function ExerciseSelectionScreen() {
       pathname: "/workouts/new",
       params: {
         ...(clientId ? { clientId } : {}),
+        ...(clientName ? { clientName } : {}),
+        ...(date ? { date } : {}),
         ...(selectedIds.length > 0 ? { exerciseIds: selectedIds.join(",") } : {}),
         ...(nextSupersetConnectionIds.length > 0 ? { supersetConnectionIds: nextSupersetConnectionIds.join(",") } : {}),
         ...(approachData ? { approachData } : {})
@@ -64,27 +69,31 @@ export default function ExerciseSelectionScreen() {
         </View>
       </View>
 
-      <Divider width="fill" tone="canvasSoft" />
-
       <View style={styles.body}>
-        <StateSelect selectedCount={selectedIds.length} label="Выбрано" resetLabel="Сбросить" width="fill" onReset={() => setSelectedIds([])} />
-        <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-          {filteredExercises.map((exercise) => {
-            const selected = selectedIds.includes(exercise.id);
+        <Divider width="fill" tone="canvasSoft" />
+        <View style={styles.bodyContent}>
+          <StateSelect selectedCount={selectedIds.length} label="Выбрано" resetLabel="Сбросить" width="fill" onReset={() => setSelectedIds([])} />
+          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+            {filteredExercises.map((exercise, index) => {
+              const selected = selectedIdSet.has(exercise.id);
+              const previousSelected = index > 0 && selectedIdSet.has(filteredExercises[index - 1].id);
+              const nextSelected = index < filteredExercises.length - 1 && selectedIdSet.has(filteredExercises[index + 1].id);
 
-            return (
-              <ListItemGym
-                key={exercise.id}
-                title={exercise.name}
-                mode={selected ? "selected" : "default"}
-                width="fill"
-                selected={selected}
-                onPress={() => toggleExercise(exercise.id)}
-                onSelectedChange={() => toggleExercise(exercise.id)}
-              />
-            );
-          })}
-        </ScrollView>
+              return (
+                <ListItemGym
+                  key={exercise.id}
+                  title={exercise.name}
+                  groupPosition={getListItemGymSelectedGroupPosition(selected, previousSelected, nextSelected)}
+                  mode={selected ? "selected" : "default"}
+                  width="fill"
+                  selected={selected}
+                  onPress={() => toggleExercise(exercise.id)}
+                  onSelectedChange={() => toggleExercise(exercise.id)}
+                />
+              );
+            })}
+          </ScrollView>
+        </View>
       </View>
 
       <View style={styles.footer}>
@@ -116,10 +125,14 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
-    paddingTop: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
   },
+  bodyContent: {
+    flex: 1,
+    paddingTop: theme.spacing.lg
+  },
   list: {
+    gap: theme.spacing.xxs,
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing["3xl"]
   },

@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-native";
 import { View } from "react-native";
 import { theme } from "@/theme";
-import { ListItemGym, type ListItemGymMode } from "./ListItemGym";
+import { ListItemGym, getListItemGymGroupPosition, getListItemGymSelectedGroupPosition, type ListItemGymMode } from "./ListItemGym";
 
 const modes: ListItemGymMode[] = ["default", "selected", "move"];
 
@@ -49,6 +49,50 @@ export const SwipeDelete: Story = {
   }
 };
 
+export const GroupedSelectedList: Story = {
+  render: () => (
+    <View style={{ gap: theme.spacing.xxs }}>
+      {exercises.map((item, index) => (
+        <ListItemGym
+          key={item}
+          title={item}
+          groupPosition={getListItemGymGroupPosition(index, exercises.length)}
+          mode="selected"
+          selected
+        />
+      ))}
+    </View>
+  )
+};
+
+export const AdjacentSelectedPair: Story = {
+  render: () => {
+    const selectedFlags = [true, true, false];
+
+    return (
+      <View style={{ gap: theme.spacing.xxs }}>
+        {exercises.map((item, index) => {
+          const selected = selectedFlags[index] ?? false;
+
+          return (
+            <ListItemGym
+              key={item}
+              title={item}
+              groupPosition={getListItemGymSelectedGroupPosition(
+                selected,
+                selectedFlags[index - 1] ?? false,
+                selectedFlags[index + 1] ?? false
+              )}
+              mode={selected ? "selected" : "default"}
+              selected={selected}
+            />
+          );
+        })}
+      </View>
+    );
+  }
+};
+
 export const ReorderableList: Story = {
   render: () => {
     const [items, setItems] = useState(exercises);
@@ -66,7 +110,7 @@ export const ReorderableList: Story = {
     };
 
     return (
-      <View style={{ gap: theme.spacing.sm }}>
+      <View style={{ gap: theme.spacing.xxs }}>
         {items.map((item, index) => (
           <ListItemGym
             key={item}

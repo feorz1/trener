@@ -3,6 +3,7 @@
 Use only:
 
 - `theme.radius.none`
+- `theme.radius.s`
 - `theme.radius.sm`
 - `theme.radius.md`
 - `theme.radius.lg`
@@ -11,4 +12,3 @@ Use only:
 - `theme.radius.full`
 
 Do not use raw border radius numbers inside component code.
-

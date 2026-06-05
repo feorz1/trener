@@ -42,8 +42,8 @@ export function Card({
   dayPlanState = "plan",
   workoutStatus = "planned",
   dayTitle = "План 5 мая",
-  dayCount = "5 занятий",
-  dayMeta = "Следующая через 25 минут",
+  dayCount = "5 тренировок",
+  dayMeta = "Следующая через 1 ч 20 мин",
   muscleGroup = "Руки",
   muscleIconName = "muscle arms",
   clientName = "Константин",
@@ -197,8 +197,7 @@ const styles = StyleSheet.create({
     color: theme.colors.content.primaryPale
   },
   planCount: {
-    ...theme.typography.display.md,
-    lineHeight: theme.typography.display.md.fontSize + theme.spacing.xs,
+    ...theme.typography.display.sm,
     color: theme.colors.content.primary
   },
   planMeta: {
@@ -212,7 +211,7 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.lg
   },
   planButton: {
-    minHeight: theme.sizes.buttonMdHeight
+    minHeight: theme.typography.button.md.lineHeight + theme.spacing.md + theme.spacing.md
   },
   workoutRoot: {
     position: "relative",

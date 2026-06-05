@@ -9,6 +9,7 @@
 ## Tokens
 
 - `radius/none` -> `theme.radius.none`
+- `radius/s` -> `theme.radius.s`
 - `radius/sm` -> `theme.radius.sm`
 - `radius/md` -> `theme.radius.md`
 - `radius/lg` -> `theme.radius.lg`
@@ -22,4 +23,3 @@
 - Cards and primary surfaces usually use `radius/xl`.
 - Inputs and compact controls usually use `radius/md`.
 - Do not use raw border radius numbers in component code.
-

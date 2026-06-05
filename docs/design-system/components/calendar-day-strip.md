@@ -11,7 +11,7 @@
 
 ## Anatomy
 
-- `root`: horizontal week strip with clipped rounded corners.
+- `root`: horizontal week strip with clipped overflow and no container radius.
 - `week page`: seven day cells. Paging moves exactly one week.
 - `day cell`: pressable date surface.
 - `weekday`: short weekday label.
@@ -63,7 +63,7 @@ type CalendarDayStripItem = {
 | strip width | component size | `theme.sizes.calendarDayStripWidth` |
 | day height | component size | `theme.sizes.calendarDayHeight` |
 | current day dot | component size | `theme.sizes.calendarDayDot` |
-| strip radius | `radius/xl` | `theme.radius.xl` |
+| strip radius | none | no root `borderRadius` |
 | day radius | `radius/lg` | `theme.radius.lg` |
 | strip padding | `spacing/xxs` | `theme.spacing.xxs` |
 | day padding | `spacing/sm` | `theme.spacing.sm` |

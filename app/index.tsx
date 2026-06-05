@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { router } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
@@ -9,6 +9,7 @@ import { theme } from "@/theme";
 import type { WorkoutStatus } from "@/types";
 
 type PlanningModalStep = "closed" | "choice" | "client";
+type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
 type TodayWorkout = {
   id: string;
@@ -21,6 +22,28 @@ type TodayWorkout = {
 };
 
 const weekdayShort = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
+const repeatDayByNativeWeekday: Record<number, RepeatDay> = {
+  0: "sunday",
+  1: "monday",
+  2: "tuesday",
+  3: "wednesday",
+  4: "thursday",
+  5: "friday",
+  6: "saturday"
+};
+const repeatDayKeys = new Set<RepeatDay>(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
+
+function firstParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function parseRepeatDays(value?: string) {
+  if (!value) return [];
+
+  return value
+    .split(",")
+    .filter((day): day is RepeatDay => repeatDayKeys.has(day as RepeatDay));
+}
 
 function startOfDay(date: Date) {
   const value = new Date(date);
@@ -39,6 +62,15 @@ function getDateKey(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(value?: string) {
+  if (!value) return undefined;
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+
+  return startOfDay(new Date(year, month - 1, day));
 }
 
 function getWeekStart(date: Date) {
@@ -66,6 +98,26 @@ function getWeekItems(today: Date): CalendarDayStripItem[] {
   });
 }
 
+function getWeekPages(anchorDate: Date, today: Date): CalendarDayStripItem[][] {
+  const anchorWeekStart = getWeekStart(anchorDate);
+
+  return Array.from({ length: 5 }, (_, weekIndex) => {
+    const weekStart = addDays(anchorWeekStart, (weekIndex - 2) * 7);
+    return getWeekItems(weekStart);
+  }).map((week) =>
+    week.map((item) => {
+      const date = parseDateKey(item.key) ?? today;
+      const todayStart = startOfDay(today);
+      const temporalState = date < todayStart ? "past" : date > todayStart ? "future" : "default";
+
+      return {
+        ...item,
+        temporalState
+      };
+    })
+  );
+}
+
 function formatHeaderDate(date: Date) {
   const parts = new Intl.DateTimeFormat("ru-RU", {
     day: "numeric",
@@ -84,6 +136,34 @@ function formatPlanDate(date: Date) {
     day: "numeric",
     month: "long"
   }).format(date);
+}
+
+function getWorkoutDateTime(date: Date, time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return undefined;
+
+  const value = new Date(date);
+  value.setHours(hours, minutes, 0, 0);
+  return value;
+}
+
+function getNextWorkoutMeta(workouts: TodayWorkout[], selectedDate: Date, now: Date) {
+  const nextWorkoutDate = workouts
+    .flatMap((workout) => {
+      const workoutDate = getWorkoutDateTime(selectedDate, workout.time);
+      return workoutDate && workoutDate > now ? [workoutDate] : [];
+    })
+    .sort((left, right) => left.getTime() - right.getTime())[0];
+
+  if (!nextWorkoutDate) return "";
+
+  const totalMinutes = Math.max(1, Math.ceil((nextWorkoutDate.getTime() - now.getTime()) / 60000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) return `Следующая через ${minutes} мин`;
+  if (minutes === 0) return `Следующая через ${hours} ч`;
+  return `Следующая через ${hours} ч ${minutes} мин`;
 }
 
 function getDemoWorkouts(today: Date): Record<string, TodayWorkout[]> {
@@ -123,36 +203,104 @@ function getDemoWorkouts(today: Date): Record<string, TodayWorkout[]> {
 }
 
 function getPlanCount(workoutsCount: number) {
-  if (workoutsCount === 0) return "Занятий нет";
-  if (workoutsCount === 1) return "1 занятие";
-  if (workoutsCount >= 2 && workoutsCount <= 4) return `${workoutsCount} занятия`;
-  return `${workoutsCount} занятий`;
+  if (workoutsCount === 0) return "Тренировок нет";
+  if (workoutsCount === 1) return "1 тренировка";
+  if (workoutsCount >= 2 && workoutsCount <= 4) return `${workoutsCount} тренировки`;
+  return `${workoutsCount} тренировок`;
+}
+
+function addWorkoutToDay(workoutsByDay: Record<string, TodayWorkout[]>, dayKey: string, workout: TodayWorkout) {
+  workoutsByDay[dayKey] = [workout, ...(workoutsByDay[dayKey] ?? [])].sort((left, right) => left.time.localeCompare(right.time));
 }
 
 export default function IndexScreen() {
+  const { plannedWorkout, plannedDate, plannedTime, plannedClientName, plannedExerciseCount, plannedRepeatDays } = useLocalSearchParams<{
+    plannedWorkout?: string;
+    plannedDate?: string;
+    plannedTime?: string;
+    plannedClientName?: string;
+    plannedExerciseCount?: string;
+    plannedRepeatDays?: string;
+  }>();
   const today = useMemo(() => startOfDay(new Date()), []);
-  const weekItems = useMemo(() => getWeekItems(today), [today]);
+  const plannedDateKey = firstParam(plannedDate);
+  const plannedAnchorDate = useMemo(() => parseDateKey(plannedDateKey), [plannedDateKey]);
+  const weekAnchorDate = plannedAnchorDate ?? today;
+  const weekPages = useMemo(() => getWeekPages(weekAnchorDate, today), [today, weekAnchorDate]);
+  const weekItems = useMemo(() => weekPages.flat(), [weekPages]);
   const todayKey = useMemo(() => getDateKey(today), [today]);
-  const workoutsByDay = useMemo(() => getDemoWorkouts(today), [today]);
-  const [selectedDayKey, setSelectedDayKey] = useState(todayKey);
+  const workoutsByDay = useMemo(() => {
+    const demoWorkouts = getDemoWorkouts(today);
+
+    if (firstParam(plannedWorkout) === "1" && plannedDateKey) {
+      const plannedExerciseCountValue = Number(firstParam(plannedExerciseCount) ?? 6);
+      const plannedStartDate = parseDateKey(plannedDateKey);
+      const repeatDays = parseRepeatDays(firstParam(plannedRepeatDays));
+      const visibleDates = weekItems.flatMap((item) => parseDateKey(item.key) ?? []);
+      const occurrenceKeys = new Set<string>([plannedDateKey]);
+
+      if (plannedStartDate && repeatDays.length > 0) {
+        visibleDates.forEach((date) => {
+          const repeatDay = repeatDayByNativeWeekday[date.getDay()];
+          if (date >= plannedStartDate && repeatDays.includes(repeatDay)) {
+            occurrenceKeys.add(getDateKey(date));
+          }
+        });
+      }
+
+      occurrenceKeys.forEach((dayKey) => {
+        addWorkoutToDay(demoWorkouts, dayKey, {
+          id: `workout-new-planned-${dayKey}`,
+          clientName: firstParam(plannedClientName) ?? "Константин",
+          time: firstParam(plannedTime) ?? "17:00",
+          title: "Руки",
+          exercisesCount: Number.isFinite(plannedExerciseCountValue) ? plannedExerciseCountValue : 6,
+          completedExercises: 0,
+          status: "planned"
+        });
+      });
+    }
+
+    return demoWorkouts;
+  }, [plannedClientName, plannedDateKey, plannedExerciseCount, plannedRepeatDays, plannedTime, plannedWorkout, today, weekItems]);
+  const [selectedDayKey, setSelectedDayKey] = useState(plannedDateKey ?? todayKey);
   const [planningStep, setPlanningStep] = useState<PlanningModalStep>("closed");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (plannedDateKey) {
+      setSelectedDayKey(plannedDateKey);
+    }
+  }, [plannedDateKey]);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   const selectedDate = useMemo(() => {
+    const parsedDate = parseDateKey(selectedDayKey);
+    if (parsedDate) return parsedDate;
+
     const index = weekItems.findIndex((item) => item.key === selectedDayKey);
-    return index >= 0 ? addDays(getWeekStart(today), index) : today;
-  }, [selectedDayKey, today, weekItems]);
+    return index >= 0 ? addDays(getWeekStart(weekAnchorDate), index) : today;
+  }, [selectedDayKey, today, weekAnchorDate, weekItems]);
 
   const isToday = selectedDayKey === todayKey;
   const isPast = startOfDay(selectedDate) < today;
   const originalWorkoutsCount = workoutsByDay[selectedDayKey]?.length ?? 0;
   const selectedWorkouts = useMemo(() => {
     const dayWorkouts = workoutsByDay[selectedDayKey] ?? [];
-    return isPast ? dayWorkouts.filter((workout) => workout.status !== "planned") : dayWorkouts;
+    return isPast ? dayWorkouts.filter((workout) => workout.status !== "planned" || workout.id.startsWith("workout-new-planned")) : dayWorkouts;
   }, [isPast, selectedDayKey, workoutsByDay]);
   const hasVisibleWorkouts = selectedWorkouts.length > 0;
   const shouldShowDayPlan = isToday || originalWorkoutsCount === 0;
   const shouldShowAddWorkout = !isPast && originalWorkoutsCount > 0;
+  const nextWorkoutMeta = useMemo(
+    () => getNextWorkoutMeta(workoutsByDay[selectedDayKey] ?? [], selectedDate, now),
+    [now, selectedDate, selectedDayKey, workoutsByDay]
+  );
 
   const openWorkoutSession = (workoutId: string) => {
     router.push({
@@ -182,13 +330,24 @@ export default function IndexScreen() {
     });
   };
 
+  const openNewClient = () => {
+    setPlanningStep("closed");
+    router.push({
+      pathname: "/clients/new",
+      params: {
+        returnTo: "/workouts/new",
+        date: selectedDayKey
+      }
+    });
+  };
+
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.body}>
           <Header title="Тренировки" subtitle={formatHeaderDate(selectedDate)} subtitlePosition="top" size="xl" style={styles.header} />
 
-          <CalendarDayStrip items={weekItems} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={setSelectedDayKey} />
+          <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={setSelectedDayKey} />
 
           <View style={styles.cards}>
             {shouldShowDayPlan ? (
@@ -197,7 +356,7 @@ export default function IndexScreen() {
                 dayPlanState={originalWorkoutsCount === 0 && !isPast ? "planNext" : "plan"}
                 dayTitle={`План ${formatPlanDate(selectedDate)}`}
                 dayCount={getPlanCount(originalWorkoutsCount)}
-                dayMeta={originalWorkoutsCount > 0 ? "Следующая через 25 минут" : ""}
+                dayMeta={originalWorkoutsCount > 0 ? nextWorkoutMeta : ""}
                 onAddWorkout={openPlanningChoice}
               />
             ) : null}
@@ -237,7 +396,7 @@ export default function IndexScreen() {
         showActions={planningStep === "client"}
         actionLayout="stacked"
         primaryAction={planningStep === "client" ? { label: "Сохранить", type: "primary", disabled: !selectedClientId, onPress: saveClientSelection } : undefined}
-        secondaryAction={planningStep === "client" ? { label: "Создать нового клиента", type: "secondaryNeutral", disabled: true } : undefined}
+        secondaryAction={planningStep === "client" ? { label: "Создать нового клиента", type: "secondaryNeutral", onPress: openNewClient } : undefined}
         onClose={closePlanning}
         bodyStyle={styles.modalBody}
       >

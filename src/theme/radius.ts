@@ -1,5 +1,6 @@
 export const radius = {
   none: 0,
+  s: 4,
   sm: 8,
   md: 12,
   lg: 16,
@@ -8,7 +9,6 @@ export const radius = {
   full: 9999,
 
   // Compatibility aliases for existing components.
-  s: 8,
   m: 12,
   l: 16
 } as const;

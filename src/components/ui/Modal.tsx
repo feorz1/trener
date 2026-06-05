@@ -25,8 +25,9 @@ const KEYBOARD_HIDE_OFFSET_RESET_DELAY_MS = 260;
 const MODAL_OPEN_DURATION_MS = 300;
 const MODAL_CLOSE_DURATION_MS = 280;
 const MODAL_LAYOUT_DURATION_MS = 240;
+const isFabricEnabled = Boolean((globalThis as { nativeFabricUIManager?: unknown }).nativeFabricUIManager);
 
-if (Platform.OS === "android") {
+if (Platform.OS === "android" && !isFabricEnabled) {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
 

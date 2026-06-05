@@ -142,7 +142,7 @@ Do not build screens from ad hoc Figma layers when a canonical component exists 
 | strip width | component size | `theme.sizes.calendarDayStripWidth` |
 | day height | component size | `theme.sizes.calendarDayHeight` |
 | current day dot | component size | `theme.sizes.calendarDayDot` |
-| strip radius | `radius/xl` | `theme.radius.xl` |
+| strip radius | none | no root `borderRadius` |
 | day radius | `radius/lg` | `theme.radius.lg` |
 | strip padding | `spacing/xxs` | `theme.spacing.xxs` |
 | day padding | `spacing/sm` | `theme.spacing.sm` |

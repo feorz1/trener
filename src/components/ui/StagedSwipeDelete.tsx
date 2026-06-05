@@ -12,6 +12,7 @@ import Animated, {
   withTiming
 } from "react-native-reanimated";
 import { theme } from "@/theme";
+import type { GroupedListItemShapeStyle } from "./groupedListItem";
 import { Icon } from "./Icon";
 
 export type StagedSwipeDeleteProps = {
@@ -21,7 +22,10 @@ export type StagedSwipeDeleteProps = {
   open?: boolean;
   accessibilityLabel?: string;
   onDelete: () => void;
+  onDeleteCommitStart?: () => void;
   onOpenChange?: (open: boolean) => void;
+  onSwipePressHoldChange?: (pressed: boolean) => void;
+  shapeStyle?: GroupedListItemShapeStyle;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -29,7 +33,8 @@ const SWIPE_REVEAL_THRESHOLD = theme.spacing.xl;
 const SWIPE_COMMIT_RATIO = 0.72;
 const SWIPE_VELOCITY_THRESHOLD = 0.35;
 const SWIPE_COMMIT_VELOCITY = 0.85;
-const TIMING_CONFIG = { duration: 180, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) };
+const TIMING_CONFIG = { duration: 140, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) };
+const DELETE_COMMIT_FADE_CONFIG = { duration: 40, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) };
 
 function clampWorklet(value: number, min: number, max: number) {
   "worklet";
@@ -48,7 +53,10 @@ export function StagedSwipeDelete({
   open,
   accessibilityLabel = "Delete",
   onDelete,
+  onDeleteCommitStart,
   onOpenChange,
+  onSwipePressHoldChange,
+  shapeStyle,
   style
 }: StagedSwipeDeleteProps) {
   const controlledOpen = open !== undefined;
@@ -56,7 +64,9 @@ export function StagedSwipeDelete({
   const [deleteOpen, setDeleteOpen] = useState(open ?? defaultOpen);
   const resolvedOpen = controlledOpen ? open : internalOpen;
   const translateX = useSharedValue<number>(resolvedOpen ? -deleteWidth : theme.spacing[0]);
+  const deleteActionVisibility = useSharedValue<number>(1);
   const gestureStartTranslate = useSharedValue<number>(theme.spacing[0]);
+  const gestureSettling = useSharedValue<boolean>(false);
   const commitHapticFired = useSharedValue<boolean>(false);
   const rowWidth = useSharedValue<number>(theme.sizes.approachWidth);
 
@@ -73,32 +83,49 @@ export function StagedSwipeDelete({
 
   const animateOpenState = useCallback(
     (nextOpen: boolean) => {
+      deleteActionVisibility.value = 1;
       setOpenState(nextOpen);
       translateX.value = withTiming(nextOpen ? -deleteWidth : theme.spacing[0], TIMING_CONFIG);
     },
-    [deleteWidth, setOpenState, translateX]
+    [deleteActionVisibility, deleteWidth, setOpenState, translateX]
   );
 
   useEffect(() => {
+    deleteActionVisibility.value = 1;
     setDeleteOpen(resolvedOpen);
     translateX.value = withTiming(resolvedOpen ? -deleteWidth : theme.spacing[0], TIMING_CONFIG);
-  }, [deleteWidth, resolvedOpen, translateX]);
+  }, [deleteActionVisibility, deleteWidth, resolvedOpen, translateX]);
 
   const deleteAfterCommit = useCallback(() => {
-    setOpenState(false);
     onDelete();
-  }, [onDelete, setOpenState]);
+  }, [onDelete]);
+
+  const notifyDeleteCommitStart = useCallback(() => {
+    onDeleteCommitStart?.();
+  }, [onDeleteCommitStart]);
+
+  const setSwipePressHold = useCallback(
+    (pressed: boolean) => {
+      onSwipePressHoldChange?.(pressed);
+    },
+    [onSwipePressHoldChange]
+  );
 
   const commitDelete = useCallback(() => {
     triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
+    setSwipePressHold(true);
+    notifyDeleteCommitStart();
     setDeleteOpen(false);
     translateX.value = withTiming(-rowWidth.value, TIMING_CONFIG, (finished) => {
       if (finished) {
-        translateX.value = theme.spacing[0];
-        runOnJS(deleteAfterCommit)();
+        deleteActionVisibility.value = withTiming(theme.spacing[0], DELETE_COMMIT_FADE_CONFIG, (fadeFinished) => {
+          if (fadeFinished) {
+            runOnJS(deleteAfterCommit)();
+          }
+        });
       }
     });
-  }, [deleteAfterCommit, rowWidth, translateX]);
+  }, [deleteActionVisibility, deleteAfterCommit, notifyDeleteCommitStart, rowWidth, setSwipePressHold, translateX]);
 
   const swipeGesture = useMemo(
     () =>
@@ -106,6 +133,8 @@ export function StagedSwipeDelete({
         .activeOffsetX([-theme.spacing.sm, theme.spacing.sm])
         .failOffsetY([-theme.spacing.lg, theme.spacing.lg])
         .onBegin(() => {
+          gestureSettling.value = false;
+          runOnJS(setSwipePressHold)(true);
           gestureStartTranslate.value = translateX.value;
         })
         .onUpdate((event) => {
@@ -127,10 +156,15 @@ export function StagedSwipeDelete({
           const shouldCommit = translateX.value <= commitTranslate || (event.velocityX < -SWIPE_COMMIT_VELOCITY && translateX.value < -deleteWidth);
 
           if (shouldCommit) {
+            gestureSettling.value = true;
+            runOnJS(notifyDeleteCommitStart)();
             translateX.value = withTiming(fullTranslate, TIMING_CONFIG, (finished) => {
               if (finished) {
-                translateX.value = theme.spacing[0];
-                runOnJS(deleteAfterCommit)();
+                deleteActionVisibility.value = withTiming(theme.spacing[0], DELETE_COMMIT_FADE_CONFIG, (fadeFinished) => {
+                  if (fadeFinished) {
+                    runOnJS(deleteAfterCommit)();
+                  }
+                });
               }
             });
             return;
@@ -138,24 +172,45 @@ export function StagedSwipeDelete({
 
           const shouldOpen = translateX.value <= -SWIPE_REVEAL_THRESHOLD || (event.velocityX < -SWIPE_VELOCITY_THRESHOLD && translateX.value < theme.spacing[0]);
           if (shouldOpen) {
+            gestureSettling.value = true;
             translateX.value = withTiming(-deleteWidth, TIMING_CONFIG, (finished) => {
               if (finished) {
+                gestureSettling.value = false;
                 runOnJS(setOpenState)(true);
+                runOnJS(setSwipePressHold)(false);
               }
             });
             return;
           }
 
+          gestureSettling.value = true;
           translateX.value = withTiming(theme.spacing[0], TIMING_CONFIG, (finished) => {
             if (finished) {
+              gestureSettling.value = false;
               runOnJS(setOpenState)(false);
+              runOnJS(setSwipePressHold)(false);
             }
           });
         })
         .onFinalize(() => {
           commitHapticFired.value = false;
+          if (!gestureSettling.value) {
+            runOnJS(setSwipePressHold)(false);
+          }
         }),
-    [commitHapticFired, deleteAfterCommit, deleteWidth, gestureStartTranslate, rowWidth, setOpenState, translateX]
+    [
+      commitHapticFired,
+      deleteActionVisibility,
+      deleteAfterCommit,
+      deleteWidth,
+      gestureStartTranslate,
+      gestureSettling,
+      notifyDeleteCommitStart,
+      rowWidth,
+      setOpenState,
+      setSwipePressHold,
+      translateX
+    ]
   );
 
   const deleteActionStyle = useAnimatedStyle(() => {
@@ -163,7 +218,7 @@ export function StagedSwipeDelete({
 
     return {
       width: exposedWidth,
-      opacity: interpolate(exposedWidth, [theme.spacing[0], theme.spacing.xs], [0, 1], Extrapolation.CLAMP)
+      opacity: interpolate(exposedWidth, [theme.spacing[0], theme.spacing.xs], [0, 1], Extrapolation.CLAMP) * deleteActionVisibility.value
     };
   });
 
@@ -177,13 +232,13 @@ export function StagedSwipeDelete({
   });
 
   return (
-    <View
-      style={[styles.root, style]}
+    <Animated.View
+      style={[styles.root, style, shapeStyle]}
       onLayout={(event) => {
         rowWidth.value = event.nativeEvent.layout.width || theme.sizes.approachWidth;
       }}
     >
-      <Animated.View style={[styles.deleteActionFill, deleteActionStyle]} pointerEvents="box-none">
+      <Animated.View style={[styles.deleteActionFill, shapeStyle, deleteActionStyle]} pointerEvents="box-none">
         <Pressable
           accessibilityLabel={accessibilityLabel}
           accessibilityRole="button"
@@ -197,9 +252,9 @@ export function StagedSwipeDelete({
         </Pressable>
       </Animated.View>
       <GestureDetector gesture={swipeGesture}>
-        <Animated.View style={[styles.swipeableChildren, contentStyle]}>{children}</Animated.View>
+        <Animated.View style={[styles.swipeableChildren, shapeStyle, contentStyle]}>{children}</Animated.View>
       </GestureDetector>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -231,6 +286,7 @@ const styles = StyleSheet.create({
     justifyContent: "center"
   },
   swipeableChildren: {
+    overflow: "hidden",
     borderRadius: theme.radius.lg
   }
 });

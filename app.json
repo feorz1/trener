@@ -19,7 +19,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#111827"
-      }
+      },
+      "package": "com.anonymous.trainerfoundation"
     }
   }
 }

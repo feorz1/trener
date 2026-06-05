@@ -53,22 +53,22 @@ Canonical trainer dashboard card. It covers the day plan block, workout entries,
 | day plan preview width | Figma width `343` | `theme.sizes.cardPlanWidth` |
 | add workout height | Figma height `74` | `theme.sizes.cardAddWorkoutMinHeight` |
 | plan height | Figma height `120` | content-driven |
-| plan next height | Figma height `164` | content-driven |
+| plan next height | Figma height `153` | content-driven |
 | client typography | `Typography/Display/XS` | `theme.typography.display.xs` |
 | muscle group typography | `Typography/Body/MD Strong`, 20px line height | `theme.typography.body.mdStrong` with line-height override |
 | meta typography | `Typography/Body/SM Strong` | `theme.typography.body.smStrong` |
 | plan meta typography | `Typography/Body/SM`, 18px line height | `theme.typography.body.sm` with line-height override |
-| plan count typography | `Typography/Display/MD`, 44px line height | `theme.typography.display.md` with line-height override |
+| plan count typography | `Typography/Display/SM` | `theme.typography.display.sm` |
 | muscle icon | `Icons / muscle arms` | `Icon name="muscle arms"` |
 | workout action button height | `spacing/sm + Typography/Button/MD + spacing/sm` | `Button size="medium"` with compact card override |
-| plan next action button height | Figma height `48` | `theme.sizes.buttonMdHeight` |
+| plan next action button height | `Typography/Button/MD + spacing/md + spacing/md` | compact card override |
 
 ## Implementation Requirements
 
 - `Card` composes canonical `Button`, `Icon`, `Badge`, and `ProgressBar`.
 - More action opens an in-card move/cancel menu.
 - The menu resets when `variant`, `dayPlanState`, or `workoutStatus` changes.
-- `dayPlanState="plan"` renders the 343x120 summary with title, count, and meta text; `dayPlanState="planNext"` renders the 343x164 summary with one green add action and no meta line.
+- `dayPlanState="plan"` renders the 343x120 summary with title, count, and meta text; `dayPlanState="planNext"` renders the 343x153 summary with one green add action and no meta line.
 - Workout entries use the same nesting as Figma: a `content` block with 16 px padding and 8 px internal gap, followed by `Action small` with 16 px horizontal padding, 2 px top padding, 16 px bottom padding, and compact 34 px action buttons.
 - In-progress workout cards show an action by default. Planned workout cards use `showAction` to match the Figma property.
 - The more menu must render above the progress/action area and menu labels must stay on one line.
