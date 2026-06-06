@@ -1,6 +1,7 @@
+import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -135,6 +136,17 @@ function getExerciseLayoutRows(exercises: WorkoutExercise[], rowHeights: Record<
 
   return { rows, height: top };
 }
+
+function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
+  if (Platform.OS === "web") return;
+  void Haptics.impactAsync(style).catch(() => undefined);
+}
+
+function triggerSelection() {
+  if (Platform.OS === "web") return;
+  void Haptics.selectionAsync().catch(() => undefined);
+}
+
 export default function NewWorkoutScreen() {
   const { clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     clientId?: string;
@@ -320,6 +332,18 @@ export default function NewWorkoutScreen() {
     });
   }, []);
 
+  const handleExerciseDragStart = useCallback(() => {
+    triggerImpact(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const handleExerciseOrderChange = useCallback(() => {
+    triggerSelection();
+  }, []);
+
+  const handleExerciseDrop = useCallback(() => {
+    triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
   const renderExercise = useCallback(
     (item: WorkoutExercise) => (
       <MeasuredExerciseRow
@@ -393,7 +417,6 @@ export default function NewWorkoutScreen() {
                     dropAnimationDuration={100}
                     flexDirection="column"
                     gap={EXERCISE_ROW_GAP}
-                    hapticsEnabled
                     inactiveItemOpacity={1}
                     inactiveItemScale={1}
                     itemEntering={null}
@@ -405,7 +428,10 @@ export default function NewWorkoutScreen() {
                     overflow="hidden"
                     strategy="insert"
                     width={exerciseListWidth ?? "fill"}
+                    onActiveItemDropped={handleExerciseDrop}
                     onDragEnd={handleExerciseDragEnd}
+                    onDragStart={handleExerciseDragStart}
+                    onOrderChange={handleExerciseOrderChange}
                   >
                     {selectedExercises.map((item) => (
                       <View key={item.id} style={[styles.sortableRowSlot, exerciseListWidth ? { width: exerciseListWidth } : undefined]}>
