@@ -27,6 +27,12 @@ export const shadows = {
     },
     default: {}
   }),
+  dividerOverlay: Platform.select({
+    android: {
+      elevation: 1
+    },
+    default: {}
+  }),
   switchThumb: Platform.select({
     ios: {
       shadowColor: colors.text.primary,

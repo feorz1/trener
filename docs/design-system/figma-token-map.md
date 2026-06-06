@@ -51,6 +51,7 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | Figma variable | Value | Code target |
 |---|---:|---|
 | `radius/none` | `0` | `theme.radius.none` |
+| `radius/s` | `4` | `theme.radius.s` |
 | `radius/sm` | `8` | `theme.radius.sm` |
 | `radius/md` | `12` | `theme.radius.md` |
 | `radius/lg` | `16` | `theme.radius.lg` |
@@ -90,6 +91,7 @@ color/background/canvas             -> theme.colors.background.canvas
 color/status/positive           -> theme.colors.status.positive
 color/accent/cyan        -> theme.colors.accent.cyan
 spacing/md              -> theme.spacing.md
+radius/s                -> theme.radius.s
 radius/lg               -> theme.radius.lg
 Typography/Body/MD      -> theme.typography.body.md
 Typography/Button/MD    -> theme.typography.button.md

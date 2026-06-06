@@ -1,8 +1,8 @@
 import * as Haptics from "expo-haptics";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import Sortable, { type SortableGridDragEndParams, type SortableGridRenderItemInfo } from "react-native-sortables";
+import { Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
@@ -25,7 +25,9 @@ import type { ApproachCountItem } from "@/components/ui";
 
 type ApproachData = Record<string, ApproachCountItem[]>;
 type WorkoutExercise = (typeof mockExercises)[number];
-const DRAG_HANDLE_DELAY_MS = 120;
+const EXERCISE_ROW_GAP = theme.spacing.xxs;
+const EXERCISE_ROW_HEIGHT = theme.sizes.listItemGymSwipeMinHeight - EXERCISE_ROW_GAP;
+const EXERCISE_SLOT_HEIGHT = theme.sizes.listItemGymSwipeMinHeight;
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -113,14 +115,43 @@ function preserveSupersetConnectionsAfterReorder(currentIds: string[], nextIds: 
   });
 }
 
+function getMeasuredExerciseHeight(exerciseId: string, rowHeights: Record<string, number>) {
+  return rowHeights[exerciseId] ?? EXERCISE_SLOT_HEIGHT;
+}
+
+function getExerciseLayoutRows(exercises: WorkoutExercise[], rowHeights: Record<string, number>) {
+  let top = theme.spacing[0];
+
+  const rows = exercises.map((exercise, index) => {
+    const height = getMeasuredExerciseHeight(exercise.id, rowHeights);
+    const row = {
+      id: exercise.id,
+      height,
+      top,
+      center: top + height / 2
+    };
+    top += height + (index < exercises.length - 1 ? EXERCISE_ROW_GAP : theme.spacing[0]);
+    return row;
+  });
+
+  return { rows, height: top };
+}
+
 function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
   if (Platform.OS === "web") return;
   void Haptics.impactAsync(style).catch(() => undefined);
 }
 
+function triggerSelection() {
+  if (Platform.OS === "web") return;
+  void Haptics.selectionAsync().catch(() => undefined);
+}
+
 export default function NewWorkoutScreen() {
-  const { clientId, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     clientId?: string;
+    clientName?: string;
+    date?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
@@ -135,15 +166,18 @@ export default function NewWorkoutScreen() {
   const [localSupersetConnectionIds, setLocalSupersetConnectionIds] = useState<string[]>(selectedSupersetConnectionIds);
   const [localApproachData, setLocalApproachData] = useState<ApproachData>(selectedApproachData);
   const [exerciseRowHeights, setExerciseRowHeights] = useState<Record<string, number>>({});
-  const orderedExerciseIdsRef = useRef(selectedExerciseIds);
+  const [exerciseListWidth, setExerciseListWidth] = useState<number | undefined>();
   const selectedExercises = useMemo(
     () => orderedExerciseIds.flatMap((id) => mockExercises.find((exercise) => exercise.id === id) ?? []),
     [orderedExerciseIds]
   );
+  const exerciseLayout = useMemo(() => getExerciseLayoutRows(selectedExercises, exerciseRowHeights), [exerciseRowHeights, selectedExercises]);
+  const exerciseItemHeights = useMemo(() => exerciseLayout.rows.map((row) => row.height), [exerciseLayout.rows]);
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>(initialClientId);
   const [pendingClientId, setPendingClientId] = useState<string | undefined>(initialClientId);
   const [clientModalVisible, setClientModalVisible] = useState(false);
   const selectedClient = mockClients.find((client) => client.id === selectedClientId);
+  const selectedClientName = selectedClient?.name ?? firstParam(clientName);
   const hasExercises = selectedExercises.length > 0;
   const supersetConnections = useMemo(
     () =>
@@ -153,11 +187,12 @@ export default function NewWorkoutScreen() {
 
         return { id, selected: localSupersetConnectionIds.includes(id) };
       }),
-    [selectedExercises, localSupersetConnectionIds]
+    [localSupersetConnectionIds, selectedExercises]
   );
 
   useEffect(() => {
     setOrderedExerciseIds(selectedExerciseIds);
+    setExerciseRowHeights({});
     setLocalSupersetConnectionIds((current) => {
       const validIds = getAdjacentConnectionIds(selectedExerciseIds);
       const sourceIds = selectedSupersetConnectionIds.length > 0 ? selectedSupersetConnectionIds : current;
@@ -166,10 +201,6 @@ export default function NewWorkoutScreen() {
     });
     setLocalApproachData(selectedApproachData);
   }, [selectedApproachData, selectedExerciseKey, selectedSupersetConnectionKey]);
-
-  useEffect(() => {
-    orderedExerciseIdsRef.current = orderedExerciseIds;
-  }, [orderedExerciseIds]);
 
   const openClientModal = () => {
     setPendingClientId(selectedClientId);
@@ -188,6 +219,22 @@ export default function NewWorkoutScreen() {
     setClientModalVisible(false);
   };
 
+  const openNewClient = useCallback(() => {
+    const serializedApproachData = serializeApproachData(localApproachData);
+
+    setClientModalVisible(false);
+    router.push({
+      pathname: "/clients/new",
+      params: {
+        returnTo: "/workouts/new",
+        ...(date ? { date } : {}),
+        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
+        ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
+        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
+      }
+    });
+  }, [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds]);
+
   const openExerciseSelection = useCallback(() => {
     const serializedApproachData = serializeApproachData(localApproachData);
 
@@ -195,12 +242,29 @@ export default function NewWorkoutScreen() {
       pathname: "/workouts/exercises",
       params: {
         ...(selectedClientId ? { clientId: selectedClientId } : {}),
+        ...(selectedClientName ? { clientName: selectedClientName } : {}),
+        ...(date ? { date } : {}),
         ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
         ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
         ...(serializedApproachData ? { approachData: serializedApproachData } : {})
       }
     });
-  }, [localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId]);
+  }, [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId, selectedClientName]);
+
+  const openSchedule = useCallback(() => {
+    const serializedApproachData = serializeApproachData(localApproachData);
+
+    router.push({
+      pathname: "/workouts/schedule",
+      params: {
+        ...(selectedClientId ? { clientId: selectedClientId } : {}),
+        ...(selectedClientName ? { clientName: selectedClientName } : {}),
+        ...(date ? { date } : {}),
+        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
+        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
+      }
+    });
+  }, [date, localApproachData, orderedExerciseIds, selectedClientId, selectedClientName]);
 
   const openExerciseApproach = useCallback(
     (exerciseId: string) => {
@@ -211,19 +275,20 @@ export default function NewWorkoutScreen() {
         params: {
           exerciseId,
           ...(selectedClientId ? { clientId: selectedClientId } : {}),
+          ...(selectedClientName ? { clientName: selectedClientName } : {}),
+          ...(date ? { date } : {}),
           ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
           ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
           ...(serializedApproachData ? { approachData: serializedApproachData } : {})
         }
       });
     },
-    [localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId]
+    [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId, selectedClientName]
   );
 
   const removeExercise = useCallback((exerciseId: string) => {
     setOrderedExerciseIds((currentIds) => {
       const nextIds = currentIds.filter((id) => id !== exerciseId);
-      orderedExerciseIdsRef.current = nextIds;
 
       setLocalSupersetConnectionIds((currentConnectionIds) => {
         const validConnectionIds = getAdjacentConnectionIds(nextIds);
@@ -236,6 +301,10 @@ export default function NewWorkoutScreen() {
 
       return nextIds;
     });
+    setExerciseRowHeights((current) => {
+      const { [exerciseId]: _removed, ...rest } = current;
+      return rest;
+    });
   }, []);
 
   const toggleSupersetConnection = useCallback((id: string) => {
@@ -243,29 +312,43 @@ export default function NewWorkoutScreen() {
   }, []);
 
   const updateExerciseRowHeight = useCallback((exerciseId: string, height: number) => {
+    const measuredHeight = Math.max(EXERCISE_ROW_HEIGHT, Math.round(height));
+
     setExerciseRowHeights((current) => {
-      if (current[exerciseId] === height) return current;
-      return { ...current, [exerciseId]: height };
+      if (current[exerciseId] === measuredHeight) return current;
+      return { ...current, [exerciseId]: measuredHeight };
     });
   }, []);
 
-  const commitExerciseOrder = useCallback(({ data }: SortableGridDragEndParams<WorkoutExercise>) => {
-    const currentIds = orderedExerciseIdsRef.current;
-    const nextIds = data.map((exercise) => exercise.id);
+  const handleExerciseListLayout = useCallback((event: LayoutChangeEvent) => {
+    setExerciseListWidth(Math.round(event.nativeEvent.layout.width));
+  }, []);
 
-    if (nextIds.every((id, index) => id === currentIds[index])) return;
+  const handleExerciseDragEnd = useCallback(({ order }: SortableFlexDragEndParams) => {
+    setOrderedExerciseIds((currentIds) => {
+      const nextIds = order(currentIds);
+      setLocalSupersetConnectionIds((current) => preserveSupersetConnectionsAfterReorder(currentIds, nextIds, current));
+      return nextIds;
+    });
+  }, []);
 
-    orderedExerciseIdsRef.current = nextIds;
-    setOrderedExerciseIds(nextIds);
-    setLocalSupersetConnectionIds((current) => preserveSupersetConnectionsAfterReorder(currentIds, nextIds, current));
+  const handleExerciseDragStart = useCallback(() => {
+    triggerImpact(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const handleExerciseOrderChange = useCallback(() => {
+    triggerSelection();
+  }, []);
+
+  const handleExerciseDrop = useCallback(() => {
+    triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
   const renderExercise = useCallback(
-    ({ item }: SortableGridRenderItemInfo<WorkoutExercise>) => (
-      <View
-        style={styles.exerciseRow}
-        onLayout={(event) => updateExerciseRowHeight(item.id, event.nativeEvent.layout.height)}
-        collapsable={false}
+    (item: WorkoutExercise) => (
+      <MeasuredExerciseRow
+        exerciseId={item.id}
+        onHeightChange={updateExerciseRowHeight}
       >
         <ListItemGym
           title={item.name}
@@ -276,13 +359,16 @@ export default function NewWorkoutScreen() {
           onPress={localApproachData[item.id]?.length > 0 ? () => openExerciseApproach(item.id) : undefined}
           onAddSetPress={() => openExerciseApproach(item.id)}
           onDelete={() => removeExercise(item.id)}
+          style={styles.exerciseCard}
           trailingSlot={
-            <Sortable.Handle style={styles.dragHandle}>
-              <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.mute} />
+            <Sortable.Handle>
+              <View accessibilityLabel="Move exercise" accessibilityRole="button" style={styles.dragHandle}>
+                <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.mute} />
+              </View>
             </Sortable.Handle>
           }
         />
-      </View>
+      </MeasuredExerciseRow>
     ),
     [localApproachData, openExerciseApproach, removeExercise, updateExerciseRowHeight]
   );
@@ -295,7 +381,7 @@ export default function NewWorkoutScreen() {
         <View>
           <Select
             label="Клиент"
-            value={selectedClient?.name}
+            value={selectedClientName}
             placeholder="Выберите клиента"
             width="fill"
             showMessage={false}
@@ -303,10 +389,9 @@ export default function NewWorkoutScreen() {
           />
         </View>
 
-        <Divider width="fill" tone="canvasSoft" />
-
         {hasExercises ? (
           <View style={styles.exerciseSection}>
+            <Divider width="fill" tone="canvasSoft" />
             <View style={styles.exerciseHeader}>
               <Text style={styles.exerciseHeaderTitle}>Упражнения</Text>
               <Badge label={String(selectedExercises.length)} tone="neutral" size="s" icon={false} />
@@ -315,36 +400,60 @@ export default function NewWorkoutScreen() {
               {selectedExercises.length >= 2 ? (
                 <SuperSet
                   itemCount={selectedExercises.length}
-                  rowHeights={selectedExercises.map((exercise) => exerciseRowHeights[exercise.id] ?? theme.sizes.listItemGymMinHeight)}
+                  rowHeights={exerciseItemHeights}
+                  rowGap={EXERCISE_ROW_GAP}
                   segments={supersetConnections}
+                  style={styles.superSetOverlay}
                   onSegmentPress={toggleSupersetConnection}
                 />
               ) : null}
               <View style={styles.selectedList}>
-                <Sortable.Grid
-                  activeItemScale={1}
-                  columns={1}
-                  customHandle
-                  data={selectedExercises}
-                  dragActivationDelay={DRAG_HANDLE_DELAY_MS}
-                  inactiveItemOpacity={1}
-                  inactiveItemScale={1}
-                  keyExtractor={(item) => item.id}
-                  overDrag="vertical"
-                  rowGap={theme.spacing[0]}
-                  strategy="insert"
-                  onDragEnd={commitExerciseOrder}
-                  onDragStart={() => triggerImpact(Haptics.ImpactFeedbackStyle.Light)}
-                  renderItem={renderExercise}
-                />
+                <View onLayout={handleExerciseListLayout} style={styles.selectedListClip}>
+                  <Sortable.Flex
+                    activationAnimationDuration={80}
+                    activeItemScale={1}
+                    activeItemShadowOpacity={0.12}
+                    customHandle
+                    dropAnimationDuration={100}
+                    flexDirection="column"
+                    gap={EXERCISE_ROW_GAP}
+                    inactiveItemOpacity={1}
+                    inactiveItemScale={1}
+                    itemEntering={null}
+                    itemExiting={null}
+                    itemsLayoutTransitionMode="reorder"
+                    maxWidth={exerciseListWidth}
+                    minWidth={exerciseListWidth ?? theme.spacing[0]}
+                    overDrag="none"
+                    overflow="hidden"
+                    strategy="insert"
+                    width={exerciseListWidth ?? "fill"}
+                    onActiveItemDropped={handleExerciseDrop}
+                    onDragEnd={handleExerciseDragEnd}
+                    onDragStart={handleExerciseDragStart}
+                    onOrderChange={handleExerciseOrderChange}
+                  >
+                    {selectedExercises.map((item) => (
+                      <View key={item.id} style={[styles.sortableRowSlot, exerciseListWidth ? { width: exerciseListWidth } : undefined]}>
+                        {renderExercise(item)}
+                      </View>
+                    ))}
+                  </Sortable.Flex>
+                </View>
               </View>
             </View>
             <View style={styles.addAction}>
-              <Button label="Добавить" type="secondaryNeutral" width="fill" onPress={openExerciseSelection} />
+              <Button
+                label="Добавить"
+                type="secondaryNeutral"
+                width="fill"
+                onPress={openExerciseSelection}
+              />
             </View>
           </View>
         ) : (
           <View style={styles.exercises}>
+            <Divider width="fill" tone="canvasSoft" />
             <Header title="Упражнения" size="lg" showSubtitle={false} style={styles.sectionHeader} />
             <View style={styles.emptyState}>
               <Icon name="muscle arms" size={theme.sizes.approachHeaderThumb + theme.spacing["3xl"]} color={theme.colors.status.negativeDarkest} />
@@ -364,6 +473,7 @@ export default function NewWorkoutScreen() {
           type="primary"
           width="fill"
           state={hasExercises ? "active" : "disabled"}
+          onPress={openSchedule}
         />
       </View>
 
@@ -376,7 +486,7 @@ export default function NewWorkoutScreen() {
         showCloseButton
         actionLayout="stacked"
         primaryAction={{ label: "Сохранить", type: "primary", disabled: !pendingClientId, onPress: saveClientSelection }}
-        secondaryAction={{ label: "Создать нового клиента", type: "secondaryNeutral", disabled: true }}
+        secondaryAction={{ label: "Создать нового клиента", type: "secondaryNeutral", onPress: openNewClient }}
         onClose={closeClientModal}
         bodyStyle={styles.modalBody}
       >
@@ -398,6 +508,29 @@ export default function NewWorkoutScreen() {
         })}
       </Modal>
     </SafeAreaView>
+  );
+}
+
+function MeasuredExerciseRow({
+  children,
+  exerciseId,
+  onHeightChange
+}: {
+  children: ReactNode;
+  exerciseId: string;
+  onHeightChange: (exerciseId: string, height: number) => void;
+}) {
+  const handleLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      onHeightChange(exerciseId, event.nativeEvent.layout.height || theme.sizes.listItemGymSwipeMinHeight);
+    },
+    [exerciseId, onHeightChange]
+  );
+
+  return (
+    <View collapsable={false} onLayout={handleLayout} style={styles.exerciseRow}>
+      {children}
+    </View>
   );
 }
 
@@ -457,17 +590,38 @@ const styles = StyleSheet.create({
     color: theme.colors.content.ink
   },
   selectedBody: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingLeft: theme.spacing.sm
+    position: "relative",
+    paddingLeft: theme.spacing.sm,
+    overflow: "hidden"
+  },
+  superSetOverlay: {
+    position: "absolute",
+    top: theme.spacing[0],
+    left: theme.spacing.sm,
+    zIndex: 1
   },
   selectedList: {
-    flex: 1,
     minWidth: theme.spacing[0],
-    paddingRight: theme.spacing.sm
+    marginLeft: theme.sizes.superSetWidth,
+    paddingRight: theme.spacing.sm,
+    alignSelf: "stretch"
+  },
+  selectedListClip: {
+    width: "100%",
+    alignSelf: "stretch",
+    overflow: "hidden"
+  },
+  sortableRowSlot: {
+    width: "100%",
+    alignSelf: "stretch"
   },
   exerciseRow: {
-    width: "100%"
+    width: "100%",
+    minHeight: EXERCISE_ROW_HEIGHT,
+    overflow: "hidden"
+  },
+  exerciseCard: {
+    minHeight: EXERCISE_ROW_HEIGHT
   },
   dragHandle: {
     width: theme.spacing.xl,

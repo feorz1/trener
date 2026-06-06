@@ -57,11 +57,20 @@ function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
   void Haptics.impactAsync(style).catch(() => undefined);
 }
 
-function buildWorkoutParams(clientId: string | undefined, exerciseIds: string[], supersetConnectionIds: string[], approachData?: ApproachData) {
+function buildWorkoutParams(
+  clientId: string | undefined,
+  clientName: string | undefined,
+  date: string | undefined,
+  exerciseIds: string[],
+  supersetConnectionIds: string[],
+  approachData?: ApproachData
+) {
   const serializedApproachData = approachData ? serializeApproachData(approachData) : undefined;
 
   return {
     ...(clientId ? { clientId } : {}),
+    ...(clientName ? { clientName } : {}),
+    ...(date ? { date } : {}),
     ...(exerciseIds.length > 0 ? { exerciseIds: exerciseIds.join(",") } : {}),
     ...(supersetConnectionIds.length > 0 ? { supersetConnectionIds: supersetConnectionIds.join(",") } : {}),
     ...(serializedApproachData ? { approachData: serializedApproachData } : {})
@@ -75,9 +84,11 @@ const initialSets: ApproachCountItem[] = [
 ];
 
 export default function ExerciseApproachScreen() {
-  const { exerciseId, clientId, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { exerciseId, clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     exerciseId?: string;
     clientId?: string;
+    clientName?: string;
+    date?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
@@ -104,10 +115,10 @@ export default function ExerciseApproachScreen() {
     (nextExerciseIds = selectedExerciseIds, nextSupersetConnectionIds = selectedSupersetConnectionIds, nextApproachData = currentApproachData) => {
       router.replace({
         pathname: "/workouts/new",
-        params: buildWorkoutParams(firstParam(clientId), nextExerciseIds, nextSupersetConnectionIds, nextApproachData)
+        params: buildWorkoutParams(firstParam(clientId), firstParam(clientName), firstParam(date), nextExerciseIds, nextSupersetConnectionIds, nextApproachData)
       });
     },
-    [clientId, currentApproachData, selectedExerciseIds, selectedSupersetConnectionIds]
+    [clientId, clientName, currentApproachData, date, selectedExerciseIds, selectedSupersetConnectionIds]
   );
 
   const saveSets = () => {
@@ -187,9 +198,8 @@ export default function ExerciseApproachScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <TextArea label="Заметки" value={note} width="fill" showMessage={false} onChangeText={setNote} />
 
-        <Divider width="fill" tone="canvasSoft" />
-
         <View style={styles.approachSection}>
+          <Divider width="fill" tone="canvasSoft" />
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Подходы</Text>
             <Badge label={String(sets.length)} tone="neutral" size="s" icon={false} />
@@ -201,6 +211,7 @@ export default function ExerciseApproachScreen() {
               activeItemShadowOpacity={0.12}
               columns={1}
               customHandle
+              dimensionsAnimationType="layout"
               data={sets}
               dragActivationDelay={DRAG_HANDLE_DELAY_MS}
               inactiveItemOpacity={1}

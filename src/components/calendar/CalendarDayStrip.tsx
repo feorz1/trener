@@ -143,6 +143,7 @@ export function CalendarDayStrip({
 }: CalendarDayStripProps) {
   const pages = useMemo(() => getWeekPages(items, weeks), [items, weeks]);
   const fallbackSelectedKey = pages[0]?.[0]?.key ?? "";
+  const scrollRef = useRef<ScrollView | null>(null);
   const [internalSelectedKey, setInternalSelectedKey] = useState(defaultSelectedKey ?? selectedKey ?? fallbackSelectedKey);
   const [measuredWidth, setMeasuredWidth] = useState(width === "full" ? theme.sizes.calendarDayStripWidth : width);
   const resolvedSelectedKey = selectedKey ?? internalSelectedKey;
@@ -151,6 +152,20 @@ export function CalendarDayStrip({
   const safePageWidth = Math.max(pageWidth, theme.spacing.xxs * 2 + theme.spacing.xs * 6 + 7);
   const cellWidth = (safePageWidth - theme.spacing.xxs * 2 - theme.spacing.xs * 6) / 7;
   const hasPaging = pages.length > 1;
+  const selectedPageIndex = Math.max(
+    pages.findIndex((week) => week.some((item) => item.key === resolvedSelectedKey)),
+    0
+  );
+
+  useEffect(() => {
+    if (!hasPaging) return;
+
+    scrollRef.current?.scrollTo({
+      x: selectedPageIndex * pageWidth,
+      y: 0,
+      animated: false
+    });
+  }, [hasPaging, pageWidth, selectedPageIndex]);
 
   const handlePress = (item: CalendarDayStripItem) => {
     setInternalSelectedKey(item.key);
@@ -192,6 +207,7 @@ export function CalendarDayStrip({
     >
       {hasPaging ? (
         <ScrollView
+          ref={scrollRef}
           horizontal
           pagingEnabled
           disableIntervalMomentum
@@ -218,8 +234,7 @@ const styles = StyleSheet.create({
     height: theme.sizes.calendarDayStripHeight,
     minHeight: theme.sizes.calendarDayStripHeight,
     maxHeight: theme.sizes.calendarDayStripHeight,
-    overflow: "hidden",
-    borderRadius: theme.radius.xl
+    overflow: "hidden"
   },
   scroll: {
     height: theme.sizes.calendarDayStripHeight,

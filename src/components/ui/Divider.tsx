@@ -16,6 +16,8 @@ export type DividerProps = {
 
 type DividerCornerPosition = "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
 
+const dividerVisualHeight = theme.sizes.dividerCorner * 2 + theme.sizes.dividerHeight;
+
 const cornerPaths: Record<DividerCornerPosition, string> = {
   topLeft:
     "M3.74254e-10 0C3.74254e-10 7.43977 -0.000397259 11.1599 0.817383 14.2119C3.03662 22.494 9.50599 28.9634 17.7881 31.1826C20.8401 32.0004 24.5602 32 32 32H3.74254e-10V0Z",
@@ -48,6 +50,7 @@ export function Divider({ type = "card", width = "fill", tone = "canvasSoft", st
 
   return (
     <View
+      collapsable={false}
       pointerEvents="none"
       testID={testID}
       style={[styles.root, width === "fill" ? styles.fillWidth : styles.fixedWidth, type === "card" && styles.card, style]}
@@ -64,9 +67,12 @@ export function Divider({ type = "card", width = "fill", tone = "canvasSoft", st
 const styles = StyleSheet.create({
   root: {
     position: "relative",
-    height: theme.sizes.dividerHeight,
-    flexDirection: "row",
-    overflow: "visible"
+    height: dividerVisualHeight,
+    marginTop: -theme.sizes.dividerCorner,
+    marginBottom: -theme.sizes.dividerCorner,
+    overflow: "visible",
+    zIndex: 1,
+    ...theme.shadows.dividerOverlay
   },
   fixedWidth: {
     width: theme.sizes.dividerWidth
@@ -77,19 +83,24 @@ const styles = StyleSheet.create({
   },
   card: {},
   bar: {
-    flex: 1,
-    height: "100%"
+    position: "absolute",
+    top: theme.sizes.dividerCorner,
+    left: theme.spacing[0],
+    right: theme.spacing[0],
+    height: theme.sizes.dividerHeight,
+    zIndex: 1
   },
   corner: {
     position: "absolute",
     width: theme.sizes.dividerCorner,
-    height: theme.sizes.dividerCorner
+    height: theme.sizes.dividerCorner,
+    zIndex: 2
   },
   topCorner: {
-    top: -theme.sizes.dividerCorner
+    top: theme.spacing[0]
   },
   bottomCorner: {
-    bottom: -theme.sizes.dividerCorner
+    bottom: theme.spacing[0]
   },
   leftCorner: {
     left: theme.spacing[0]

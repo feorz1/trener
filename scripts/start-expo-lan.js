@@ -1,9 +1,12 @@
+const { existsSync } = require("node:fs");
 const { networkInterfaces } = require("node:os");
+const { join } = require("node:path");
 const { spawnSync, spawn } = require("node:child_process");
 
 const args = process.argv.slice(2);
 const isDevClient = args.includes("--dev-client");
 const isStorybook = args.includes("--storybook");
+const isAndroid = args.includes("--android");
 
 function isPrivateIp(address) {
   return (
@@ -48,6 +51,23 @@ function findLanIp() {
   return candidates[0];
 }
 
+function findAndroidAdb() {
+  const sdkRoots = [
+    process.env.ANDROID_HOME,
+    process.env.ANDROID_SDK_ROOT,
+    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Android", "Sdk") : undefined,
+  ].filter(Boolean);
+
+  for (const sdkRoot of sdkRoots) {
+    const adbPath = join(sdkRoot, "platform-tools", process.platform === "win32" ? "adb.exe" : "adb");
+    if (existsSync(adbPath)) {
+      return adbPath;
+    }
+  }
+
+  return undefined;
+}
+
 const selected = findLanIp();
 
 if (!selected) {
@@ -55,7 +75,7 @@ if (!selected) {
   process.exit(1);
 }
 
-console.log(`Using ${selected.address} from ${selected.name} for iPhone LAN testing.`);
+console.log(`Using ${selected.address} from ${selected.name} for mobile LAN testing.`);
 
 const timestampResult = spawnSync("npm.cmd", ["run", "storybook:timestamps"], {
   stdio: "inherit",
@@ -78,6 +98,16 @@ if (isDevClient) {
   expoArgs.push("--dev-client");
 } else {
   expoArgs.push("--go");
+}
+
+if (isAndroid) {
+  const adbPath = findAndroidAdb();
+
+  if (adbPath) {
+    expoArgs.push("--android");
+  } else {
+    console.warn("Android SDK/adb was not found. Starting Expo LAN server without --android; scan the QR code in Expo Go.");
+  }
 }
 
 const env = {

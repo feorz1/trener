@@ -116,6 +116,7 @@ typography:
 
 rounded:
   none: 0px
+  s: 4px
   sm: 8px
   md: 12px
   lg: 16px
@@ -435,6 +436,7 @@ The brand uses surface contrast (`{colors.canvas-soft}` background vs `{colors.c
 | Token | Value | Use |
 |---|---|---|
 | `{rounded.none}` | 0px | Full-bleed bands. |
+| `{rounded.s}` | 4px | Small inner control corners and subtle nested chrome. |
 | `{rounded.sm}` | 8px | Inline pills, small badges. |
 | `{rounded.md}` | 12px | Form inputs, smaller chrome. |
 | `{rounded.lg}` | 16px | Mid-size cards. |

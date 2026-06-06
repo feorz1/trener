@@ -2,11 +2,22 @@ import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react-native";
 import { View } from "react-native";
 import { theme } from "@/theme";
-import { ListItemCell, type ListItemCellLeading, type ListItemCellState, type ListItemCellTrailing } from "./ListItemCell";
+import {
+  ListItemCell,
+  getListItemCellSelectedGroupPosition,
+  type ListItemCellLeading,
+  type ListItemCellState,
+  type ListItemCellTrailing
+} from "./ListItemCell";
 
 const leadingOptions: ListItemCellLeading[] = ["none", "avatar", "icon"];
 const trailingOptions: ListItemCellTrailing[] = ["none", "button", "checkbox", "radio", "icon", "switch", "badge", "text"];
 const states: ListItemCellState[] = ["default", "pressed", "disabled"];
+const groupedItems = [
+  { id: "bank", title: "Bank transfer", subtitle: "Wise account" },
+  { id: "card", title: "Payment card", subtitle: "Visa ending 4242" },
+  { id: "balance", title: "Balance", subtitle: "Available now" }
+];
 
 const meta = {
   title: "Components/List Item Cell",
@@ -76,6 +87,40 @@ export const CanonicalVariants: Story = {
       <ListItemCell title="To your SGD balance" subtitle="Cancelled" trailing="text" trailingText="1 SGD" />
     </View>
   )
+};
+
+export const GroupedSelection: Story = {
+  render: () => {
+    const [selectedIds, setSelectedIds] = useState<string[]>(["bank", "card"]);
+    const selectedIdSet = new Set(selectedIds);
+
+    const toggle = (id: string) => {
+      setSelectedIds((current) => (current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id]));
+    };
+
+    return (
+      <View style={[styles.storyFrame, { gap: theme.spacing.xxs }]}>
+        {groupedItems.map((item, index) => {
+          const selected = selectedIdSet.has(item.id);
+          const previousSelected = index > 0 && selectedIdSet.has(groupedItems[index - 1].id);
+          const nextSelected = index < groupedItems.length - 1 && selectedIdSet.has(groupedItems[index + 1].id);
+
+          return (
+            <ListItemCell
+              key={item.id}
+              title={item.title}
+              subtitle={item.subtitle}
+              trailing="checkbox"
+              selected={selected}
+              groupPosition={getListItemCellSelectedGroupPosition(selected, previousSelected, nextSelected)}
+              onPress={() => toggle(item.id)}
+              onSelectedChange={() => toggle(item.id)}
+            />
+          );
+        })}
+      </View>
+    );
+  }
 };
 
 const styles = {

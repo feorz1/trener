@@ -34,15 +34,18 @@ export function SuperSet({
   const resolvedSegments = segments.length > 0 ? segments : defaultSegments;
   const resolvedItemCount = Math.max(itemCount ?? resolvedSegments.length + 1, 2);
   const resolvedRowHeights = Array.from({ length: resolvedItemCount }, (_, index) => rowHeights?.[index] ?? rowHeight);
-  const rowOffsets = resolvedRowHeights.reduce<number[]>((offsets, currentHeight, index) => {
-    const previousOffset = offsets[index] ?? theme.spacing[0];
-    offsets[index + 1] = previousOffset + currentHeight + (index < resolvedItemCount - 1 ? rowGap : theme.spacing[0]);
-    return offsets;
-  }, [theme.spacing[0]]);
-  const railHeight = rowOffsets[resolvedItemCount] ?? resolvedItemCount * rowHeight;
+  const rowTops = resolvedRowHeights.reduce<number[]>((tops, height, index) => {
+    const previousTop = tops[index - 1] ?? theme.spacing[0];
+    const previousHeight = resolvedRowHeights[index - 1] ?? theme.spacing[0];
+    tops.push(index === 0 ? theme.spacing[0] : previousTop + previousHeight + rowGap);
+    return tops;
+  }, []);
+  const railHeight = resolvedRowHeights.reduce((height, itemHeight) => height + itemHeight, theme.spacing[0]) + Math.max(resolvedItemCount - 1, 0) * rowGap;
   const buttonClearance = theme.sizes.superSetButton / 2 + theme.spacing.xs;
-  const rowLines = resolvedRowHeights.map((height, index) => {
-    const avatarInset = Math.max(theme.spacing[0], (height - theme.sizes.listItemGymThumb) / 2);
+  const rowLines = Array.from({ length: resolvedItemCount }, (_, index) => {
+    const currentRowHeight = resolvedRowHeights[index] ?? rowHeight;
+    const rowOffset = rowTops[index] ?? theme.spacing[0];
+    const avatarInset = Math.max(theme.spacing[0], (currentRowHeight - theme.sizes.listItemGymThumb) / 2);
     const edgeTrim = avatarInset + theme.spacing.xxs;
     const topTrim = index > 0 ? buttonClearance : edgeTrim;
     const bottomTrim = index < resolvedItemCount - 1 ? buttonClearance : edgeTrim;
@@ -51,12 +54,12 @@ export function SuperSet({
     return {
       id: `row-${index}`,
       selected,
-      top: (rowOffsets[index] ?? theme.spacing[0]) + topTrim,
-      height: Math.max(theme.spacing[0], height - topTrim - bottomTrim)
+      top: rowOffset + topTrim,
+      height: Math.max(theme.spacing[0], currentRowHeight - topTrim - bottomTrim)
     };
   });
   const buttons = resolvedSegments.map((segment, index) => {
-    const rowBottom = (rowOffsets[index + 1] ?? theme.spacing[0]) - rowGap;
+    const rowBottom = (rowTops[index] ?? theme.spacing[0]) + (resolvedRowHeights[index] ?? rowHeight);
 
     return {
       segment,

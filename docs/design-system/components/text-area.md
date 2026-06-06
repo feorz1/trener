@@ -58,6 +58,8 @@ Multi-line text input for longer trainer notes, exercise comments, client limita
 | error border/message | `color/status/negative` | `theme.colors.status.negative` |
 | disabled fill | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | disabled text | `color/content/mute` | `theme.colors.content.mute` |
+| root top padding | `spacing/md` | `theme.spacing.md` |
+| root bottom padding | `spacing/lg` | `theme.spacing.lg` |
 | root gap | `spacing/sm` | `theme.spacing.sm` |
 | field horizontal padding | `spacing/lg` | `theme.spacing.lg` |
 | field vertical padding | `spacing/md` | `theme.spacing.md` |

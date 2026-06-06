@@ -68,6 +68,7 @@ Do not introduce numeric spacing names or arbitrary component-local spacing valu
 Radius variables are:
 
 - `radius/none`
+- `radius/s`
 - `radius/sm`
 - `radius/md`
 - `radius/lg`
