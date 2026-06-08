@@ -17,7 +17,7 @@
     },
     "background": {
       "canvas": "#FFFFFF",
-      "canvasSoft": "#EDEFEB",
+      "canvasSoft": "#F3F3F3",
       "cardDivider": "#F5F4F2"
     },
     "status": {
@@ -67,7 +67,7 @@
       "xs": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 24, "lineHeight": 31.2, "letterSpacing": -0.48 }
     },
     "body": {
-      "lg": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 20, "lineHeight": 30, "letterSpacing": 0 },
+      "lg": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 20, "lineHeight": 24, "letterSpacing": 0 },
       "md": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 16, "lineHeight": 24, "letterSpacing": 0 },
       "mdStrong": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 16, "lineHeight": 20, "letterSpacing": 0 },
       "sm": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 14, "lineHeight": 20, "letterSpacing": 0 },
@@ -77,7 +77,7 @@
       },
       "caption": { "fontFamily": "Inter", "fontWeight": "400", "fontSize": 12, "lineHeight": 16, "letterSpacing": 0 },
       "button": {
-        "md": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 14, "lineHeight": 18, "letterSpacing": 0 }
+        "md": { "fontFamily": "Inter", "fontWeight": "600", "fontSize": 16, "lineHeight": 20, "letterSpacing": 0 }
       }
   }
 }

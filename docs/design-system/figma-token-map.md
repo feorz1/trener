@@ -19,7 +19,7 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/content/mute` | `#868685` | `theme.colors.content.mute` |
 | `color/content/disabled` | `#CFCFCF` | `theme.colors.content.disabled` |
 | `color/background/canvas` | `#FFFFFF` | `theme.colors.background.canvas` |
-| `color/background/canvas-soft` | `#EDEFEB` | `theme.colors.background.canvasSoft` |
+| `color/background/canvas-soft` | `#F3F3F3` | `theme.colors.background.canvasSoft` |
 | `card-divider` | `#F5F4F2` | `theme.colors.background.cardDivider` |
 | `color/status/positive` | `#2EAD4B` | `theme.colors.status.positive` |
 | `color/status/positive-deep` | `#054D28` | `theme.colors.status.positiveDeep` |
@@ -70,7 +70,7 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `Typography/Display/MD` | Inter Bold | `40` | `34` | `0` | `theme.typography.display.md` |
 | `Typography/Display/SM` | Inter Semi Bold | `32` | `38.4` | `-0.96` | `theme.typography.display.sm` |
 | `Typography/Display/XS` | Inter Semi Bold | `24` | `31.2` | `-0.48` | `theme.typography.display.xs` |
-| `Typography/Body/LG` | Inter Semi Bold | `20` | `30` | `0` | `theme.typography.body.lg` |
+| `Typography/Body/LG` | Inter Semi Bold | `20` | `24` | `0` | `theme.typography.body.lg` |
 | `Typography/Body/MD` | Inter Regular | `16` | `24` | `0` | `theme.typography.body.md` |
 | `Typography/Body/MD Strong` | Inter Semi Bold | `16` | `20` | `0` | `theme.typography.body.mdStrong` |
 | `Typography/Body/SM` | Inter Regular | `14` | `20` | `0` | `theme.typography.body.sm` |
@@ -78,7 +78,7 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `Typography/Body/SM Caption` | Inter Semi Bold | `12` | `16` | `0` | `theme.typography.body.smCaption` |
 | `Typography/Body/Caption` | Inter Semi Bold | `10` | `16` | `0` | `theme.typography.body.caption` |
 | `Typography/Caption` | Inter Regular | `12` | `16` | `0` | `theme.typography.caption` |
-| `Typography/Button/MD` | Inter Semi Bold | `14` | `18` | `0` | `theme.typography.button.md` |
+| `Typography/Button/MD` | Inter Semi Bold | `16` | `20` | `0` | `theme.typography.button.md` |
 
 ## Code Mapping Rules
 

@@ -13,14 +13,14 @@ export const colors = {
   },
   background: {
     canvas: "#FFFFFF",
-    canvasSoft: "#EDEFEB",
+    canvasSoft: "#F3F3F3",
     cardDivider: "#F5F4F2",
 
     // Compatibility aliases for the pre-Wise app screens.
-    app: "#EDEFEB",
+    app: "#F3F3F3",
     surface: "#FFFFFF",
     surfaceSoft: "#E2F6D5",
-    surfaceMuted: "#EDEFEB",
+    surfaceMuted: "#F3F3F3",
     overlay: "#0E0F0C"
   },
   status: {
@@ -40,7 +40,7 @@ export const colors = {
     warningSoft: "#FFF6CC",
     error: "#D03238",
     errorSoft: "#FDEAEA",
-    neutral: "#EDEFEB"
+    neutral: "#F3F3F3"
   },
   accent: {
     orange: "#FFC091",
@@ -58,7 +58,7 @@ export const colors = {
   border: {
     default: "#0E0F0C",
     active: "#9FE870",
-    soft: "#EDEFEB"
+    soft: "#F3F3F3"
   },
   brand: {
     primary: "#9FE870",

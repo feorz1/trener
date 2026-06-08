@@ -17,6 +17,7 @@ export * from "./Header";
 export * from "./ListItemGym";
 export * from "./ListItemCell";
 export * from "./Loader";
+export * from "./MeasurementSlider";
 export * from "./Modal";
 export * from "./Navigation";
 export * from "./ProgressBar";

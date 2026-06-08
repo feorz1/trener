@@ -1,11 +1,13 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, View } from "react-native";
-import Sortable, { type SortableGridDragEndParams, type SortableGridRenderItemInfo } from "react-native-sortables";
+import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from "react-native";
+import Animated, { useAnimatedRef } from "react-native-reanimated";
+import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ApproachCount, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
+import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
 const DRAG_HANDLE_DELAY_MS = 120;
@@ -78,10 +80,24 @@ function buildWorkoutParams(
 }
 
 const initialSets: ApproachCountItem[] = [
-  { id: "set-1", index: 1, weight: 150, reps: 12 },
-  { id: "set-2", index: 2, weight: 150, reps: 12 },
-  { id: "set-3", index: 3, weight: 150, reps: 12 }
+  { id: "set-1", index: 1, weight: 150, reps: 12 }
 ];
+
+function createAddedSet(index: number, template?: ApproachCountItem): ApproachCountItem {
+  const id = `set-${Date.now()}-${index}`;
+
+  if (!template) {
+    return { id, index, weight: 150, reps: 12 };
+  }
+
+  return {
+    id,
+    index,
+    weight: template.weight,
+    reps: template.reps,
+    unit: template.unit
+  };
+}
 
 export default function ExerciseApproachScreen() {
   const { exerciseId, clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
@@ -102,7 +118,12 @@ export default function ExerciseApproachScreen() {
   const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
   const [sets, setSets] = useState(initialExerciseSets);
   const [activeSetId, setActiveSetId] = useState<string | undefined>();
+  const [setListWidth, setSetListWidth] = useState<number | undefined>();
+  const [setDragging, setSetDragging] = useState(false);
+  const { scrollProps } = useConditionalScroll({ disabled: setDragging });
+  const scrollableRef = useAnimatedRef<ScrollView>();
   const setsRef = useRef(initialExerciseSets);
+  const latestEditedSetRef = useRef<ApproachCountItem | undefined>(undefined);
   const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
@@ -135,16 +156,32 @@ export default function ExerciseApproachScreen() {
 
   const addSet = () => {
     const nextIndex = setsRef.current.length + 1;
-    syncSets([...setsRef.current, { id: `set-${Date.now()}`, index: nextIndex, weight: 150, reps: 12 }]);
+    const template = latestEditedSetRef.current ?? setsRef.current[setsRef.current.length - 1];
+    syncSets([...setsRef.current, createAddedSet(nextIndex, template)]);
   };
 
   const deleteSet = useCallback((setId: string) => {
     syncSets(setsRef.current.filter((set) => set.id !== setId));
   }, [syncSets]);
 
-  const updateSet = useCallback((setId: string, patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => {
-    syncSets(setsRef.current.map((set) => (set.id === setId ? { ...set, ...patch } : set)));
-  }, [syncSets]);
+  const updateSet = useCallback(
+    (setId: string, patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => {
+      syncSets(
+        setsRef.current.map((set) => {
+          if (set.id !== setId) return set;
+
+          const nextSet = { ...set, ...patch };
+          latestEditedSetRef.current = nextSet;
+          return nextSet;
+        })
+      );
+    },
+    [syncSets]
+  );
+
+  const handleSetListLayout = useCallback((event: LayoutChangeEvent) => {
+    setSetListWidth(Math.round(event.nativeEvent.layout.width));
+  }, []);
 
   const deleteExercise = () => {
     if (!currentExerciseId) {
@@ -160,10 +197,11 @@ export default function ExerciseApproachScreen() {
   };
 
   const commitSetOrder = useCallback(
-    ({ data }: SortableGridDragEndParams<ApproachCountItem>) => {
+    ({ order }: SortableFlexDragEndParams) => {
       setActiveSetId(undefined);
+      setSetDragging(false);
       const currentSets = setsRef.current;
-      const nextSets = data;
+      const nextSets = order(currentSets);
 
       if (nextSets.length !== currentSets.length) return;
       if (nextSets.every((set, index) => set.id === currentSets[index]?.id)) return;
@@ -173,8 +211,19 @@ export default function ExerciseApproachScreen() {
     [syncSets]
   );
 
+  const handleSetDrop = useCallback(() => {
+    setActiveSetId(undefined);
+    setSetDragging(false);
+  }, []);
+
+  const handleSetDragStart = useCallback(({ key }: { key: string }) => {
+    setActiveSetId(key);
+    setSetDragging(true);
+    triggerImpact(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
   const renderSet = useCallback(
-    ({ index, item }: SortableGridRenderItemInfo<ApproachCountItem>) => (
+    (item: ApproachCountItem, index: number) => (
       <View style={[styles.sortableSetItem, activeSetId === item.id && styles.activeSetItem]}>
         <ApproachCount
           item={{ ...item, index: index + 1 }}
@@ -195,7 +244,7 @@ export default function ExerciseApproachScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title={exercise?.name ?? "Упражнение"} onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView ref={scrollableRef as never} contentContainerStyle={styles.content} {...scrollProps}>
         <TextArea label="Заметки" value={note} width="fill" showMessage={false} onChangeText={setNote} />
 
         <View style={styles.approachSection}>
@@ -206,38 +255,51 @@ export default function ExerciseApproachScreen() {
           </View>
 
           <View style={setListStyle}>
-            <Sortable.Grid
-              activeItemScale={1}
-              activeItemShadowOpacity={0.12}
-              columns={1}
-              customHandle
-              dimensionsAnimationType="layout"
-              data={sets}
-              dragActivationDelay={DRAG_HANDLE_DELAY_MS}
-              inactiveItemOpacity={1}
-              inactiveItemScale={1}
-              keyExtractor={(item) => item.id}
-              overDrag="vertical"
-              rowGap={theme.spacing.sm}
-              strategy="insert"
-              onDragEnd={commitSetOrder}
-              onDragStart={({ key }) => {
-                setActiveSetId(key);
-                triggerImpact(Haptics.ImpactFeedbackStyle.Light);
-              }}
-              renderItem={renderSet}
-            />
+            <View onLayout={handleSetListLayout} style={styles.setListClip}>
+              <Sortable.Flex
+                activationAnimationDuration={80}
+                activeItemScale={1}
+                activeItemShadowOpacity={0.12}
+                customHandle
+                dropAnimationDuration={100}
+                dragActivationDelay={DRAG_HANDLE_DELAY_MS}
+                dragActivationFailOffset={theme.spacing.lg}
+                flexDirection="column"
+                gap={theme.spacing.sm}
+                inactiveItemOpacity={1}
+                inactiveItemScale={1}
+                itemEntering={null}
+                itemExiting={null}
+                itemsLayoutTransitionMode="reorder"
+                maxWidth={setListWidth}
+                minWidth={setListWidth ?? theme.spacing[0]}
+                overDrag="vertical"
+                overflow="hidden"
+                scrollableRef={scrollableRef}
+                strategy="insert"
+                width={setListWidth ?? "fill"}
+                onDragEnd={commitSetOrder}
+                onActiveItemDropped={handleSetDrop}
+                onDragStart={handleSetDragStart}
+              >
+                {sets.map((item, index) => (
+                  <View key={item.id} style={[styles.sortableSetSlot, setListWidth ? { width: setListWidth } : undefined]}>
+                    {renderSet(item, index)}
+                  </View>
+                ))}
+              </Sortable.Flex>
+            </View>
           </View>
 
           <View style={styles.addAction}>
-            <Button label="Добавить" type="secondaryNeutral" width="fill" onPress={addSet} />
+            <Button label="Добавить" type="secondaryNeutral" size="large" width="fill" onPress={addSet} />
           </View>
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Сохранить" type="primary" width="fill" onPress={saveSets} />
-        <Button label="Удалить упражнение" type="secondaryNeutral" width="fill" onPress={deleteExercise} />
+        <Button label="Сохранить" type="primary" size="large" width="fill" onPress={saveSets} />
+        <Button label="Удалить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={deleteExercise} />
       </View>
     </SafeAreaView>
   );
@@ -274,8 +336,21 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.sm,
     backgroundColor: theme.colors.background.canvas
   },
+  setListClip: {
+    width: "100%",
+    minWidth: theme.spacing[0],
+    alignSelf: "stretch",
+    overflow: "hidden"
+  },
   sortableSetItem: {
+    width: "100%",
+    minWidth: theme.spacing[0],
+    alignSelf: "stretch",
     minHeight: theme.sizes.approachCountRowMinHeight
+  },
+  sortableSetSlot: {
+    width: "100%",
+    alignSelf: "stretch"
   },
   activeSetItem: {
     ...theme.shadows.raised

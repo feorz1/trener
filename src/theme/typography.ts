@@ -61,7 +61,7 @@ export const typography = {
     lg: {
       fontFamily: fontFamilies.semibold,
       fontSize: 20,
-      lineHeight: 30,
+      lineHeight: 24,
       fontWeight: "600",
       letterSpacing: 0
     },
@@ -125,8 +125,8 @@ export const typography = {
   button: {
     md: {
       fontFamily: fontFamilies.semibold,
-      fontSize: 14,
-      lineHeight: 18,
+      fontSize: 16,
+      lineHeight: 20,
       fontWeight: "600",
       letterSpacing: 0
     }

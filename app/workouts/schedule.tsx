@@ -15,6 +15,7 @@ import {
   Select
 } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
+import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
 type DateCell = {
@@ -94,8 +95,9 @@ function formatSelectDate(date: Date) {
   const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
   const day = parts.find((part) => part.type === "day")?.value ?? "";
   const month = parts.find((part) => part.type === "month")?.value ?? "";
+  const dayMonth = [day, month].filter(Boolean).join(" ");
 
-  return `${capitalize(weekday)}, ${day} ${month}`;
+  return [capitalize(weekday), dayMonth].filter(Boolean).join(", ");
 }
 
 function formatMonth(date: Date) {
@@ -159,7 +161,7 @@ export default function ScheduleWorkoutScreen() {
   const selectedClient = mockClients.find((client) => client.id === firstParam(clientId));
   const initialDate = useMemo(() => parseDateKey(firstParam(date)), [date]);
   const [scheduledDate, setScheduledDate] = useState(initialDate);
-  const [scheduledTime, setScheduledTime] = useState<CalendarSlot>("16:00");
+  const [scheduledTime, setScheduledTime] = useState<CalendarSlot | undefined>();
   const [dateConfirmed, setDateConfirmed] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [repeatVisible, setRepeatVisible] = useState(false);
@@ -170,6 +172,7 @@ export default function ScheduleWorkoutScreen() {
   const selectedExerciseCount = firstParam(exerciseIds)?.split(",").filter(Boolean).length || 6;
   const clientName = selectedClient?.name ?? firstParam(clientNameParam) ?? "Константин";
   const repeatValue = getRepeatValue(repeatDays);
+  const { scrollProps } = useConditionalScroll();
 
   const openCalendar = () => {
     setPendingDate(scheduledDate);
@@ -201,6 +204,8 @@ export default function ScheduleWorkoutScreen() {
   };
 
   const saveWorkout = () => {
+    if (!scheduledTime) return;
+
     router.replace({
       pathname: "/",
       params: {
@@ -218,7 +223,7 @@ export default function ScheduleWorkoutScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title="Создание тренировки" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <Select
           label="Дата"
           value={formatSelectDate(scheduledDate)}
@@ -230,6 +235,7 @@ export default function ScheduleWorkoutScreen() {
         <Select
           label="Время начала"
           value={scheduledTime}
+          placeholder="Выберите время"
           width="fill"
           showMessage={false}
           state={dateConfirmed ? "default" : "empty"}
@@ -244,7 +250,7 @@ export default function ScheduleWorkoutScreen() {
           onPress={openRepeat}
         />
 
-        {dateConfirmed ? (
+        {dateConfirmed && scheduledTime ? (
           <View style={styles.previewSection}>
             <Divider width="fill" tone="canvasSoft" />
             <View style={styles.previewCardWrap}>
@@ -266,7 +272,7 @@ export default function ScheduleWorkoutScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Сохранить" type="primary" width="fill" onPress={saveWorkout} />
+        <Button label="Сохранить" type="primary" size="large" width="fill" state={scheduledTime ? "active" : "disabled"} onPress={saveWorkout} />
       </View>
 
       <CalendarSheet
@@ -402,7 +408,7 @@ function CalendarSheet({
                 ))}
               </View>
             </View>
-            <Button label="Сохранить" type="primary" width="fill" state={selectedSlot ? "active" : "disabled"} onPress={onSave} />
+            <Button label="Сохранить" type="primary" size="large" width="fill" state={selectedSlot ? "active" : "disabled"} onPress={onSave} />
           </View>
         </Animated.View>
       </View>

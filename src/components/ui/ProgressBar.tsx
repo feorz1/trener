@@ -7,6 +7,7 @@ export type ProgressBarProps = {
   total: number;
   label?: string;
   showBadge?: boolean;
+  tone?: "dynamic" | "primary";
   style?: StyleProp<ViewStyle>;
 };
 
@@ -27,12 +28,12 @@ function getTone(percent: number): { fill: string; badgeTone: BadgeTone } {
   return { fill: theme.colors.status.negative, badgeTone: "negativeSolid" };
 }
 
-export function ProgressBar({ completed, total, label, showBadge = true, style }: ProgressBarProps) {
+export function ProgressBar({ completed, total, label, showBadge = true, tone: toneMode = "dynamic", style }: ProgressBarProps) {
   const safeTotal = Math.max(0, total);
   const safeCompleted = Math.max(0, Math.min(completed, safeTotal));
   const percent = safeTotal > 0 ? clampPercent((safeCompleted / safeTotal) * 100) : 0;
   const roundedPercent = Math.round(percent);
-  const tone = getTone(percent);
+  const tone = toneMode === "primary" ? { fill: theme.colors.content.primary, badgeTone: "primary" as const } : getTone(percent);
   const showFillSeparator = roundedPercent > 0 && roundedPercent < 100;
   const resolvedLabel = label ?? `${safeCompleted} of ${safeTotal} exercises`;
 
