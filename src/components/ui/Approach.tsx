@@ -1019,7 +1019,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   numberText: {
-    ...theme.typography.body.smCaption,
+    ...theme.typography.body.smStrong,
     color: theme.colors.content.inkDeep
   },
   metrics: {
@@ -1048,7 +1048,7 @@ const styles = StyleSheet.create({
     margin: theme.spacing[0],
     textAlign: "center",
     textAlignVertical: "center",
-    ...theme.typography.body.smStrong,
+    ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink,
     backgroundColor: "transparent"
   },
@@ -1057,7 +1057,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     marginTop: theme.spacing.xl,
-    ...theme.typography.body.caption,
+    ...theme.typography.body.smCaption,
     color: theme.colors.content.mute
   },
   metricFocusBorder: {

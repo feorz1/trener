@@ -85,7 +85,7 @@ export function ApproachCount({ item, trailingSlot, onDelete, onValueChange, sty
   }
 
   return (
-    <StagedSwipeDelete accessibilityLabel="Удалить подход" deleteWidth={theme.sizes.approachDeleteWidth} onDelete={onDelete}>
+    <StagedSwipeDelete accessibilityLabel="Удалить подход" deleteWidth={theme.sizes.approachDeleteWidth} onDelete={onDelete} style={styles.swipeRoot}>
       {content}
     </StagedSwipeDelete>
   );
@@ -116,6 +116,8 @@ function Metric({ label, value, onChange }: { label: string; value: string; onCh
 
 const styles = StyleSheet.create({
   root: {
+    width: "100%",
+    alignSelf: "stretch",
     minHeight: theme.sizes.approachCountRowMinHeight,
     flexDirection: "row",
     alignItems: "center",
@@ -124,6 +126,10 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvasSoft
+  },
+  swipeRoot: {
+    width: "100%",
+    alignSelf: "stretch"
   },
   numberPill: {
     width: theme.sizes.approachCountNumber,
@@ -134,7 +140,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   numberText: {
-    ...theme.typography.body.smCaption,
+    ...theme.typography.body.smStrong,
     color: theme.colors.content.inkDeep
   },
   metrics: {
@@ -162,13 +168,13 @@ const styles = StyleSheet.create({
     margin: theme.spacing[0],
     textAlign: "center",
     textAlignVertical: "center",
-    ...theme.typography.body.smStrong,
+    ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink,
     backgroundColor: "transparent"
   },
   metricLabel: {
     marginTop: theme.spacing.xl,
-    ...theme.typography.body.caption,
+    ...theme.typography.body.smCaption,
     color: theme.colors.content.mute
   },
   metricFocusBorder: {

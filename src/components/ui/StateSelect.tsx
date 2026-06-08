@@ -49,7 +49,6 @@ const styles = StyleSheet.create({
     color: theme.colors.content.ink
   },
   resetButton: {
-    minHeight: theme.spacing["2xl"],
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: theme.spacing.md,
