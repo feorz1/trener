@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Chip, Divider, ListItemGym, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
+import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
 function parseIds(value?: string | string[]) {
@@ -29,6 +30,7 @@ export default function ExerciseSelectionScreen() {
   const supersetConnectionIdsFromParams = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedFromParams);
   const [search, setSearch] = useState("");
+  const { scrollProps } = useConditionalScroll();
   const normalizedSearch = search.trim().toLowerCase();
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -73,7 +75,7 @@ export default function ExerciseSelectionScreen() {
         <Divider width="fill" tone="canvasSoft" />
         <View style={styles.bodyContent}>
           <StateSelect selectedCount={selectedIds.length} label="Выбрано" resetLabel="Сбросить" width="fill" onReset={() => setSelectedIds([])} />
-          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={styles.list} {...scrollProps}>
             {filteredExercises.map((exercise, index) => {
               const selected = selectedIdSet.has(exercise.id);
               const previousSelected = index > 0 && selectedIdSet.has(filteredExercises[index - 1].id);
@@ -100,6 +102,7 @@ export default function ExerciseSelectionScreen() {
         <Button
           label="Сохранить"
           type="primary"
+          size="large"
           width="fill"
           state={selectedIds.length > 0 ? "active" : "disabled"}
           onPress={saveSelection}

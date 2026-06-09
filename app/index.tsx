@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Card, Header, ListItemCell, Modal, Radio } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
+import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { WorkoutStatus } from "@/types";
 
@@ -267,6 +268,7 @@ export default function IndexScreen() {
   const [planningStep, setPlanningStep] = useState<PlanningModalStep>("closed");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const [now, setNow] = useState(() => new Date());
+  const { scrollProps } = useConditionalScroll();
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -343,7 +345,7 @@ export default function IndexScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <View style={styles.body}>
           <Header title="Тренировки" subtitle={formatHeaderDate(selectedDate)} subtitlePosition="top" size="xl" style={styles.header} />
 
@@ -430,11 +432,9 @@ export default function IndexScreen() {
                 <ListItemCell
                   key={client.id}
                   title={client.name}
-                  leading="avatar"
-                  avatarType="initials"
-                  avatarInitials={client.avatarInitials}
+                  leading="none"
+                  density="compact"
                   trailingSlot={<Radio selected={selected} showLabel={false} onChange={() => setSelectedClientId(client.id)} />}
-                  selected={selected}
                   onPress={() => setSelectedClientId(client.id)}
                 />
               );

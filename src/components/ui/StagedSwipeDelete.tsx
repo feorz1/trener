@@ -260,6 +260,8 @@ export function StagedSwipeDelete({
 
 const styles = StyleSheet.create({
   root: {
+    width: "100%",
+    alignSelf: "stretch",
     minHeight: theme.sizes.approachCountRowMinHeight,
     position: "relative",
     overflow: "hidden",

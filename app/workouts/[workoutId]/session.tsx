@@ -13,7 +13,7 @@ export default function WorkoutSessionScreen() {
         <Header title="Тренировка" subtitle={`ID: ${workoutId ?? "unknown"}`} style={styles.header} />
         <Text style={styles.copy}>Экран сессии будет следующим шагом после Today/Home.</Text>
         <Link href="/" asChild>
-          <Button label="Назад к расписанию" type="secondary" width="fill" />
+          <Button label="Назад к расписанию" type="secondary" size="large" width="fill" />
         </Link>
       </View>
     </SafeAreaView>

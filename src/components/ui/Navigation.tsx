@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
-import { Icon } from "./Icon";
+import { Icon, type IconName } from "./Icon";
 
 export type NavigationProps = {
   title: string;
@@ -8,6 +8,7 @@ export type NavigationProps = {
   showSubtitle?: boolean;
   onBack?: PressableProps["onPress"];
   backAccessibilityLabel?: string;
+  backIconName?: IconName;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -17,6 +18,7 @@ export function Navigation({
   showSubtitle = true,
   onBack,
   backAccessibilityLabel = "Go back",
+  backIconName = "arrow left",
   style
 }: NavigationProps) {
   const hasSubtitle = showSubtitle && Boolean(subtitle);
@@ -30,7 +32,7 @@ export function Navigation({
         onPress={onBack}
         style={({ pressed }) => [styles.sideSlot, pressed && styles.pressed]}
       >
-        <Icon name="arrow left" size={theme.sizes.navigationIcon} color={theme.colors.content.ink} />
+        <Icon name={backIconName} size={theme.sizes.navigationIcon} color={theme.colors.content.ink} />
       </Pressable>
 
       <View style={styles.centerSlot}>

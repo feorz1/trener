@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   },
   optionSelected: {
     borderColor: theme.colors.content.inkDeep,
-    backgroundColor: theme.colors.content.primaryPale
+    backgroundColor: theme.colors.background.canvas
   },
   optionPressed: {
     backgroundColor: theme.colors.content.primaryActive
@@ -170,6 +170,7 @@ const styles = StyleSheet.create({
   optionLabel: {
     ...theme.typography.body.md,
     minWidth: theme.spacing[0],
+    minHeight: theme.typography.body.md.lineHeight,
     color: theme.colors.content.ink
   },
   messageRow: {

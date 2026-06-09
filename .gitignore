@@ -18,6 +18,18 @@ figma-plugin/dist/
 .codex/
 .codex/logs/
 .codex_tmp/
+.codex-temp/
+
+# Local editor and generated design scratch files
+.idea/
+.magicpath/
+
+# Temporary media captures
+tmp_video_contact.jpg
+tmp_video_frames/
+
+# Local native build artifacts
+android/app/debug.keystore
 
 # Logs
 *.log

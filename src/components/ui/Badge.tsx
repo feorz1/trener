@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     ...theme.typography.body.smStrong
   },
   labelTiny: {
-    ...theme.typography.captionStrong
+    ...theme.typography.body.smCaption
   }
 });
 
@@ -155,7 +155,7 @@ const sizeStyles = StyleSheet.create({
     paddingVertical: theme.spacing.xxs
   },
   s: {
-    minHeight: theme.typography.captionStrong.lineHeight + theme.spacing.xxs + theme.spacing.xxs,
+    minHeight: theme.typography.body.smCaption.lineHeight + theme.spacing.xxs + theme.spacing.xxs,
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: theme.spacing.xxs
   }

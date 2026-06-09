@@ -44,5 +44,17 @@ export const shadows = {
       elevation: 2
     },
     default: {}
+  }),
+  glass: Platform.select({
+    ios: {
+      shadowColor: colors.text.primary,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.12,
+      shadowRadius: 40
+    },
+    android: {
+      elevation: 6
+    },
+    default: {}
   })
 } as const;

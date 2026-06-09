@@ -1,7 +1,8 @@
 import * as Haptics from "expo-haptics";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Platform, ScrollView, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from "react-native";
+import Animated, { useAnimatedRef } from "react-native-reanimated";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { mockExercises } from "@/data/mockExercises";
+import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { ApproachCountItem } from "@/components/ui";
 
@@ -167,6 +169,9 @@ export default function NewWorkoutScreen() {
   const [localApproachData, setLocalApproachData] = useState<ApproachData>(selectedApproachData);
   const [exerciseRowHeights, setExerciseRowHeights] = useState<Record<string, number>>({});
   const [exerciseListWidth, setExerciseListWidth] = useState<number | undefined>();
+  const [exerciseDragging, setExerciseDragging] = useState(false);
+  const { scrollProps } = useConditionalScroll({ disabled: exerciseDragging });
+  const scrollableRef = useAnimatedRef<ScrollView>();
   const selectedExercises = useMemo(
     () => orderedExerciseIds.flatMap((id) => mockExercises.find((exercise) => exercise.id === id) ?? []),
     [orderedExerciseIds]
@@ -325,6 +330,7 @@ export default function NewWorkoutScreen() {
   }, []);
 
   const handleExerciseDragEnd = useCallback(({ order }: SortableFlexDragEndParams) => {
+    setExerciseDragging(false);
     setOrderedExerciseIds((currentIds) => {
       const nextIds = order(currentIds);
       setLocalSupersetConnectionIds((current) => preserveSupersetConnectionsAfterReorder(currentIds, nextIds, current));
@@ -333,6 +339,7 @@ export default function NewWorkoutScreen() {
   }, []);
 
   const handleExerciseDragStart = useCallback(() => {
+    setExerciseDragging(true);
     triggerImpact(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
@@ -341,6 +348,7 @@ export default function NewWorkoutScreen() {
   }, []);
 
   const handleExerciseDrop = useCallback(() => {
+    setExerciseDragging(false);
     triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
@@ -357,6 +365,7 @@ export default function NewWorkoutScreen() {
           setVariant={localApproachData[item.id]?.length > 0 ? "set" : "new"}
           setValues={localApproachData[item.id] ? formatSetValues(localApproachData[item.id]) : undefined}
           onPress={localApproachData[item.id]?.length > 0 ? () => openExerciseApproach(item.id) : undefined}
+          suppressPressedStyle
           onAddSetPress={() => openExerciseApproach(item.id)}
           onDelete={() => removeExercise(item.id)}
           style={styles.exerciseCard}
@@ -377,7 +386,11 @@ export default function NewWorkoutScreen() {
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title="Создание тренировки" onBack={() => router.back()} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView
+        ref={scrollableRef as never}
+        contentContainerStyle={styles.content}
+        {...scrollProps}
+      >
         <View>
           <Select
             label="Клиент"
@@ -426,6 +439,7 @@ export default function NewWorkoutScreen() {
                     minWidth={exerciseListWidth ?? theme.spacing[0]}
                     overDrag="none"
                     overflow="hidden"
+                    scrollableRef={scrollableRef}
                     strategy="insert"
                     width={exerciseListWidth ?? "fill"}
                     onActiveItemDropped={handleExerciseDrop}
@@ -446,6 +460,7 @@ export default function NewWorkoutScreen() {
               <Button
                 label="Добавить"
                 type="secondaryNeutral"
+                size="large"
                 width="fill"
                 onPress={openExerciseSelection}
               />
@@ -461,16 +476,17 @@ export default function NewWorkoutScreen() {
                 <Text style={styles.emptyTitle}>Упражнений ещё нет</Text>
                 <Text style={styles.emptyDescription}>Добавьте новое, чтобы создать тренировку</Text>
               </View>
-              <Button label="Добавить" type="secondaryNeutral" size="small" onPress={openExerciseSelection} />
+              <Button label="Добавить" type="secondaryNeutral" size="large" onPress={openExerciseSelection} />
             </View>
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
 
       <View style={styles.footer}>
         <Button
           label="Сохранить и запланировать"
           type="primary"
+          size="large"
           width="fill"
           state={hasExercises ? "active" : "disabled"}
           onPress={openSchedule}
@@ -497,11 +513,9 @@ export default function NewWorkoutScreen() {
             <ListItemCell
               key={client.id}
               title={client.name}
-              leading="avatar"
-              avatarType="initials"
-              avatarInitials={client.avatarInitials}
+              leading="none"
+              density="compact"
               trailingSlot={<Radio selected={selected} showLabel={false} onChange={() => setPendingClientId(client.id)} />}
-              selected={selected}
               onPress={() => setPendingClientId(client.id)}
             />
           );

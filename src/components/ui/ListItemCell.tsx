@@ -29,6 +29,8 @@ export type ListItemCellState = "default" | "pressed" | "disabled";
 export type ListItemCellLeading = "none" | "avatar" | "icon";
 export type ListItemCellTrailing = "none" | "button" | "checkbox" | "radio" | "icon" | "switch" | "badge" | "text";
 export type ListItemCellGroupPosition = GroupedListItemPosition;
+export type ListItemCellDensity = "regular" | "compact";
+export type ListItemCellSurface = "canvas" | "canvasSoft";
 
 export type ListItemCellProps = Omit<PressableProps, "children" | "disabled" | "style"> & {
   title: string;
@@ -41,6 +43,8 @@ export type ListItemCellProps = Omit<PressableProps, "children" | "disabled" | "
   disabled?: boolean;
   selected?: boolean;
   groupPosition?: ListItemCellGroupPosition;
+  density?: ListItemCellDensity;
+  surface?: ListItemCellSurface;
   showEyebrow?: boolean;
   showSubtitle?: boolean;
   avatarType?: AvatarType;
@@ -82,6 +86,8 @@ export function ListItemCell({
   disabled,
   selected = false,
   groupPosition = "single",
+  density = "regular",
+  surface = "canvas",
   showEyebrow = Boolean(eyebrow),
   showSubtitle = Boolean(subtitle),
   avatarType = "icon",
@@ -119,6 +125,8 @@ export function ListItemCell({
 
           return [
             styles.root,
+            density === "compact" && styles.rootCompact,
+            surface === "canvasSoft" && styles.rootCanvasSoft,
             selected && styles.selected,
             isPressed && (selected ? styles.selectedPressed : styles.pressed),
             isDisabled && styles.disabled
@@ -236,6 +244,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.background.canvas
+  },
+  rootCompact: {
+    minHeight: theme.sizes.listItemCellCompactMinHeight
+  },
+  rootCanvasSoft: {
+    backgroundColor: theme.colors.background.canvasSoft
   },
   pressed: {
     backgroundColor: theme.colors.background.canvasSoft

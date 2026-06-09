@@ -10,6 +10,7 @@ import {
   View,
   type ImageSourcePropType,
   type StyleProp,
+  type TextInputSelectionChangeEventData,
   type TextStyle,
   type ViewStyle
 } from "react-native";
@@ -855,11 +856,28 @@ function Metric({
   onChange: (value: string) => void;
   onFocus?: () => void;
 }) {
+  const inputRef = useRef<NativeTextInput>(null);
   const [focused, setFocused] = useState(false);
+  const [selection, setSelection] = useState({ start: value.length, end: value.length });
+  const moveCaretToEnd = useCallback(() => {
+    const nextSelection = { start: value.length, end: value.length };
+
+    setSelection(nextSelection);
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection: nextSelection });
+    });
+  }, [value]);
+
+  useEffect(() => {
+    if (!focused) {
+      setSelection({ start: value.length, end: value.length });
+    }
+  }, [focused, value.length]);
 
   return (
     <View style={styles.metric}>
       <NativeTextInput
+        ref={inputRef}
         accessibilityLabel={label}
         editable={!disabled}
         keyboardType="decimal-pad"
@@ -868,8 +886,12 @@ function Metric({
         onFocus={() => {
           onFocus?.();
           setFocused(true);
+          moveCaretToEnd();
         }}
-        selectTextOnFocus
+        onSelectionChange={(event: { nativeEvent: TextInputSelectionChangeEventData }) => {
+          setSelection(event.nativeEvent.selection);
+        }}
+        selection={focused ? selection : undefined}
         style={[styles.metricValueInput, disabled && styles.metricDisabledText, metricInputReset]}
         value={value}
       />
@@ -1019,7 +1041,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   numberText: {
-    ...theme.typography.body.smCaption,
+    ...theme.typography.body.smStrong,
     color: theme.colors.content.inkDeep
   },
   metrics: {
@@ -1048,7 +1070,7 @@ const styles = StyleSheet.create({
     margin: theme.spacing[0],
     textAlign: "center",
     textAlignVertical: "center",
-    ...theme.typography.body.smStrong,
+    ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink,
     backgroundColor: "transparent"
   },
@@ -1057,7 +1079,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     marginTop: theme.spacing.xl,
-    ...theme.typography.body.caption,
+    ...theme.typography.body.smCaption,
     color: theme.colors.content.mute
   },
   metricFocusBorder: {

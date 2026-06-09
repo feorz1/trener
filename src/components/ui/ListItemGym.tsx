@@ -42,6 +42,7 @@ export type ListItemGymProps = Omit<PressableProps, "children" | "style"> & {
   onMovePress?: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  suppressPressedStyle?: boolean;
   deleteOpen?: boolean;
   defaultDeleteOpen?: boolean;
   onDeleteCommitStart?: () => void;
@@ -76,6 +77,7 @@ export function ListItemGym({
   onAddSetPress,
   onSelectedChange,
   onMovePress,
+  suppressPressedStyle = false,
   deleteOpen,
   defaultDeleteOpen = false,
   onDeleteCommitStart,
@@ -111,7 +113,7 @@ export function ListItemGym({
       style={({ pressed }) => [
         styles.root,
         isSelected && styles.selected,
-        (pressed || swipePressHeld || deleteCommitting) && (isSelected ? styles.selectedPressed : styles.pressed)
+        ((!suppressPressedStyle && (pressed || swipePressHeld)) || deleteCommitting) && (isSelected ? styles.selectedPressed : styles.pressed)
       ]}
     >
       <ExerciseThumb source={imageSource} />
@@ -142,7 +144,7 @@ export function ListItemGym({
         onDelete={handleDelete}
         onDeleteCommitStart={handleDeleteCommitStart}
         onOpenChange={onDeleteOpenChange}
-        onSwipePressHoldChange={setSwipePressHeld}
+        onSwipePressHoldChange={suppressPressedStyle ? undefined : setSwipePressHeld}
         shapeStyle={radiusStyle}
         style={[styles.swipeRoot, widthStyle, style]}
       >
@@ -226,10 +228,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     minWidth: theme.spacing[0],
-    gap: theme.spacing.xs
+    gap: theme.spacing.xxs
   },
   title: {
-    ...theme.typography.body.smStrong,
+    ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink
   }
 });

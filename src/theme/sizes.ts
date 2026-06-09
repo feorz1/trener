@@ -45,6 +45,7 @@ export const sizes = {
   avatarIndicatorMd: 14,
   avatarRingStroke: 2,
   listItemCellMinHeight: 68,
+  listItemCellCompactMinHeight: 48,
   listItemCellIcon: 20,
   actionWidth: 500,
   navigationHeight: 44,
@@ -102,6 +103,9 @@ export const sizes = {
   approachStatusIcon: 24,
   approachDeleteWidth: 56,
   approachDragLongPressDelay: 260,
+  approachQuickValuesHeight: 76,
+  approachQuickValuesChipHeight: 40,
+  approachQuickValuesChipMinWidth: 53,
   alertWidth: 356,
   alertIcon: 32,
   alertCompactMinHeight: 64,
@@ -119,7 +123,22 @@ export const sizes = {
   variantOptionHeight: 48,
   switchWidth: 52,
   switchHeight: 32,
-  switchThumb: 28
+  switchThumb: 28,
+  measurementSliderHeight: 285,
+  measurementSliderContentGap: 30,
+  measurementSliderValueHeight: 72,
+  measurementSliderRulerHeight: 60,
+  measurementSliderFadeHeight: 50,
+  measurementSliderTickSpacing: 14,
+  measurementSliderTickWidth: 2,
+  measurementSliderMinorTickHeight: 17,
+  measurementSliderMajorTickHeight: 26,
+  measurementSliderIndicatorWidth: 15,
+  measurementSliderIndicatorHeight: 13,
+  measurementSliderFadeWidth: 76,
+  measurementSliderRangeHeight: 26,
+  measurementSliderLabelWidth: 56,
+  measurementSliderSnapDelay: 120
 } as const;
 
 export type SizeToken = keyof typeof sizes;

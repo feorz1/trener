@@ -15,7 +15,7 @@ colors:
   mute: "#868685"
   disabled: "#cfcfcf"
   canvas: "#ffffff"
-  canvas-soft: "#edefeb"
+  canvas-soft: "#f3f3f3"
   card-divider: "#f5f4f2"
   positive: "#2ead4b"
   positive-deep: "#054d28"
@@ -72,7 +72,7 @@ typography:
     fontFamily: Inter, system-ui, sans-serif
     fontSize: 20px
     fontWeight: 600
-    lineHeight: 30px
+    lineHeight: 24px
   body-md:
     fontFamily: Inter, system-ui, sans-serif
     fontSize: 16px
@@ -110,9 +110,9 @@ typography:
     lineHeight: 16px
   button-md:
     fontFamily: Inter, system-ui, sans-serif
-    fontSize: 14px
+    fontSize: 16px
     fontWeight: 600
-    lineHeight: 18px
+    lineHeight: 20px
 
 rounded:
   none: 0px
@@ -304,7 +304,7 @@ components:
 
 ## Overview
 
-Wise — the global money-transfer brand — wears its identity in a single signature pairing: a vivid lime-green `{colors.primary}` (`#9fe870`) used as the CTA pill and brand accent, set against a pale sage-tinted canvas `{colors.canvas-soft}` (`#edefeb`) that runs across the hero band, and a near-black ink `{colors.ink}` (`#0e0f0c`) with a hint of warmth from the brand's underlying olive cast. The brand reads more like a calm Scandinavian magazine than a bank — generous whitespace, large rounded cards, and an unusually heavy display sans set at weight 900 carrying every hero headline.
+Wise — the global money-transfer brand — wears its identity in a single signature pairing: a vivid lime-green `{colors.primary}` (`#9fe870`) used as the CTA pill and brand accent, set against a pale sage-tinted canvas `{colors.canvas-soft}` (`#f3f3f3`) that runs across the hero band, and a near-black ink `{colors.ink}` (`#0e0f0c`) with a hint of warmth from the brand's underlying olive cast. The brand reads more like a calm Scandinavian magazine than a bank — generous whitespace, large rounded cards, and an unusually heavy display sans set at weight 900 carrying every hero headline.
 
 Display typography is the second decisive voice. The proprietary `Wise Sans` family carries hero displays at weight 900 in scales from 64 px up to 126 px on the largest hero. The brand pairs Wise Sans 900 with Inter at weight 600 for sub-displays — the contrast between the chunky proprietary face and Inter's neutrality creates a particular hierarchy: Wise Sans for the brand moment, Inter for everything else.
 
@@ -314,7 +314,7 @@ Cards are universally pill-rounded — `{rounded.xl}` 24 px is the brand's signa
 - A single lime-green CTA accent `{colors.primary}` (`#9fe870`) — the brand's universal primary action color. No second accent.
 - Two-face display typography — Wise Sans (proprietary, weight 900, hero scale) + Inter (weight 600, sub-display scale). The contrast is the brand's typographic story.
 - `{rounded.xl}` 24 px is the canonical card radius; buttons use `{rounded.lg}` / `{rounded.md}` / `{rounded.pill}` by size and type.
-- Sage-tinted canvas `{colors.canvas-soft}` (`#edefeb`) is the brand's hero surface; white `{colors.canvas}` is reserved for cards within the sage band.
+- Sage-tinted canvas `{colors.canvas-soft}` (`#f3f3f3`) is the brand's hero surface; white `{colors.canvas}` is reserved for cards within the sage band.
 - A full semantic palette: positive green family, warning yellow family, negative red family — each documented with content / hover / active variants for in-product use.
 - Currency-converter card on the hero — the brand's signature interactive component, hosting from/to amount inputs.
 
@@ -328,7 +328,7 @@ Cards are universally pill-rounded — `{rounded.xl}` 24 px is the brand's signa
 
 ### Surface
 - **Canvas** (`{colors.canvas}` — `#ffffff`): Pure white for card interiors.
-- **Canvas Soft** (`{colors.canvas-soft}` — `#edefeb`): The sage-tinted page background. Defining mood of the brand.
+- **Canvas Soft** (`{colors.canvas-soft}` — `#f3f3f3`): The sage-tinted page background. Defining mood of the brand.
 - **Card Divider** (`{colors.card-divider}` — `#f5f4f2`): Neutral fill for card-slot separators and their corner masks.
 
 ### Text
@@ -371,7 +371,7 @@ Two faces ladder the system:
 | `{typography.display-md}` | 40px | 900 | 34px | 0 | Section / card headlines. |
 | `{typography.display-sm}` | 32px | 600 | 38.4px | -0.96px | Inter-rendered section headings. |
 | `{typography.display-xs}` | 24px | 600 | 31.2px | -0.48px | Sub-section displays. |
-| `{typography.body-lg}` | 20px | 600 | 30px | 0 | Lead paragraphs. |
+| `{typography.body-lg}` | 20px | 600 | 24px | 0 | Lead paragraphs. |
 | `{typography.body-md}` | 16px | 400 | 24px | 0 | Default body. |
 | `{typography.body-md-strong}` | 16px | 600 | 20px | 0 | Bold inline body. |
 | `{typography.body-sm}` | 14px | 400 | 20px | 0 | Secondary body. |
@@ -379,7 +379,7 @@ Two faces ladder the system:
 | `{typography.body-sm-caption}` | 12px | 600 | 16px | 0 | Small semibold number chips. |
 | `{typography.body-caption}` | 10px | 600 | 16px | 0 | Compact unit labels and helper captions. |
 | `{typography.caption}` | 12px | 400 | 16px | 0 | Fine print. |
-| `{typography.button-md}` | 14px | 600 | 18px | 0 | Button label. |
+| `{typography.button-md}` | 16px | 600 | 20px | 0 | Button label. |
 
 ### Principles
 - **Weight 900 for hero, weight 600 for everything else.** The brand's display ceiling is full-black weight; everything below is semibold.

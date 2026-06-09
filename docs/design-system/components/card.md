@@ -60,8 +60,8 @@ Canonical trainer dashboard card. It covers the day plan block, workout entries,
 | plan meta typography | `Typography/Body/SM`, 18px line height | `theme.typography.body.sm` with line-height override |
 | plan count typography | `Typography/Display/SM` | `theme.typography.display.sm` |
 | muscle icon | `Icons / muscle arms` | `Icon name="muscle arms"` |
-| workout action button height | `spacing/sm + Typography/Button/MD + spacing/sm` | `Button size="medium"` with compact card override |
-| plan next action button height | `Typography/Button/MD + spacing/md + spacing/md` | compact card override |
+| workout action button height | `Button / medium` | `Button size="medium"` / `theme.sizes.buttonMediumHeight` |
+| plan next action button height | `Button / medium` | `Button size="medium"` / `theme.sizes.buttonMediumHeight` |
 
 ## Implementation Requirements
 
@@ -69,7 +69,7 @@ Canonical trainer dashboard card. It covers the day plan block, workout entries,
 - More action opens an in-card move/cancel menu.
 - The menu resets when `variant`, `dayPlanState`, or `workoutStatus` changes.
 - `dayPlanState="plan"` renders the 343x120 summary with title, count, and meta text; `dayPlanState="planNext"` renders the 343x153 summary with one green add action and no meta line.
-- Workout entries use the same nesting as Figma: a `content` block with 16 px padding and 8 px internal gap, followed by `Action small` with 16 px horizontal padding, 2 px top padding, 16 px bottom padding, and compact 34 px action buttons.
+- Workout entries use the same nesting as Figma: a `content` block with 16 px padding and 8 px internal gap, followed by an action area with 16 px horizontal padding, 2 px top padding, 16 px bottom padding, and canonical 44 px medium action buttons.
 - In-progress workout cards show an action by default. Planned workout cards use `showAction` to match the Figma property.
 - The more menu must render above the progress/action area and menu labels must stay on one line.
 - Storybook previews should render Card at its canonical Figma width on web, while native screens may stretch it to the available container width.

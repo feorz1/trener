@@ -52,7 +52,7 @@ const defaultLabels: Record<Exclude<ButtonSize, "mediumIcon" | "smallIcon">, str
 export function Button({
   label,
   type = "primary",
-  size = "medium",
+  size = "large",
   state = "active",
   width = "hug",
   disabled,

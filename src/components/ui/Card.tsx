@@ -83,7 +83,7 @@ export function Card({
         </View>
         {shouldShowDayAction ? (
           <View style={styles.planActions}>
-            <Button label={dayActionLabel} type="secondary" size="medium" width="fill" onPress={onAddWorkout} style={styles.planButton} />
+            <Button label={dayActionLabel} type="secondary" size="medium" width="fill" onPress={onAddWorkout} />
           </View>
         ) : null}
       </View>
@@ -99,7 +99,6 @@ export function Card({
           size="medium"
           width="fill"
           onPress={onAddWorkout}
-          style={styles.addWorkoutButton}
         />
       </View>
     );
@@ -172,7 +171,6 @@ export function Card({
             size="medium"
             width="fill"
             onPress={isInProgress ? onContinue : onStart}
-            style={styles.workoutActionButton}
           />
         </View>
       ) : null}
@@ -210,9 +208,6 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xxs,
     paddingBottom: theme.spacing.lg
   },
-  planButton: {
-    minHeight: theme.typography.button.md.lineHeight + theme.spacing.md + theme.spacing.md
-  },
   workoutRoot: {
     position: "relative",
     alignSelf: "stretch",
@@ -231,10 +226,6 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvasSoft
-  },
-  addWorkoutButton: {
-    minHeight: theme.typography.button.md.lineHeight + theme.spacing.md + theme.spacing.md,
-    paddingVertical: theme.spacing.md
   },
   pressed: {
     backgroundColor: theme.colors.content.primaryPale
@@ -306,9 +297,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xxs,
     paddingBottom: theme.spacing.lg
-  },
-  workoutActionButton: {
-    minHeight: theme.typography.button.md.lineHeight + theme.spacing.sm + theme.spacing.sm
   },
   clientName: {
     ...theme.typography.display.xs,

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Platform,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   TextInput as NativeTextInput,
   View,
   type StyleProp,
+  type TextInputSelectionChangeEventData,
   type TextStyle,
   type ViewStyle
 } from "react-native";
@@ -21,11 +22,17 @@ export type ApproachCountItem = {
   unit?: string;
 };
 
+export type ApproachMetric = "weight" | "reps";
+
 export type ApproachCountProps = {
   item: ApproachCountItem;
+  focusedMetric?: ApproachMetric;
   trailingSlot?: ReactNode;
   onDelete?: () => void;
   onValueChange?: (patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => void;
+  onMetricBlur?: (metric: ApproachMetric) => void;
+  onMetricCommit?: (metric: ApproachMetric, value: number | undefined) => void;
+  onMetricFocus?: (metric: ApproachMetric) => void;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -49,12 +56,33 @@ const metricInputReset =
       } as TextStyle & { boxShadow: "none"; outlineStyle: "none" })
     : undefined;
 
-export function ApproachCount({ item, trailingSlot, onDelete, onValueChange, style }: ApproachCountProps) {
+export function ApproachCount({
+  item,
+  focusedMetric,
+  trailingSlot,
+  onDelete,
+  onValueChange,
+  onMetricBlur,
+  onMetricCommit,
+  onMetricFocus,
+  style
+}: ApproachCountProps) {
   const [weight, setWeight] = useState(item.weight === undefined ? "" : String(item.weight));
   const [reps, setReps] = useState(item.reps === undefined ? "" : String(item.reps));
+  const dirtyMetricsRef = useRef<Partial<Record<ApproachMetric, boolean>>>({});
 
-  const updateMetric = (key: "weight" | "reps", value: string) => {
+  useEffect(() => {
+    setWeight(item.weight === undefined ? "" : String(item.weight));
+  }, [item.weight]);
+
+  useEffect(() => {
+    setReps(item.reps === undefined ? "" : String(item.reps));
+  }, [item.reps]);
+
+  const updateMetric = (key: ApproachMetric, value: string) => {
     const nextValue = sanitizeMetricValue(value);
+    dirtyMetricsRef.current[key] = true;
+
     if (key === "weight") {
       setWeight(nextValue);
       onValueChange?.({ weight: parseMetricValue(nextValue) });
@@ -65,6 +93,13 @@ export function ApproachCount({ item, trailingSlot, onDelete, onValueChange, sty
     onValueChange?.({ reps: parseMetricValue(nextValue) });
   };
 
+  const commitMetric = (key: ApproachMetric, value: string) => {
+    if (!dirtyMetricsRef.current[key]) return;
+
+    dirtyMetricsRef.current[key] = false;
+    onMetricCommit?.(key, parseMetricValue(value));
+  };
+
   const content = (
     <View style={[styles.root, style]}>
       <View style={styles.numberPill}>
@@ -72,8 +107,28 @@ export function ApproachCount({ item, trailingSlot, onDelete, onValueChange, sty
       </View>
 
       <View style={styles.metrics}>
-        <Metric label={item.unit ?? "КГ"} value={weight} onChange={(value) => updateMetric("weight", value)} />
-        <Metric label="ПОВТОРОВ" value={reps} onChange={(value) => updateMetric("reps", value)} />
+        <Metric
+          label={item.unit ?? "КГ"}
+          shouldFocus={focusedMetric === "weight"}
+          value={weight}
+          onBlur={() => {
+            commitMetric("weight", weight);
+            onMetricBlur?.("weight");
+          }}
+          onChange={(value) => updateMetric("weight", value)}
+          onFocus={() => onMetricFocus?.("weight")}
+        />
+        <Metric
+          label="ПОВТОРОВ"
+          shouldFocus={focusedMetric === "reps"}
+          value={reps}
+          onBlur={() => {
+            commitMetric("reps", reps);
+            onMetricBlur?.("reps");
+          }}
+          onChange={(value) => updateMetric("reps", value)}
+          onFocus={() => onMetricFocus?.("reps")}
+        />
       </View>
 
       {trailingSlot ?? <Icon name="move" size={theme.sizes.approachStatusIcon} color={theme.colors.content.body} />}
@@ -85,24 +140,72 @@ export function ApproachCount({ item, trailingSlot, onDelete, onValueChange, sty
   }
 
   return (
-    <StagedSwipeDelete accessibilityLabel="Удалить подход" deleteWidth={theme.sizes.approachDeleteWidth} onDelete={onDelete}>
+    <StagedSwipeDelete accessibilityLabel="Удалить подход" deleteWidth={theme.sizes.approachDeleteWidth} onDelete={onDelete} style={styles.swipeRoot}>
       {content}
     </StagedSwipeDelete>
   );
 }
 
-function Metric({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function Metric({
+  label,
+  shouldFocus,
+  value,
+  onBlur,
+  onChange,
+  onFocus
+}: {
+  label: string;
+  shouldFocus?: boolean;
+  value: string;
+  onBlur?: () => void;
+  onChange: (value: string) => void;
+  onFocus?: () => void;
+}) {
+  const inputRef = useRef<NativeTextInput>(null);
   const [focused, setFocused] = useState(false);
+  const [selection, setSelection] = useState({ start: value.length, end: value.length });
+  const moveCaretToEnd = useCallback(() => {
+    const nextSelection = { start: value.length, end: value.length };
+
+    setSelection(nextSelection);
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection: nextSelection });
+    });
+  }, [value]);
+
+  useEffect(() => {
+    if (!shouldFocus) return;
+
+    inputRef.current?.focus();
+    moveCaretToEnd();
+  }, [moveCaretToEnd, shouldFocus]);
+
+  useEffect(() => {
+    if (!focused) {
+      setSelection({ start: value.length, end: value.length });
+    }
+  }, [focused, value.length]);
 
   return (
     <View style={styles.metric}>
       <NativeTextInput
+        ref={inputRef}
         accessibilityLabel={label}
         keyboardType="decimal-pad"
-        onBlur={() => setFocused(false)}
+        onBlur={() => {
+          setFocused(false);
+          onBlur?.();
+        }}
         onChangeText={onChange}
-        onFocus={() => setFocused(true)}
-        selectTextOnFocus
+        onFocus={() => {
+          setFocused(true);
+          moveCaretToEnd();
+          onFocus?.();
+        }}
+        onSelectionChange={(event: { nativeEvent: TextInputSelectionChangeEventData }) => {
+          setSelection(event.nativeEvent.selection);
+        }}
+        selection={focused ? selection : undefined}
         style={[styles.metricValueInput, metricInputReset]}
         value={value}
       />
@@ -116,6 +219,8 @@ function Metric({ label, value, onChange }: { label: string; value: string; onCh
 
 const styles = StyleSheet.create({
   root: {
+    width: "100%",
+    alignSelf: "stretch",
     minHeight: theme.sizes.approachCountRowMinHeight,
     flexDirection: "row",
     alignItems: "center",
@@ -124,6 +229,10 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvasSoft
+  },
+  swipeRoot: {
+    width: "100%",
+    alignSelf: "stretch"
   },
   numberPill: {
     width: theme.sizes.approachCountNumber,
@@ -134,7 +243,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   numberText: {
-    ...theme.typography.body.smCaption,
+    ...theme.typography.body.smStrong,
     color: theme.colors.content.inkDeep
   },
   metrics: {
@@ -162,13 +271,13 @@ const styles = StyleSheet.create({
     margin: theme.spacing[0],
     textAlign: "center",
     textAlignVertical: "center",
-    ...theme.typography.body.smStrong,
+    ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink,
     backgroundColor: "transparent"
   },
   metricLabel: {
     marginTop: theme.spacing.xl,
-    ...theme.typography.body.caption,
+    ...theme.typography.body.smCaption,
     color: theme.colors.content.mute
   },
   metricFocusBorder: {
