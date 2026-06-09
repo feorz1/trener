@@ -15,6 +15,8 @@ export const colors = {
     canvas: "#FFFFFF",
     canvasSoft: "#F3F3F3",
     cardDivider: "#F5F4F2",
+    glass: "rgba(243, 243, 243, 0.72)",
+    glassOverlay: "rgba(255, 255, 255, 0.24)",
 
     // Compatibility aliases for the pre-Wise app screens.
     app: "#F3F3F3",

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
@@ -264,42 +264,44 @@ export default function NewClientScreen() {
         onBack={goBack}
       />
 
-      <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
-        <View style={styles.header}>
-          <Text style={styles.title}>{getStepTitle(step)}</Text>
-          <ProgressBar completed={progressBySection[sectionStep]} total={100} label={`${sectionStep} из 7`} showBadge tone="primary" />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAwareBody}>
+        <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" {...scrollProps}>
+          <View style={styles.header}>
+            <Text style={styles.title}>{getStepTitle(step)}</Text>
+            <ProgressBar completed={progressBySection[sectionStep]} total={100} label={`${sectionStep} из 7`} showBadge tone="primary" />
+          </View>
+
+          <Divider width="fill" tone="canvasSoft" />
+
+          {step === "basic" ? <BasicStep form={form} updateForm={updateForm} /> : null}
+          {step === "age" ? <BodySliderStep title="Текущий возраст" value={form.age} min={0} max={100} onChange={(value) => updateForm("age", value)} /> : null}
+          {step === "height" ? <BodySliderStep title="Текущий рост" value={form.height} min={0} max={250} onChange={(value) => updateForm("height", value)} /> : null}
+          {step === "weight" ? <BodySliderStep title="Текущий вес" value={form.weight} min={0} max={250} onChange={updateWeight} /> : null}
+          {step === "targetWeight" ? (
+            <BodySliderStep
+              title="Желаемый вес"
+              value={form.targetWeight}
+              min={0}
+              max={250}
+              referenceValue={form.weight}
+              rangeFrom={form.weight}
+              onChange={(value) => updateForm("targetWeight", value)}
+            />
+          ) : null}
+          {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
+          {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
+          {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
+          {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
+          {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
+          {step === "summary" ? (
+            <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
+          ) : null}
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Button label={step === "summary" ? "Создать клиента" : "Продолжить"} type="primary" size="large" width="fill" onPress={step === "summary" ? createClient : goNext} />
         </View>
-
-        <Divider width="fill" tone="canvasSoft" />
-
-        {step === "basic" ? <BasicStep form={form} updateForm={updateForm} /> : null}
-        {step === "age" ? <BodySliderStep title="Текущий возраст" value={form.age} min={0} max={100} onChange={(value) => updateForm("age", value)} /> : null}
-        {step === "height" ? <BodySliderStep title="Текущий рост" value={form.height} min={0} max={250} onChange={(value) => updateForm("height", value)} /> : null}
-        {step === "weight" ? <BodySliderStep title="Текущий вес" value={form.weight} min={0} max={250} onChange={updateWeight} /> : null}
-        {step === "targetWeight" ? (
-          <BodySliderStep
-            title="Желаемый вес"
-            value={form.targetWeight}
-            min={0}
-            max={250}
-            referenceValue={form.weight}
-            rangeFrom={form.weight}
-            onChange={(value) => updateForm("targetWeight", value)}
-          />
-        ) : null}
-        {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
-        {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
-        {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
-        {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
-        {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
-        {step === "summary" ? (
-          <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
-        ) : null}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Button label={step === "summary" ? "Создать клиента" : "Продолжить"} type="primary" size="large" width="fill" onPress={step === "summary" ? createClient : goNext} />
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -695,6 +697,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background.canvas
+  },
+  keyboardAwareBody: {
+    flex: 1
   },
   content: {
     flexGrow: 1,

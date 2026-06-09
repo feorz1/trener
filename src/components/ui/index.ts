@@ -3,6 +3,7 @@ export * from "./Action";
 export * from "./Alert";
 export * from "./Approach";
 export * from "./ApproachCount";
+export * from "./ApproachQuickValues";
 export * from "./Avatar";
 export * from "./Badge";
 export * from "./Card";

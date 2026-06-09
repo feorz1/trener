@@ -9,7 +9,7 @@ export const componentUpdates = {
   "StateSelect": "22:21 07.06",
   "DateCell": "22:39 24.05",
   "Divider": "22:15 04.06",
-  "Approach": "22:21 07.06",
+  "Approach": "00:39 09.06",
   "ChipsList": "15:59 23.05",
   "ListItemGym": "22:21 07.06",
   "Set": "23:49 01.06",

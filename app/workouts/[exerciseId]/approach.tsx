@@ -1,18 +1,53 @@
 import * as Haptics from "expo-haptics";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from "react-native";
 import Animated, { useAnimatedRef } from "react-native-reanimated";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ApproachCount, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem } from "@/components/ui";
+import { ApproachCount, ApproachQuickValues, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem, type ApproachMetric } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
 
 const DRAG_HANDLE_DELAY_MS = 120;
+const MAX_FREQUENT_VALUE_COUNT = 6;
+const defaultFrequentValues: Record<ApproachMetric, number[]> = {
+  weight: [],
+  reps: []
+};
+const defaultPopularValues: Record<ApproachMetric, number[]> = {
+  weight: [6, 8, 12, 15, 18, 20, 25, 30],
+  reps: [5, 6, 8, 10, 12, 15, 20]
+};
+const popularWeightValuesByExerciseId: Record<string, number[]> = {
+  "ex-1": [6, 8, 12, 15, 18, 20, 25, 30],
+  "ex-2": [5, 8, 10, 12, 15, 20, 25],
+  "ex-3": [0, 2.5, 5, 7.5, 10, 15, 20],
+  "ex-4": [20, 30, 40, 50, 60, 70, 80],
+  "ex-5": [0, 5, 10, 15, 20, 25],
+  "ex-6": [40, 50, 60, 70, 80, 100, 120],
+  "ex-7": [20, 30, 40, 50, 60, 80, 100],
+  "ex-8": [20, 30, 40, 50, 60, 70]
+};
+const popularRepValuesByExerciseId: Record<string, number[]> = {
+  "ex-1": [5, 6, 8, 10, 12, 15],
+  "ex-2": [6, 8, 10, 12, 15],
+  "ex-3": [3, 5, 6, 8, 10, 12],
+  "ex-4": [3, 5, 6, 8, 10, 12],
+  "ex-5": [5, 6, 8, 10, 12, 15],
+  "ex-6": [3, 5, 6, 8, 10],
+  "ex-7": [5, 6, 8, 10, 12],
+  "ex-8": [6, 8, 10, 12, 15]
+};
 
 type ApproachData = Record<string, ApproachCountItem[]>;
+type ActiveMetric = {
+  setId: string;
+  metric: ApproachMetric;
+};
 
 function getSetListMinHeight(itemCount: number) {
   if (itemCount === 0) return theme.spacing[0];
@@ -48,6 +83,33 @@ function serializeApproachData(data: ApproachData) {
   const entries = Object.entries(data).filter(([, sets]) => sets.length > 0);
   if (entries.length === 0) return undefined;
   return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
+}
+
+function normalizeMetricHistory(value: unknown): Record<ApproachMetric, number[]> {
+  if (!value || typeof value !== "object") return defaultFrequentValues;
+
+  const history = value as Partial<Record<ApproachMetric, unknown>>;
+  return {
+    weight: Array.isArray(history.weight) ? history.weight.filter((item): item is number => Number.isFinite(item)).slice(0, MAX_FREQUENT_VALUE_COUNT) : [],
+    reps: Array.isArray(history.reps) ? history.reps.filter((item): item is number => Number.isFinite(item)).slice(0, MAX_FREQUENT_VALUE_COUNT) : []
+  };
+}
+
+function getPopularMetricValues(exerciseId: string | undefined, metric: ApproachMetric | undefined) {
+  if (!metric) return [];
+  if (!exerciseId) return defaultPopularValues[metric];
+
+  if (metric === "weight") {
+    return popularWeightValuesByExerciseId[exerciseId] ?? defaultPopularValues.weight;
+  }
+
+  return popularRepValuesByExerciseId[exerciseId] ?? defaultPopularValues.reps;
+}
+
+function rememberMetricValue(values: number[], value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value)) return values;
+
+  return [value, ...values.filter((item) => item !== value)].slice(0, MAX_FREQUENT_VALUE_COUNT);
 }
 
 function getAdjacentConnectionIds(ids: string[]) {
@@ -118,13 +180,49 @@ export default function ExerciseApproachScreen() {
   const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
   const [sets, setSets] = useState(initialExerciseSets);
   const [activeSetId, setActiveSetId] = useState<string | undefined>();
+  const [activeMetric, setActiveMetric] = useState<ActiveMetric | undefined>();
+  const [frequentValues, setFrequentValues] = useState<Record<ApproachMetric, number[]>>(defaultFrequentValues);
   const [setListWidth, setSetListWidth] = useState<number | undefined>();
   const [setDragging, setSetDragging] = useState(false);
   const { scrollProps } = useConditionalScroll({ disabled: setDragging });
+  const keyboardInset = useKeyboardInset();
   const scrollableRef = useAnimatedRef<ScrollView>();
   const setsRef = useRef(initialExerciseSets);
   const latestEditedSetRef = useRef<ApproachCountItem | undefined>(undefined);
   const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
+  const metricHistoryKey = useMemo(() => `approachMetricHistory:${currentExerciseId ?? "global"}`, [currentExerciseId]);
+  const activePopularValues = useMemo(() => getPopularMetricValues(currentExerciseId, activeMetric?.metric), [activeMetric?.metric, currentExerciseId]);
+  const activeFrequentValues = activeMetric ? frequentValues[activeMetric.metric] : [];
+  const contentStyle = useMemo(
+    () => [
+      styles.content,
+      activeMetric
+        ? {
+            paddingBottom: theme.spacing["3xl"] * 3 + keyboardInset + theme.sizes.approachQuickValuesHeight + theme.spacing.md
+          }
+        : undefined
+    ],
+    [activeMetric, keyboardInset]
+  );
+
+  useEffect(() => {
+    let mounted = true;
+
+    void AsyncStorage.getItem(metricHistoryKey)
+      .then((value) => {
+        if (!mounted || !value) return;
+        setFrequentValues(normalizeMetricHistory(JSON.parse(value)));
+      })
+      .catch(() => {
+        if (mounted) {
+          setFrequentValues(defaultFrequentValues);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [metricHistoryKey]);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
     const normalizedSets = nextSets.map((set, index) => ({ ...set, index: index + 1 }));
@@ -161,6 +259,7 @@ export default function ExerciseApproachScreen() {
   };
 
   const deleteSet = useCallback((setId: string) => {
+    setActiveMetric((current) => (current?.setId === setId ? undefined : current));
     syncSets(setsRef.current.filter((set) => set.id !== setId));
   }, [syncSets]);
 
@@ -177,6 +276,32 @@ export default function ExerciseApproachScreen() {
       );
     },
     [syncSets]
+  );
+
+  const rememberFrequentValue = useCallback(
+    (metric: ApproachMetric, value: number | undefined) => {
+      setFrequentValues((current) => {
+        const nextValues = rememberMetricValue(current[metric], value);
+        if (nextValues === current[metric]) return current;
+
+        const nextHistory = { ...current, [metric]: nextValues };
+        void AsyncStorage.setItem(metricHistoryKey, JSON.stringify(nextHistory)).catch(() => undefined);
+        return nextHistory;
+      });
+    },
+    [metricHistoryKey]
+  );
+
+  const selectQuickValue = useCallback(
+    (value: number) => {
+      if (!activeMetric) return;
+
+      updateSet(activeMetric.setId, { [activeMetric.metric]: value });
+      if (activeMetric.metric === "weight") {
+        setActiveMetric({ setId: activeMetric.setId, metric: "reps" });
+      }
+    },
+    [activeMetric, updateSet]
   );
 
   const handleSetListLayout = useCallback((event: LayoutChangeEvent) => {
@@ -199,6 +324,7 @@ export default function ExerciseApproachScreen() {
   const commitSetOrder = useCallback(
     ({ order }: SortableFlexDragEndParams) => {
       setActiveSetId(undefined);
+      setActiveMetric(undefined);
       setSetDragging(false);
       const currentSets = setsRef.current;
       const nextSets = order(currentSets);
@@ -213,11 +339,13 @@ export default function ExerciseApproachScreen() {
 
   const handleSetDrop = useCallback(() => {
     setActiveSetId(undefined);
+    setActiveMetric(undefined);
     setSetDragging(false);
   }, []);
 
   const handleSetDragStart = useCallback(({ key }: { key: string }) => {
     setActiveSetId(key);
+    setActiveMetric(undefined);
     setSetDragging(true);
     triggerImpact(Haptics.ImpactFeedbackStyle.Light);
   }, []);
@@ -226,8 +354,16 @@ export default function ExerciseApproachScreen() {
     (item: ApproachCountItem, index: number) => (
       <View style={[styles.sortableSetItem, activeSetId === item.id && styles.activeSetItem]}>
         <ApproachCount
+          focusedMetric={activeMetric?.setId === item.id ? activeMetric.metric : undefined}
           item={{ ...item, index: index + 1 }}
           onDelete={() => deleteSet(item.id)}
+          onMetricBlur={(metric) => {
+            setTimeout(() => {
+              setActiveMetric((current) => (current?.setId === item.id && current.metric === metric ? undefined : current));
+            }, 80);
+          }}
+          onMetricCommit={rememberFrequentValue}
+          onMetricFocus={(metric) => setActiveMetric({ setId: item.id, metric })}
           onValueChange={(patch) => updateSet(item.id, patch)}
           trailingSlot={
             <Sortable.Handle style={styles.dragHandle}>
@@ -237,15 +373,21 @@ export default function ExerciseApproachScreen() {
         />
       </View>
     ),
-    [activeSetId, deleteSet, updateSet]
+    [activeMetric, activeSetId, deleteSet, rememberFrequentValue, updateSet]
   );
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title={exercise?.name ?? "Упражнение"} onBack={() => router.back()} />
 
-      <Animated.ScrollView ref={scrollableRef as never} contentContainerStyle={styles.content} {...scrollProps}>
-        <TextArea label="Заметки" value={note} width="fill" showMessage={false} onChangeText={setNote} />
+      <Animated.ScrollView
+        ref={scrollableRef as never}
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={contentStyle}
+        keyboardShouldPersistTaps="handled"
+        {...scrollProps}
+      >
+        <TextArea label="Заметки" value={note} width="fill" showMessage={false} onFocus={() => setActiveMetric(undefined)} onChangeText={setNote} />
 
         <View style={styles.approachSection}>
           <Divider width="fill" tone="canvasSoft" />
@@ -301,6 +443,15 @@ export default function ExerciseApproachScreen() {
         <Button label="Сохранить" type="primary" size="large" width="fill" onPress={saveSets} />
         <Button label="Удалить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={deleteExercise} />
       </View>
+
+      {activeMetric ? (
+        <ApproachQuickValues
+          frequentValues={activeFrequentValues}
+          popularValues={activePopularValues}
+          style={[styles.quickValues, { bottom: keyboardInset + theme.spacing.sm }]}
+          onSelectValue={selectQuickValue}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -368,5 +519,11 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  quickValues: {
+    position: "absolute",
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    zIndex: 10
   }
 });
