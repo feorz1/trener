@@ -1,9 +1,12 @@
+import { useEffect, useMemo, useRef } from "react";
+import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 
 export type ApproachQuickValuesProps = {
   frequentValues?: number[];
   popularValues?: number[];
+  resetKey?: string;
   style?: StyleProp<ViewStyle>;
   onSelectValue?: (value: number) => void;
 };
@@ -16,27 +19,61 @@ function uniqueValues(values: number[]) {
   return Array.from(new Set(values.filter((value) => Number.isFinite(value))));
 }
 
-export function ApproachQuickValues({ frequentValues = [], popularValues = [], style, onSelectValue }: ApproachQuickValuesProps) {
-  const normalizedFrequentValues = uniqueValues(frequentValues);
-  const normalizedPopularValues = uniqueValues(popularValues);
+type QuickValueSection = {
+  id: "frequent" | "popular";
+  title: string;
+  values: number[];
+};
 
-  if (normalizedFrequentValues.length === 0 && normalizedPopularValues.length === 0) {
+export function ApproachQuickValues({ frequentValues = [], popularValues = [], resetKey, style, onSelectValue }: ApproachQuickValuesProps) {
+  const scrollRef = useRef<ScrollView>(null);
+  const normalizedFrequentValues = useMemo(() => uniqueValues(frequentValues), [frequentValues]);
+  const normalizedPopularValues = useMemo(() => uniqueValues(popularValues), [popularValues]);
+  const sections = useMemo(
+    () =>
+      [
+        { id: "frequent", title: "ЧАСТО ИСПОЛЬЗУЕМЫЕ", values: normalizedFrequentValues },
+        { id: "popular", title: "ПОПУЛЯРНЫЕ", values: normalizedPopularValues }
+      ].filter((section) => section.values.length > 0) as QuickValueSection[],
+    [normalizedFrequentValues, normalizedPopularValues]
+  );
+
+  useEffect(() => {
+    if (!resetKey) return;
+
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ x: 0, animated: true });
+    });
+  }, [resetKey]);
+
+  if (sections.length === 0) {
     return null;
   }
 
   return (
     <View style={[styles.root, style]}>
-      <View pointerEvents="none" style={styles.glassLayer} />
-      <ScrollView
-        horizontal
-        bounces={false}
-        keyboardShouldPersistTaps="always"
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+      <LiquidGlassView
+        animated
+        colorScheme="light"
+        effect="regular"
+        style={[styles.glassRoot, !isLiquidGlassSupported && styles.fallbackGlassRoot]}
+        tintColor={theme.colors.background.glass}
       >
-        {normalizedFrequentValues.length > 0 ? <QuickValueGroup title="ЧАСТО ИСПОЛЬЗУЕМЫЕ" values={normalizedFrequentValues} onSelectValue={onSelectValue} /> : null}
-        {normalizedPopularValues.length > 0 ? <QuickValueGroup title="ПОПУЛЯРНЫЕ" values={normalizedPopularValues} onSelectValue={onSelectValue} /> : null}
-      </ScrollView>
+        {!isLiquidGlassSupported ? <View pointerEvents="none" style={styles.glassLayer} /> : null}
+        <ScrollView
+          ref={scrollRef}
+          horizontal
+          bounces={false}
+          keyboardShouldPersistTaps="always"
+          scrollEventThrottle={16}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
+          {sections.map((section) => (
+            <QuickValueGroup key={section.id} title={section.title} values={section.values} onSelectValue={onSelectValue} />
+          ))}
+        </ScrollView>
+      </LiquidGlassView>
     </View>
   );
 }
@@ -58,14 +95,20 @@ function QuickValueGroup({ title, values, onSelectValue }: { title: string; valu
 
 const styles = StyleSheet.create({
   root: {
-    width: theme.sizes.approachWidth,
     maxWidth: "100%",
     height: theme.sizes.approachQuickValuesHeight,
     alignSelf: "center",
-    overflow: "hidden",
     borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.background.glass,
     ...theme.shadows.glass
+  },
+  glassRoot: {
+    flex: 1,
+    alignItems: "stretch",
+    overflow: "hidden",
+    borderRadius: theme.radius.lg
+  },
+  fallbackGlassRoot: {
+    backgroundColor: theme.colors.background.canvasSoft
   },
   glassLayer: {
     ...StyleSheet.absoluteFillObject,

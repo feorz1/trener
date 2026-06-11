@@ -2,18 +2,19 @@ import * as Haptics from "expo-haptics";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from "react-native";
-import Animated, { useAnimatedRef } from "react-native-reanimated";
+import { Keyboard, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ApproachCount, ApproachQuickValues, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem, type ApproachMetric } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
-import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
 
 const DRAG_HANDLE_DELAY_MS = 120;
-const MAX_FREQUENT_VALUE_COUNT = 6;
+const MAX_FREQUENT_VALUE_COUNT = 5;
+const ACTIVE_METRIC_BLUR_DELAY_MS = 80;
+const QUICK_VALUES_KEYBOARD_OFFSET = theme.sizes.approachQuickValuesHeight + theme.spacing.md + theme.spacing["2xl"];
 const defaultFrequentValues: Record<ApproachMetric, number[]> = {
   weight: [],
   reps: []
@@ -185,24 +186,24 @@ export default function ExerciseApproachScreen() {
   const [setListWidth, setSetListWidth] = useState<number | undefined>();
   const [setDragging, setSetDragging] = useState(false);
   const { scrollProps } = useConditionalScroll({ disabled: setDragging });
-  const keyboardInset = useKeyboardInset();
-  const scrollableRef = useAnimatedRef<ScrollView>();
+  const activeMetricBlurTokenRef = useRef(0);
   const setsRef = useRef(initialExerciseSets);
   const latestEditedSetRef = useRef<ApproachCountItem | undefined>(undefined);
   const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
   const metricHistoryKey = useMemo(() => `approachMetricHistory:${currentExerciseId ?? "global"}`, [currentExerciseId]);
   const activePopularValues = useMemo(() => getPopularMetricValues(currentExerciseId, activeMetric?.metric), [activeMetric?.metric, currentExerciseId]);
   const activeFrequentValues = activeMetric ? frequentValues[activeMetric.metric] : [];
+  const keyboardAwareOffset = activeMetric ? QUICK_VALUES_KEYBOARD_OFFSET : theme.spacing[0];
   const contentStyle = useMemo(
     () => [
       styles.content,
       activeMetric
         ? {
-            paddingBottom: theme.spacing["3xl"] * 3 + keyboardInset + theme.sizes.approachQuickValuesHeight + theme.spacing.md
+            paddingBottom: theme.sizes.approachQuickValuesHeight + theme.spacing.xl
           }
         : undefined
     ],
-    [activeMetric, keyboardInset]
+    [activeMetric]
   );
 
   useEffect(() => {
@@ -258,6 +259,25 @@ export default function ExerciseApproachScreen() {
     syncSets([...setsRef.current, createAddedSet(nextIndex, template)]);
   };
 
+  const clearActiveMetric = useCallback(() => {
+    activeMetricBlurTokenRef.current += 1;
+    setActiveMetric(undefined);
+  }, []);
+
+  const focusMetric = useCallback((metric: ActiveMetric) => {
+    activeMetricBlurTokenRef.current += 1;
+    setActiveMetric(metric);
+  }, []);
+
+  const blurMetric = useCallback((metric: ActiveMetric) => {
+    const blurToken = activeMetricBlurTokenRef.current;
+
+    setTimeout(() => {
+      if (activeMetricBlurTokenRef.current !== blurToken) return;
+      setActiveMetric((current) => (current?.setId === metric.setId && current.metric === metric.metric ? undefined : current));
+    }, ACTIVE_METRIC_BLUR_DELAY_MS);
+  }, []);
+
   const deleteSet = useCallback((setId: string) => {
     setActiveMetric((current) => (current?.setId === setId ? undefined : current));
     syncSets(setsRef.current.filter((set) => set.id !== setId));
@@ -297,15 +317,22 @@ export default function ExerciseApproachScreen() {
       if (!activeMetric) return;
 
       updateSet(activeMetric.setId, { [activeMetric.metric]: value });
+      rememberFrequentValue(activeMetric.metric, value);
       if (activeMetric.metric === "weight") {
-        setActiveMetric({ setId: activeMetric.setId, metric: "reps" });
+        focusMetric({ setId: activeMetric.setId, metric: "reps" });
+        return;
       }
+
+      Keyboard.dismiss();
+      clearActiveMetric();
     },
-    [activeMetric, updateSet]
+    [activeMetric, clearActiveMetric, focusMetric, rememberFrequentValue, updateSet]
   );
 
   const handleSetListLayout = useCallback((event: LayoutChangeEvent) => {
-    setSetListWidth(Math.round(event.nativeEvent.layout.width));
+    const { width } = event.nativeEvent.layout;
+
+    setSetListWidth(Math.round(width));
   }, []);
 
   const deleteExercise = () => {
@@ -324,7 +351,7 @@ export default function ExerciseApproachScreen() {
   const commitSetOrder = useCallback(
     ({ order }: SortableFlexDragEndParams) => {
       setActiveSetId(undefined);
-      setActiveMetric(undefined);
+      clearActiveMetric();
       setSetDragging(false);
       const currentSets = setsRef.current;
       const nextSets = order(currentSets);
@@ -334,21 +361,21 @@ export default function ExerciseApproachScreen() {
 
       syncSets(nextSets);
     },
-    [syncSets]
+    [clearActiveMetric, syncSets]
   );
 
   const handleSetDrop = useCallback(() => {
     setActiveSetId(undefined);
-    setActiveMetric(undefined);
+    clearActiveMetric();
     setSetDragging(false);
-  }, []);
+  }, [clearActiveMetric]);
 
   const handleSetDragStart = useCallback(({ key }: { key: string }) => {
     setActiveSetId(key);
-    setActiveMetric(undefined);
+    clearActiveMetric();
     setSetDragging(true);
     triggerImpact(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
+  }, [clearActiveMetric]);
 
   const renderSet = useCallback(
     (item: ApproachCountItem, index: number) => (
@@ -357,13 +384,9 @@ export default function ExerciseApproachScreen() {
           focusedMetric={activeMetric?.setId === item.id ? activeMetric.metric : undefined}
           item={{ ...item, index: index + 1 }}
           onDelete={() => deleteSet(item.id)}
-          onMetricBlur={(metric) => {
-            setTimeout(() => {
-              setActiveMetric((current) => (current?.setId === item.id && current.metric === metric ? undefined : current));
-            }, 80);
-          }}
+          onMetricBlur={(metric) => blurMetric({ setId: item.id, metric })}
           onMetricCommit={rememberFrequentValue}
-          onMetricFocus={(metric) => setActiveMetric({ setId: item.id, metric })}
+          onMetricFocus={(metric) => focusMetric({ setId: item.id, metric })}
           onValueChange={(patch) => updateSet(item.id, patch)}
           trailingSlot={
             <Sortable.Handle style={styles.dragHandle}>
@@ -373,21 +396,35 @@ export default function ExerciseApproachScreen() {
         />
       </View>
     ),
-    [activeMetric, activeSetId, deleteSet, rememberFrequentValue, updateSet]
+    [activeMetric, activeSetId, blurMetric, deleteSet, focusMetric, rememberFrequentValue, updateSet]
   );
+
+  const quickValues = activeMetric ? (
+    <ApproachQuickValues
+      frequentValues={activeFrequentValues}
+      popularValues={activePopularValues}
+      resetKey={`${activeMetric.setId}:${activeMetric.metric}`}
+      style={styles.quickValuesOverlay}
+      onSelectValue={selectQuickValue}
+    />
+  ) : null;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title={exercise?.name ?? "Упражнение"} onBack={() => router.back()} />
 
-      <Animated.ScrollView
-        ref={scrollableRef as never}
-        automaticallyAdjustKeyboardInsets
+      <KeyboardAwareScrollView
+        bottomOffset={keyboardAwareOffset}
         contentContainerStyle={contentStyle}
+        extraKeyboardSpace={keyboardAwareOffset}
         keyboardShouldPersistTaps="handled"
+        mode="insets"
         {...scrollProps}
+        bounces={activeMetric ? false : scrollProps.bounces}
+        scrollEnabled={activeMetric ? true : scrollProps.scrollEnabled}
+        showsVerticalScrollIndicator={activeMetric ? true : scrollProps.showsVerticalScrollIndicator}
       >
-        <TextArea label="Заметки" value={note} width="fill" showMessage={false} onFocus={() => setActiveMetric(undefined)} onChangeText={setNote} />
+        <TextArea label="Заметки" value={note} width="fill" showMessage={false} onFocus={clearActiveMetric} onChangeText={setNote} />
 
         <View style={styles.approachSection}>
           <Divider width="fill" tone="canvasSoft" />
@@ -417,7 +454,6 @@ export default function ExerciseApproachScreen() {
                 minWidth={setListWidth ?? theme.spacing[0]}
                 overDrag="vertical"
                 overflow="hidden"
-                scrollableRef={scrollableRef}
                 strategy="insert"
                 width={setListWidth ?? "fill"}
                 onDragEnd={commitSetOrder}
@@ -437,20 +473,19 @@ export default function ExerciseApproachScreen() {
             <Button label="Добавить" type="secondaryNeutral" size="large" width="fill" onPress={addSet} />
           </View>
         </View>
-      </Animated.ScrollView>
+      </KeyboardAwareScrollView>
 
-      <View style={styles.footer}>
-        <Button label="Сохранить" type="primary" size="large" width="fill" onPress={saveSets} />
-        <Button label="Удалить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={deleteExercise} />
-      </View>
+      {activeMetric ? null : (
+        <View style={styles.footer}>
+          <Button label="Сохранить" type="primary" size="large" width="fill" onPress={saveSets} />
+          <Button label="Удалить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={deleteExercise} />
+        </View>
+      )}
 
       {activeMetric ? (
-        <ApproachQuickValues
-          frequentValues={activeFrequentValues}
-          popularValues={activePopularValues}
-          style={[styles.quickValues, { bottom: keyboardInset + theme.spacing.sm }]}
-          onSelectValue={selectQuickValue}
-        />
+        <KeyboardStickyView offset={{ closed: QUICK_VALUES_KEYBOARD_OFFSET, opened: -theme.spacing.sm }} style={styles.quickValuesKeyboardLayer}>
+          {quickValues}
+        </KeyboardStickyView>
       ) : null}
     </SafeAreaView>
   );
@@ -463,10 +498,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: theme.spacing["3xl"] * 3
+    paddingBottom: theme.spacing.lg
   },
   approachSection: {
-    flex: 1,
     backgroundColor: theme.colors.background.canvas
   },
   sectionHeader: {
@@ -520,10 +554,14 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
   },
-  quickValues: {
+  quickValuesKeyboardLayer: {
     position: "absolute",
-    left: theme.spacing.lg,
-    right: theme.spacing.lg,
+    right: theme.spacing[0],
+    bottom: theme.spacing[0],
+    left: theme.spacing[0],
     zIndex: 10
+  },
+  quickValuesOverlay: {
+    marginHorizontal: theme.spacing.sm
   }
 });
