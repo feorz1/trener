@@ -14,7 +14,7 @@ export const componentUpdates = {
   "ListItemGym": "23:45 09.06",
   "Set": "23:45 09.06",
   "SuperSet": "23:45 09.06",
-  "CalendarDayStrip": "23:45 09.06",
+  "CalendarDayStrip": "00:38 13.06",
   "ProgressBar": "23:45 09.06",
   "Alert": "23:45 09.06",
   "Button": "23:45 09.06",
