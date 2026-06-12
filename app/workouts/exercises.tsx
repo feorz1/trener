@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: theme.spacing.xxs,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.sm,
     paddingBottom: theme.spacing["3xl"]
   },
   footer: {

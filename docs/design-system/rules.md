@@ -29,6 +29,7 @@ Background colors:
 
 - `color/background/canvas`
 - `color/background/canvas-soft`
+- `color/background/border`
 - `card-divider`
 
 Status colors:
@@ -112,6 +113,7 @@ Figma variable/style              -> Code token
 color/content/primary             -> theme.colors.content.primary
 color/content/disabled            -> theme.colors.content.disabled
 color/background/canvas                      -> theme.colors.background.canvas
+color/background/border                      -> theme.colors.background.border
 color/status/positive                    -> theme.colors.status.positive
 spacing/md                        -> theme.spacing.md
 radius/lg                         -> theme.radius.lg

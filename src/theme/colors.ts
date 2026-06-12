@@ -14,6 +14,7 @@ export const colors = {
   background: {
     canvas: "#FFFFFF",
     canvasSoft: "#F3F3F3",
+    border: "#0E0F0C1F",
     cardDivider: "#F5F4F2",
     glass: "rgba(243, 243, 243, 0.72)",
     glassOverlay: "rgba(255, 255, 255, 0.24)",

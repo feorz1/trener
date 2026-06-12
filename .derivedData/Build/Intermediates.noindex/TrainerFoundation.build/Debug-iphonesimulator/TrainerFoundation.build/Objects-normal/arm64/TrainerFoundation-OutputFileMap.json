@@ -1,0 +1,39 @@
+{
+  "" : {
+    "diagnostics" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/TrainerFoundation-primary.dia",
+    "emit-module-dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/TrainerFoundation-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/TrainerFoundation-primary-emit-module.dia",
+    "pch" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/TrainerFoundation-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/TrainerFoundation-primary.swiftdeps"
+  },
+  "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/gpbu7557/Documents/New project/ios/Pods/Target Support Files/Pods-TrainerFoundation/ExpoModulesProvider.swift" : {
+    "const-values" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.swiftconstvalues",
+    "dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.d",
+    "diagnostics" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.dia",
+    "index-unit-output-path" : "/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.o",
+    "llvm-bc" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.bc",
+    "object" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.o",
+    "swift-dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider.swiftdeps",
+    "swiftmodule" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/ExpoModulesProvider~partial.swiftmodule"
+  },
+  "/Users/gpbu7557/Documents/New project/ios/TrainerFoundation/AppDelegate.swift" : {
+    "const-values" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/gpbu7557/Documents/New project/.derivedData/Build/Intermediates.noindex/TrainerFoundation.build/Debug-iphonesimulator/TrainerFoundation.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  }
+}

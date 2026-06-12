@@ -18,6 +18,7 @@
     "background": {
       "canvas": "#FFFFFF",
       "canvasSoft": "#F3F3F3",
+      "border": "#0E0F0C1F",
       "cardDivider": "#F5F4F2"
     },
     "status": {

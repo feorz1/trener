@@ -16,6 +16,7 @@ colors:
   disabled: "#cfcfcf"
   canvas: "#ffffff"
   canvas-soft: "#f3f3f3"
+  border: "#0e0f0c1f"
   card-divider: "#f5f4f2"
   positive: "#2ead4b"
   positive-deep: "#054d28"
@@ -329,6 +330,7 @@ Cards are universally pill-rounded — `{rounded.xl}` 24 px is the brand's signa
 ### Surface
 - **Canvas** (`{colors.canvas}` — `#ffffff`): Pure white for card interiors.
 - **Canvas Soft** (`{colors.canvas-soft}` — `#f3f3f3`): The sage-tinted page background. Defining mood of the brand.
+- **Border** (`{colors.border}` — `#0e0f0c1f`): Subtle ink-at-12% stroke for white cards on white or soft surfaces.
 - **Card Divider** (`{colors.card-divider}` — `#f5f4f2`): Neutral fill for card-slot separators and their corner masks.
 
 ### Text

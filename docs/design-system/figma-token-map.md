@@ -20,6 +20,7 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/content/disabled` | `#CFCFCF` | `theme.colors.content.disabled` |
 | `color/background/canvas` | `#FFFFFF` | `theme.colors.background.canvas` |
 | `color/background/canvas-soft` | `#F3F3F3` | `theme.colors.background.canvasSoft` |
+| `color/background/border` | `#0E0F0C1F` | `theme.colors.background.border` |
 | `card-divider` | `#F5F4F2` | `theme.colors.background.cardDivider` |
 | `color/status/positive` | `#2EAD4B` | `theme.colors.status.positive` |
 | `color/status/positive-deep` | `#054D28` | `theme.colors.status.positiveDeep` |
@@ -88,6 +89,7 @@ Figma slash names map to nested `theme.*` paths:
 color/content/primary            -> theme.colors.content.primary
 color/content/disabled           -> theme.colors.content.disabled
 color/background/canvas             -> theme.colors.background.canvas
+color/background/border             -> theme.colors.background.border
 color/status/positive           -> theme.colors.status.positive
 color/accent/cyan        -> theme.colors.accent.cyan
 spacing/md              -> theme.spacing.md
