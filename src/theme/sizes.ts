@@ -96,6 +96,7 @@ export const sizes = {
   cardAddWorkoutMinHeight: 74,
   approachWidth: 359,
   approachPreviewWidth: 343,
+  approachBorderWidth: 1,
   approachMinHeight: 392,
   approachHeaderThumb: 40,
   approachCountRowMinHeight: 65,

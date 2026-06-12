@@ -19,8 +19,8 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/content/mute` | `#868685` | `theme.colors.content.mute` |
 | `color/content/disabled` | `#CFCFCF` | `theme.colors.content.disabled` |
 | `color/background/canvas` | `#FFFFFF` | `theme.colors.background.canvas` |
-| `color/background/canvas-soft` | `#F3F3F3` | `theme.colors.background.canvasSoft` |
-| `color/background/border` | `#0E0F0C1F` | `theme.colors.background.border` |
+| `color/background/canvas-soft` | `#EFEFEF` | `theme.colors.background.canvasSoft` |
+| `color/background/border` | `#E9E9E9` | `theme.colors.background.border` |
 | `card-divider` | `#F5F4F2` | `theme.colors.background.cardDivider` |
 | `color/status/positive` | `#2EAD4B` | `theme.colors.status.positive` |
 | `color/status/positive-deep` | `#054D28` | `theme.colors.status.positiveDeep` |

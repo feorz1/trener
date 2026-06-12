@@ -17,6 +17,7 @@ import {
 import { mockClients } from "@/data/mockClients";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
+import { capitalize, formatRuMonth, formatRuSelectDate } from "@/utils/date";
 
 type DateCell = {
   date: Date;
@@ -80,32 +81,6 @@ function parseDateKey(value?: string) {
   if (!year || !month || !day) return startOfDay(new Date());
 
   return startOfDay(new Date(year, month - 1, day));
-}
-
-function capitalize(value: string) {
-  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
-}
-
-function formatSelectDate(date: Date) {
-  const parts = new Intl.DateTimeFormat("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long"
-  }).formatToParts(date);
-  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
-  const day = parts.find((part) => part.type === "day")?.value ?? "";
-  const month = parts.find((part) => part.type === "month")?.value ?? "";
-  const dayMonth = [day, month].filter(Boolean).join(" ");
-
-  return [capitalize(weekday), dayMonth].filter(Boolean).join(", ");
-}
-
-function formatMonth(date: Date) {
-  return capitalize(
-    new Intl.DateTimeFormat("ru-RU", {
-      month: "long"
-    }).format(date)
-  );
 }
 
 function buildMonthWeeks(monthDate: Date, selectedKey?: string): (DateCell | null)[][] {
@@ -226,7 +201,7 @@ export default function ScheduleWorkoutScreen() {
       <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <Select
           label="Дата"
-          value={formatSelectDate(scheduledDate)}
+          value={formatRuSelectDate(scheduledDate)}
           width="fill"
           showMessage={false}
           state={dateConfirmed ? "default" : "empty"}
@@ -429,7 +404,7 @@ function MonthSection({
 
   return (
     <View style={styles.monthSection}>
-      <Text style={styles.monthTitle}>{formatMonth(month)}</Text>
+      <Text style={styles.monthTitle}>{formatRuMonth(month)}</Text>
       <View style={styles.monthGrid}>
         {weeks.map((week, weekIndex) => (
           <View key={`${getDateKey(month)}-${weekIndex}`} style={styles.monthWeek}>
@@ -456,7 +431,7 @@ function CalendarDateButton({ cell, selected, onPress }: { cell: DateCell; selec
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={formatSelectDate(cell.date)}
+      accessibilityLabel={formatRuSelectDate(cell.date)}
       accessibilityState={{ selected, disabled: cell.disabled }}
       disabled={cell.disabled}
       onPress={onPress}

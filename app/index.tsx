@@ -8,6 +8,7 @@ import { mockClients } from "@/data/mockClients";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { WorkoutStatus } from "@/types";
+import { formatRuDayMonth, formatRuHeaderDate } from "@/utils/date";
 
 type PlanningModalStep = "closed" | "choice" | "client";
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -117,26 +118,6 @@ function getWeekPages(anchorDate: Date, today: Date): CalendarDayStripItem[][] {
       };
     })
   );
-}
-
-function formatHeaderDate(date: Date) {
-  const parts = new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "long",
-    weekday: "long"
-  }).formatToParts(date);
-  const day = parts.find((part) => part.type === "day")?.value ?? "";
-  const month = parts.find((part) => part.type === "month")?.value ?? "";
-  const weekday = parts.find((part) => part.type === "weekday")?.value ?? "";
-
-  return `${day} ${month} · ${weekday}`;
-}
-
-function formatPlanDate(date: Date) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "long"
-  }).format(date);
 }
 
 function getWorkoutDateTime(date: Date, time: string) {
@@ -347,7 +328,7 @@ export default function IndexScreen() {
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <View style={styles.body}>
-          <Header title="Тренировки" subtitle={formatHeaderDate(selectedDate)} subtitlePosition="top" size="xl" style={styles.header} />
+          <Header title="Тренировки" subtitle={formatRuHeaderDate(selectedDate)} subtitlePosition="top" size="xl" style={styles.header} />
 
           <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={setSelectedDayKey} />
 
@@ -356,7 +337,7 @@ export default function IndexScreen() {
               <Card
                 variant="dayPlan"
                 dayPlanState={originalWorkoutsCount === 0 && !isPast ? "planNext" : "plan"}
-                dayTitle={`План ${formatPlanDate(selectedDate)}`}
+                dayTitle={`План ${formatRuDayMonth(selectedDate)}`}
                 dayCount={getPlanCount(originalWorkoutsCount)}
                 dayMeta={originalWorkoutsCount > 0 ? nextWorkoutMeta : ""}
                 onAddWorkout={openPlanningChoice}

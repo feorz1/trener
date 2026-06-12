@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     gap: theme.spacing.sm,
     padding: theme.spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: theme.sizes.approachBorderWidth,
     borderColor: theme.colors.background.border,
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvas

@@ -75,6 +75,8 @@ export default function WorkoutSessionScreen() {
   const progressLabel = useMemo(() => `${completedExercises} из ${exerciseCount} упражнений`, [completedExercises, exerciseCount]);
   const finishLabel = "Завершить тренировку";
   const footerPaddingBottom = Math.max(theme.spacing.md, theme.spacing.md + keyboardInset);
+  const footerHeight = theme.spacing.lg + theme.sizes.buttonMdHeight + theme.spacing.md + theme.sizes.buttonMdHeight + footerPaddingBottom;
+  const scrollPaddingBottom = Math.max(theme.spacing["3xl"], footerHeight + theme.spacing.md);
 
   const updateExerciseSets = useCallback((exerciseId: string, nextSets: ApproachSet[]) => {
     setSessionExercises((current) =>
@@ -184,14 +186,14 @@ export default function WorkoutSessionScreen() {
       <Navigation title="Тренировка" onBack={() => router.back()} />
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: Math.max(theme.spacing["3xl"], footerPaddingBottom + theme.spacing.md) }]}
+        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
         keyboardShouldPersistTaps="handled"
         {...scrollProps}
       >
         <View style={styles.topSection}>
           <Header title={clientName} showSubtitle={false} size="lg" style={styles.header} />
           <View style={styles.status}>
-            <ProgressBar completed={completedExercises} total={exerciseCount} label={progressLabel} style={styles.progressBar} />
+            <ProgressBar completed={completedExercises} total={exerciseCount} label={progressLabel} />
           </View>
         </View>
 
@@ -249,8 +251,8 @@ const styles = StyleSheet.create({
   },
   topSection: {
     gap: theme.spacing.xxs,
-    marginBottom: theme.spacing.sm + theme.spacing.xxs,
-    paddingHorizontal: theme.spacing.lg
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg
   },
   header: {
     paddingHorizontal: theme.spacing[0],
@@ -259,13 +261,11 @@ const styles = StyleSheet.create({
   status: {
     gap: theme.spacing.md
   },
-  progressBar: {
-    paddingBottom: theme.spacing.sm
-  },
   exerciseSection: {
     backgroundColor: theme.colors.background.canvas
   },
   sectionHeader: {
+    height: theme.sizes.buttonMediumHeight,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.sm,

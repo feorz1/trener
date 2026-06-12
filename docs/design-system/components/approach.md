@@ -48,6 +48,7 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 | delete action | `color/status/negative` | `theme.colors.status.negative` |
 | add/save label | `color/content/primary` | `theme.colors.content.primary` |
 | thumbnail surface | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
+| root stroke width | `1` | `theme.sizes.approachBorderWidth` |
 | thumbnail radius | `radius/lg` | `theme.radius.lg` |
 | root padding / gap | `spacing/sm` | `theme.spacing.sm` |
 | row horizontal padding | `spacing/md` | `theme.spacing.md` |

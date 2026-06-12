@@ -227,7 +227,7 @@ function auditTokenDrift(result: AuditResult) {
     .map((file) => read(file))
     .join("\n");
 
-  for (const required of ["#9FE870", "#F3F3F3", "content", "background", "status", "accent"]) {
+  for (const required of ["#9FE870", "#EFEFEF", "content", "background", "status", "accent"]) {
     if (!tokenJson.includes(required)) result.errors.push(`tokens.design.json missing ${required}`);
     if (!themeCombined.includes(required)) result.errors.push(`src/theme missing ${required}`);
   }
