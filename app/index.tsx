@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { router, useLocalSearchParams } from "expo-router";
-import { ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
-import { Card, Header, ListItemCell, Modal, Radio } from "@/components/ui";
+import { Button, Card, Header, Icon, ListItemCell, Modal, Radio } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { WorkoutStatus } from "@/types";
-import { formatRuDayMonth, formatRuHeaderDate } from "@/utils/date";
+import { formatRuDayMonth } from "@/utils/date";
 
 type PlanningModalStep = "closed" | "choice" | "client";
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -34,6 +35,9 @@ const repeatDayByNativeWeekday: Record<number, RepeatDay> = {
   6: "saturday"
 };
 const repeatDayKeys = new Set<RepeatDay>(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
+const FAB_SCROLL_REVEAL_DELAY = 140;
+const FAB_HIT_SLOP = theme.spacing.xxs;
+const FLOATING_ADD_SIZE = theme.sizes.buttonLgHeight;
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -204,10 +208,11 @@ export default function IndexScreen() {
     plannedExerciseCount?: string;
     plannedRepeatDays?: string;
   }>();
+  const insets = useSafeAreaInsets();
   const today = useMemo(() => startOfDay(new Date()), []);
   const plannedDateKey = firstParam(plannedDate);
   const plannedAnchorDate = useMemo(() => parseDateKey(plannedDateKey), [plannedDateKey]);
-  const weekAnchorDate = plannedAnchorDate ?? today;
+  const [weekAnchorDate, setWeekAnchorDate] = useState(() => plannedAnchorDate ?? today);
   const weekPages = useMemo(() => getWeekPages(weekAnchorDate, today), [today, weekAnchorDate]);
   const weekItems = useMemo(() => weekPages.flat(), [weekPages]);
   const todayKey = useMemo(() => getDateKey(today), [today]);
@@ -249,17 +254,29 @@ export default function IndexScreen() {
   const [planningStep, setPlanningStep] = useState<PlanningModalStep>("closed");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const [now, setNow] = useState(() => new Date());
+  const [fabHidden, setFabHidden] = useState(false);
+  const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
+  const fabProgress = useRef(new Animated.Value(1)).current;
+  const fabRevealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { scrollProps } = useConditionalScroll();
 
   useEffect(() => {
     if (plannedDateKey) {
       setSelectedDayKey(plannedDateKey);
+      setWeekAnchorDate(plannedAnchorDate ?? today);
     }
-  }, [plannedDateKey]);
+  }, [plannedAnchorDate, plannedDateKey, today]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotionEnabled);
+    const subscription = AccessibilityInfo.addEventListener("reduceMotionChanged", setReduceMotionEnabled);
+
+    return () => subscription.remove();
   }, []);
 
   const selectedDate = useMemo(() => {
@@ -280,9 +297,63 @@ export default function IndexScreen() {
   const hasVisibleWorkouts = selectedWorkouts.length > 0;
   const shouldShowDayPlan = isToday || originalWorkoutsCount === 0;
   const shouldShowAddWorkout = !isPast && originalWorkoutsCount > 0;
+  const shouldShowFloatingAddWorkout = shouldShowAddWorkout;
   const nextWorkoutMeta = useMemo(
     () => getNextWorkoutMeta(workoutsByDay[selectedDayKey] ?? [], selectedDate, now),
     [now, selectedDate, selectedDayKey, workoutsByDay]
+  );
+
+  const setFloatingAddVisible = useCallback(
+    (visible: boolean) => {
+      if (fabRevealTimer.current) {
+        clearTimeout(fabRevealTimer.current);
+        fabRevealTimer.current = undefined;
+      }
+
+      setFabHidden(!visible);
+      Animated.timing(fabProgress, {
+        toValue: visible ? 1 : 0,
+        duration: reduceMotionEnabled ? 0 : 160,
+        useNativeDriver: true
+      }).start();
+    },
+    [fabProgress, reduceMotionEnabled]
+  );
+
+  const revealFloatingAddAfterScroll = useCallback(
+    (delay = FAB_SCROLL_REVEAL_DELAY) => {
+      if (!shouldShowFloatingAddWorkout) return;
+
+      if (fabRevealTimer.current) {
+        clearTimeout(fabRevealTimer.current);
+      }
+
+      fabRevealTimer.current = setTimeout(() => setFloatingAddVisible(true), delay);
+    },
+    [setFloatingAddVisible, shouldShowFloatingAddWorkout]
+  );
+
+  const hideFloatingAddForScroll = useCallback(() => {
+    if (!shouldShowFloatingAddWorkout) return;
+    setFloatingAddVisible(false);
+  }, [setFloatingAddVisible, shouldShowFloatingAddWorkout]);
+
+  useEffect(() => {
+    if (!shouldShowFloatingAddWorkout) {
+      setFloatingAddVisible(false);
+      return;
+    }
+
+    setFloatingAddVisible(true);
+  }, [setFloatingAddVisible, shouldShowFloatingAddWorkout]);
+
+  useEffect(
+    () => () => {
+      if (fabRevealTimer.current) {
+        clearTimeout(fabRevealTimer.current);
+      }
+    },
+    []
   );
 
   const openWorkoutSession = (workoutId: string) => {
@@ -295,6 +366,19 @@ export default function IndexScreen() {
   const openPlanningChoice = () => {
     setSelectedClientId(undefined);
     setPlanningStep("choice");
+  };
+
+  const selectDay = (key: string) => {
+    const nextDate = parseDateKey(key);
+    if (nextDate) {
+      setWeekAnchorDate(nextDate);
+    }
+    setSelectedDayKey(key);
+  };
+
+  const selectToday = () => {
+    setWeekAnchorDate(today);
+    setSelectedDayKey(todayKey);
   };
 
   const closePlanning = () => {
@@ -326,11 +410,25 @@ export default function IndexScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        scrollEventThrottle={16}
+        onMomentumScrollBegin={hideFloatingAddForScroll}
+        onMomentumScrollEnd={() => revealFloatingAddAfterScroll(0)}
+        onScroll={hideFloatingAddForScroll}
+        onScrollBeginDrag={hideFloatingAddForScroll}
+        onScrollEndDrag={() => revealFloatingAddAfterScroll()}
+        {...scrollProps}
+      >
         <View style={styles.body}>
-          <Header title="Тренировки" subtitle={formatRuHeaderDate(selectedDate)} subtitlePosition="top" size="xl" style={styles.header} />
+          <View style={styles.headerRow}>
+            <Header title="Тренировки" showSubtitle={false} size="xl" style={styles.header} />
+            {!isToday ? (
+              <Button label="Сегодня" type="secondaryNeutral" size="medium" style={styles.todayButton} onPress={selectToday} accessibilityLabel="Показать сегодняшний день" />
+            ) : null}
+          </View>
 
-          <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={setSelectedDayKey} />
+          <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={selectDay} />
 
           <View style={styles.cards}>
             {shouldShowDayPlan ? (
@@ -364,10 +462,42 @@ export default function IndexScreen() {
                 ))
               : null}
 
-            {shouldShowAddWorkout ? <Card variant="addWorkout" onAddWorkout={openPlanningChoice} /> : null}
           </View>
         </View>
       </ScrollView>
+
+      {shouldShowFloatingAddWorkout ? (
+        <Animated.View
+          accessibilityElementsHidden={fabHidden}
+          importantForAccessibility={fabHidden ? "no-hide-descendants" : "auto"}
+          style={[
+            styles.floatingAdd,
+            {
+              bottom: Math.max(insets.bottom, theme.spacing.lg) + theme.spacing.lg,
+              opacity: fabProgress,
+              pointerEvents: fabHidden ? "none" : "auto",
+              transform: reduceMotionEnabled
+                ? []
+                : [
+                    {
+                      translateY: fabProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [theme.spacing.xl, 0]
+                      })
+                    },
+                    {
+                      scale: fabProgress.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.92, 1]
+                      })
+                    }
+                  ]
+            }
+          ]}
+        >
+          <FloatingAddWorkoutButton onPress={openPlanningChoice} />
+        </Animated.View>
+      ) : null}
 
       <Modal
         visible={planningStep !== "closed"}
@@ -426,6 +556,30 @@ export default function IndexScreen() {
   );
 }
 
+function FloatingAddWorkoutButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityHint="Открывает планирование тренировки"
+      accessibilityLabel="Добавить тренировку"
+      accessibilityRole="button"
+      hitSlop={FAB_HIT_SLOP}
+      onPress={onPress}
+      style={({ pressed }) => [styles.floatingAddButton, pressed && styles.floatingAddButtonPressed]}
+    >
+      <LiquidGlassView
+        animated
+        colorScheme="light"
+        effect="regular"
+        style={[styles.floatingAddGlass, !isLiquidGlassSupported && styles.floatingAddFallback]}
+        tintColor={theme.colors.background.glass}
+      >
+        {!isLiquidGlassSupported ? <View style={styles.floatingAddOverlay} /> : null}
+        <Icon name="add" size={theme.sizes.buttonIconMedium} color={theme.colors.content.ink} />
+      </LiquidGlassView>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -433,20 +587,60 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: theme.spacing["3xl"]
+    paddingBottom: theme.spacing["3xl"] + FLOATING_ADD_SIZE + theme.spacing.xl
   },
   body: {
     gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm
   },
+  headerRow: {
+    minHeight: theme.sizes.buttonSmHeight,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md
+  },
   header: {
+    flex: 1,
     paddingHorizontal: theme.spacing[0],
     paddingTop: theme.spacing[0],
     paddingBottom: theme.spacing[0]
   },
+  todayButton: {
+    height: theme.sizes.buttonSmHeight,
+    minHeight: theme.sizes.buttonSmHeight
+  },
   cards: {
     gap: theme.spacing.md
+  },
+  floatingAdd: {
+    position: "absolute",
+    right: theme.spacing.lg,
+    zIndex: 50
+  },
+  floatingAddButton: {
+    width: FLOATING_ADD_SIZE,
+    height: FLOATING_ADD_SIZE,
+    borderRadius: theme.radius.pill,
+    ...theme.shadows.glass
+  },
+  floatingAddButtonPressed: {
+    opacity: 0.86
+  },
+  floatingAddGlass: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderRadius: theme.radius.pill
+  },
+  floatingAddFallback: {
+    backgroundColor: theme.colors.background.glass
+  },
+  floatingAddOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.glassOverlay
   },
   modalBody: {
     gap: theme.spacing[0]

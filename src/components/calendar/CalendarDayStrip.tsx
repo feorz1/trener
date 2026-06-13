@@ -48,7 +48,22 @@ const DEFAULT_ITEMS: CalendarDayStripItem[] = [
 
 const SELECTION_ANIMATION_DURATION = 180;
 const TODAY_DOT_TOP =
-  theme.sizes.calendarDayHeight - theme.spacing.sm - theme.sizes.calendarDayDot / 2;
+  theme.spacing.sm +
+  theme.typography.body.smCaption.lineHeight +
+  theme.spacing.xxs +
+  theme.typography.body.mdStrong.lineHeight +
+  theme.spacing.xs +
+  theme.sizes.calendarDayDot / 4;
+const MONTHS_GENITIVE = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+const WEEKDAYS_FULL: Record<string, string> = {
+  Пн: "Понедельник",
+  Вт: "Вторник",
+  Ср: "Среда",
+  Чт: "Четверг",
+  Пт: "Пятница",
+  Сб: "Суббота",
+  Вс: "Воскресенье"
+};
 
 function getBaseColor(item: CalendarDayStripItem) {
   if (item.temporalState === "past") {
@@ -64,6 +79,15 @@ function getWeekPages(items?: CalendarDayStripItem[], weeks?: CalendarDayStripIt
   }
 
   return [(items?.length ? items : DEFAULT_ITEMS).slice(0, 7)];
+}
+
+function getAccessibilityLabel(item: CalendarDayStripItem, today: boolean, selected: boolean) {
+  const [year, month, day] = item.key.split("-").map(Number);
+  const weekday = WEEKDAYS_FULL[item.weekday] ?? item.weekday;
+  const date = year && month && day ? `${day} ${MONTHS_GENITIVE[month - 1] ?? ""}`.trim() : item.dayNumber;
+  const states = [today ? "сегодня" : undefined, selected ? "выбрано" : undefined].filter(Boolean).join(", ");
+
+  return states ? `${weekday}, ${date}, ${states}` : `${weekday}, ${date}`;
 }
 
 function CalendarDayCell({
@@ -98,7 +122,7 @@ function CalendarDayCell({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.weekday}, ${item.dayNumber}${today ? ", today" : ""}${selected ? ", selected" : ""}`}
+      accessibilityLabel={getAccessibilityLabel(item, today, selected)}
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -263,7 +287,7 @@ const styles = StyleSheet.create({
   day: {
     height: theme.sizes.calendarDayHeight,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     gap: theme.spacing.xxs,
     overflow: "hidden",
     padding: theme.spacing.sm,

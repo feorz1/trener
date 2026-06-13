@@ -31,10 +31,13 @@ export const colors = {
     positiveDeep: "#054D28",
     warning: "#FFD11A",
     warningDeep: "#F38800",
+    warningDeepSoft: "#FDE7CC",
+    warningDarkest: "#9A5600",
     warningContent: "#4A3B1C",
     negative: "#D03238",
     negativeDeep: "#A72027",
     negativeDarkest: "#A7000D",
+    negativeSoft: "#F6D6D7",
     negativeBg: "#320707",
 
     // Compatibility aliases for existing components.

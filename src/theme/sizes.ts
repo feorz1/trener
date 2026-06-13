@@ -107,6 +107,8 @@ export const sizes = {
   approachQuickValuesHeight: 76,
   approachQuickValuesChipHeight: 40,
   approachQuickValuesChipMinWidth: 53,
+  workoutTimerBadgeWidth: 86,
+  workoutSummaryLightRaysHeight: 420,
   alertWidth: 356,
   alertIcon: 32,
   alertCompactMinHeight: 64,

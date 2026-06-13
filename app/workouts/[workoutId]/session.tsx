@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { mockWorkouts } from "@/data/mockWorkouts";
+import { formatTimerDuration, serializeWorkoutResult, type SessionResultSet } from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -17,14 +18,14 @@ type RouteParams = {
 };
 
 type SessionExercise = Omit<Workout["exercises"][number], "sets"> & {
-  sets: ApproachSet[];
+  sets: SessionResultSet[];
 };
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function normalizeSetIndexes(sets: ApproachSet[]) {
+function normalizeSetIndexes<T extends ApproachSet>(sets: T[]) {
   return sets.map((set, index) => ({ ...set, index: index + 1 }));
 }
 
@@ -38,7 +39,8 @@ function buildSessionExerciseSets(workoutSets: Workout["exercises"][number]["set
         reps: set.actualReps ?? set.targetReps,
         weight: set.actualWeightKg ?? set.targetWeightKg,
         unit: kgUnit,
-        state: set.completed ? "selected" : "default"
+        state: set.completed ? "selected" : "default",
+        logged: Boolean(set.actualReps || set.actualWeightKg)
       }))
   );
 }
@@ -60,10 +62,12 @@ export default function WorkoutSessionScreen() {
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
   const [sessionExercises, setSessionExercises] = useState(initialSessionExercises);
+  const sessionStartedAtRef = useRef(Date.now());
   const nextSetId = useRef(1);
 
   useEffect(() => {
     setSessionExercises(initialSessionExercises);
+    sessionStartedAtRef.current = Date.now();
     nextSetId.current = 1;
   }, [initialSessionExercises]);
 
@@ -75,8 +79,6 @@ export default function WorkoutSessionScreen() {
   const progressLabel = useMemo(() => `${completedExercises} из ${exerciseCount} упражнений`, [completedExercises, exerciseCount]);
   const finishLabel = "Завершить тренировку";
   const footerPaddingBottom = Math.max(theme.spacing.md, theme.spacing.md + keyboardInset);
-  const footerHeight = theme.spacing.lg + theme.sizes.buttonMdHeight + theme.spacing.md + theme.sizes.buttonMdHeight + footerPaddingBottom;
-  const scrollPaddingBottom = Math.max(theme.spacing["3xl"], footerHeight + theme.spacing.md);
 
   const updateExerciseSets = useCallback((exerciseId: string, nextSets: ApproachSet[]) => {
     setSessionExercises((current) =>
@@ -109,7 +111,7 @@ export default function WorkoutSessionScreen() {
           return {
             ...exercise,
             sets: normalizeSetIndexes(
-              exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch } : set))
+              exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch, logged: true } : set))
             )
           };
         })
@@ -162,8 +164,26 @@ export default function WorkoutSessionScreen() {
   }, []);
 
   const finishSession = useCallback(() => {
-    router.back();
-  }, []);
+    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
+
+    router.replace({
+      pathname: "/workouts/[workoutId]/summary",
+      params: {
+        workoutId: workout.id,
+        snapshot: serializeWorkoutResult({
+          workoutId: workout.id,
+          clientName,
+          durationSeconds,
+          exercises: sessionExercises.map((exercise) => ({
+            id: exercise.id,
+            exerciseId: exercise.exerciseId,
+            exerciseName: exercise.exerciseName,
+            sets: exercise.sets
+          }))
+        })
+      }
+    });
+  }, [clientName, sessionExercises, workout.id]);
 
   const addExercise = useCallback(() => {
     router.push("/workouts/exercises");
@@ -186,12 +206,12 @@ export default function WorkoutSessionScreen() {
       <Navigation title="Тренировка" onBack={() => router.back()} />
 
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: scrollPaddingBottom }]}
+        contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
         {...scrollProps}
       >
         <View style={styles.topSection}>
-          <Header title={clientName} showSubtitle={false} size="lg" style={styles.header} />
+          <Header title={clientName} showSubtitle={false} size="lg" style={styles.header} trailingSlot={<WorkoutTimerBadge startedAtRef={sessionStartedAtRef} />} />
           <View style={styles.status}>
             <ProgressBar completed={completedExercises} total={exerciseCount} label={progressLabel} />
           </View>
@@ -240,6 +260,20 @@ export default function WorkoutSessionScreen() {
   );
 }
 
+function WorkoutTimerBadge({ startedAtRef }: { startedAtRef: MutableRefObject<number> }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(() => Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)));
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - startedAtRef.current) / 1000)));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [startedAtRef]);
+
+  return <Badge label={formatTimerDuration(elapsedSeconds)} tone="neutral" size="sm" icon={false} style={styles.timerBadge} />;
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -247,7 +281,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingTop: theme.spacing[0]
+    paddingTop: theme.spacing[0],
+    paddingBottom: theme.spacing.md
   },
   topSection: {
     gap: theme.spacing.xxs,
@@ -260,6 +295,10 @@ const styles = StyleSheet.create({
   },
   status: {
     gap: theme.spacing.md
+  },
+  timerBadge: {
+    width: theme.sizes.workoutTimerBadgeWidth,
+    justifyContent: "center"
   },
   exerciseSection: {
     backgroundColor: theme.colors.background.canvas

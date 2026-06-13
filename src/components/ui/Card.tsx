@@ -127,6 +127,7 @@ export function Card({
               <Button
                 type="tertiary"
                 size="smallIcon"
+                accessibilityLabel="Действия тренировки"
                 icon={<Icon name="more" size={theme.sizes.buttonIconSmall} color={theme.colors.content.inkDeep} />}
                 onPress={() => setMenuOpen((value) => !value)}
               />

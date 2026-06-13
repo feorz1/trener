@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 
 export type BadgeTone =
@@ -14,7 +14,9 @@ export type BadgeTone =
   | "moved"
   | "positive"
   | "negative"
+  | "negativeSoft"
   | "negativeSolid"
+  | "warningDeepSoft"
   | "warningDeep"
   | "primary"
   | "select";
@@ -24,6 +26,7 @@ type Props = {
   tone?: BadgeTone;
   size?: "md" | "sm" | "s";
   icon?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
 const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; iconColor: string }> = {
@@ -87,10 +90,20 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
     color: theme.colors.background.canvas,
     iconColor: theme.colors.status.negative
   },
+  negativeSoft: {
+    backgroundColor: theme.colors.status.negativeSoft,
+    color: theme.colors.status.negativeDarkest,
+    iconColor: theme.colors.status.negativeDarkest
+  },
   negativeSolid: {
     backgroundColor: theme.colors.status.negative,
     color: theme.colors.background.canvas,
     iconColor: theme.colors.background.canvas
+  },
+  warningDeepSoft: {
+    backgroundColor: theme.colors.status.warningDeepSoft,
+    color: theme.colors.status.warningDarkest,
+    iconColor: theme.colors.status.warningDarkest
   },
   warningDeep: {
     backgroundColor: theme.colors.status.warningDeep,
@@ -109,11 +122,11 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
   }
 };
 
-export function Badge({ label, tone = "neutral", size = "md", icon = tone !== "neutral" }: Props) {
+export function Badge({ label, tone = "neutral", size = "md", icon = tone !== "neutral", style }: Props) {
   const stylesForTone = toneStyles[tone];
 
   return (
-    <View style={[styles.badge, sizeStyles[size], { backgroundColor: stylesForTone.backgroundColor }]}>
+    <View style={[styles.badge, sizeStyles[size], { backgroundColor: stylesForTone.backgroundColor }, style]}>
       {icon ? <View style={[styles.icon, iconSizeStyles[size], { backgroundColor: stylesForTone.iconColor }]} /> : null}
       <Text style={[size === "s" ? styles.labelTiny : styles.label, { color: stylesForTone.color }]}>{label}</Text>
     </View>
