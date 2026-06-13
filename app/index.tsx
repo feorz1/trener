@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
-import { Button, Card, Header, Icon, ListItemCell, Modal, Radio } from "@/components/ui";
+import { Button, Card, Header, Icon, ListItemCell, Modal, Radio, TabBar } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
@@ -473,7 +473,7 @@ export default function IndexScreen() {
           style={[
             styles.floatingAdd,
             {
-              bottom: Math.max(insets.bottom, theme.spacing.lg) + theme.spacing.lg,
+              bottom: Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing["2xl"],
               opacity: fabProgress,
               pointerEvents: fabHidden ? "none" : "auto",
               transform: reduceMotionEnabled
@@ -498,6 +498,10 @@ export default function IndexScreen() {
           <FloatingAddWorkoutButton onPress={openPlanningChoice} />
         </Animated.View>
       ) : null}
+
+      <View pointerEvents="box-none" style={styles.tabBarHost}>
+        <TabBar selectedValue="home" style={{ paddingBottom: Math.max(insets.bottom, theme.spacing.xl) }} />
+      </View>
 
       <Modal
         visible={planningStep !== "closed"}
@@ -566,6 +570,7 @@ function FloatingAddWorkoutButton({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       style={({ pressed }) => [styles.floatingAddButton, pressed && styles.floatingAddButtonPressed]}
     >
+      <View pointerEvents="none" style={styles.floatingAddShadow} />
       <LiquidGlassView
         animated
         colorScheme="light"
@@ -574,7 +579,7 @@ function FloatingAddWorkoutButton({ onPress }: { onPress: () => void }) {
         tintColor={theme.colors.background.glass}
       >
         {!isLiquidGlassSupported ? <View style={styles.floatingAddOverlay} /> : null}
-        <Icon name="add" size={theme.sizes.buttonIconMedium} color={theme.colors.content.ink} />
+        <Icon name="add" size={theme.sizes.cardAddWorkoutIcon} color={theme.colors.content.ink} />
       </LiquidGlassView>
     </Pressable>
   );
@@ -587,7 +592,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: theme.spacing["3xl"] + FLOATING_ADD_SIZE + theme.spacing.xl
+    paddingBottom: theme.spacing["3xl"] + FLOATING_ADD_SIZE + theme.spacing["3xl"] + theme.spacing.xl
   },
   body: {
     gap: theme.spacing.md,
@@ -618,11 +623,26 @@ const styles = StyleSheet.create({
     right: theme.spacing.lg,
     zIndex: 50
   },
+  tabBarHost: {
+    position: "absolute",
+    left: theme.spacing[0],
+    right: theme.spacing[0],
+    bottom: theme.spacing[0],
+    zIndex: 40
+  },
   floatingAddButton: {
+    position: "relative",
     width: FLOATING_ADD_SIZE,
     height: FLOATING_ADD_SIZE,
     borderRadius: theme.radius.pill,
-    ...theme.shadows.glass
+    overflow: "visible",
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  floatingAddShadow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.canvasSoft,
+    ...theme.shadows.glassAction
   },
   floatingAddButtonPressed: {
     opacity: 0.86

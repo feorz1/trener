@@ -56,5 +56,20 @@ export const shadows = {
       elevation: 6
     },
     default: {}
+  }),
+  glassAction: Platform.select({
+    ios: {
+      shadowColor: colors.content.ink,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.16,
+      shadowRadius: 18
+    },
+    android: {
+      elevation: 6
+    },
+    web: {
+      boxShadow: "0px 10px 28px rgba(14, 15, 12, 0.1), 0px 2px 8px rgba(14, 15, 12, 0.05)"
+    },
+    default: {}
   })
 } as const;

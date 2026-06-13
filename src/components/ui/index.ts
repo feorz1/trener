@@ -30,5 +30,6 @@ export * from "./StateSelect";
 export * from "./SuperSet";
 export * from "./Switch";
 export * from "./Select";
+export * from "./TabBar";
 export * from "./TextArea";
 export * from "./Variant";

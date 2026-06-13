@@ -31,6 +31,7 @@ import { Set as WorkoutSet, type WorkoutSetVariant } from "@/components/ui/Set";
 import { StateSelect } from "@/components/ui/StateSelect";
 import { SuperSet, type SuperSetSegment } from "@/components/ui/SuperSet";
 import { Switch } from "@/components/ui/Switch";
+import { TabBar, trainerTabBarItems } from "@/components/ui/TabBar";
 import { TextArea, type TextAreaState } from "@/components/ui/TextArea";
 import { Variant } from "@/components/ui/Variant";
 import { theme } from "@/theme";
@@ -54,6 +55,7 @@ type ComponentId =
   | "Divider"
   | "Button"
   | "Navigation"
+  | "TabBar"
   | "Header"
   | "Select"
   | "Loader"
@@ -90,6 +92,7 @@ const componentItems: Array<{ value: ComponentId; title: string; updatedAt: stri
   { value: "Divider", title: "Divider", updatedAt: componentUpdates.Divider },
   { value: "Button", title: "Button", updatedAt: componentUpdates.Button },
   { value: "Navigation", title: "Navigation", updatedAt: componentUpdates.Navigation },
+  { value: "TabBar", title: "Tab Bar", updatedAt: componentUpdates.TabBar },
   { value: "Header", title: "Header", updatedAt: componentUpdates.Header },
   { value: "Select", title: "Select", updatedAt: componentUpdates.Select },
   { value: "Loader", title: "Loader", updatedAt: componentUpdates.Loader },
@@ -228,6 +231,7 @@ export function MobileStorybook() {
   const [buttonSize, setButtonSize] = useState<ButtonSize>("medium");
   const [buttonState, setButtonState] = useState<ButtonState>("active");
   const [navigationShowSubtitle, setNavigationShowSubtitle] = useState(true);
+  const [tabBarValue, setTabBarValue] = useState("home");
   const [headerSize, setHeaderSize] = useState<HeaderSize>("xl");
   const [headerShowSubtitle, setHeaderShowSubtitle] = useState(true);
   const [selectState, setSelectState] = useState<SelectState>("empty");
@@ -369,6 +373,8 @@ export function MobileStorybook() {
       buttonSize={buttonSize}
       buttonState={buttonState}
       navigationShowSubtitle={navigationShowSubtitle}
+      tabBarValue={tabBarValue}
+      onTabBarValueChange={setTabBarValue}
       headerSize={headerSize}
       headerShowSubtitle={headerShowSubtitle}
       selectState={item === "Select" ? selectState : "empty"}
@@ -537,6 +543,8 @@ export function MobileStorybook() {
               setButtonState={setButtonState}
               navigationShowSubtitle={navigationShowSubtitle}
               setNavigationShowSubtitle={setNavigationShowSubtitle}
+              tabBarValue={tabBarValue}
+              setTabBarValue={setTabBarValue}
               headerSize={headerSize}
               setHeaderSize={setHeaderSize}
               headerShowSubtitle={headerShowSubtitle}
@@ -830,6 +838,8 @@ type PreviewContentProps = {
   buttonSize: ButtonSize;
   buttonState: ButtonState;
   navigationShowSubtitle: boolean;
+  tabBarValue: string;
+  onTabBarValueChange: (value: string) => void;
   headerSize: HeaderSize;
   headerShowSubtitle: boolean;
   selectState: SelectState;
@@ -936,6 +946,8 @@ function PreviewContent({
   buttonSize,
   buttonState,
   navigationShowSubtitle,
+  tabBarValue,
+  onTabBarValueChange,
   headerSize,
   headerShowSubtitle,
   selectState,
@@ -1027,7 +1039,7 @@ function PreviewContent({
         completedExercises={cardStatus === "completed" ? 6 : cardStatus === "inProgress" ? 1 : 0}
         totalExercises={6}
         exerciseCount={6}
-        style={cardVariant === "dayPlan" ? styles.cardPlanPreviewItem : styles.cardWorkoutPreviewItem}
+        style={cardVariant === "dayPlan" || cardVariant === "addWorkout" ? styles.cardPlanPreviewItem : styles.cardWorkoutPreviewItem}
       />
     );
   }
@@ -1194,6 +1206,10 @@ function PreviewContent({
 
   if (component === "Navigation") {
     return <Navigation title="Screen Header" subtitle="Additional Title" showSubtitle={navigationShowSubtitle} />;
+  }
+
+  if (component === "TabBar") {
+    return <TabBar selectedValue={tabBarValue} onValueChange={onTabBarValueChange} />;
   }
 
   if (component === "Header") {
@@ -1393,6 +1409,8 @@ type ComponentControlsProps = {
   setButtonState: (value: ButtonState) => void;
   navigationShowSubtitle: boolean;
   setNavigationShowSubtitle: (value: boolean) => void;
+  tabBarValue: string;
+  setTabBarValue: (value: string) => void;
   headerSize: HeaderSize;
   setHeaderSize: (value: HeaderSize) => void;
   headerShowSubtitle: boolean;
@@ -1527,6 +1545,8 @@ function ComponentControls({
   setButtonState,
   navigationShowSubtitle,
   setNavigationShowSubtitle,
+  tabBarValue,
+  setTabBarValue,
   headerSize,
   setHeaderSize,
   headerShowSubtitle,
@@ -1866,6 +1886,16 @@ function ComponentControls({
       <ControlGroup label="subtitle">
         <OptionChip label="show" selected={navigationShowSubtitle} onPress={() => setNavigationShowSubtitle(true)} />
         <OptionChip label="hide" selected={!navigationShowSubtitle} onPress={() => setNavigationShowSubtitle(false)} />
+      </ControlGroup>
+    );
+  }
+
+  if (component === "TabBar") {
+    return (
+      <ControlGroup label="selected">
+        {trainerTabBarItems.map((item) => (
+          <OptionChip key={item.value} label={item.label} selected={tabBarValue === item.value} onPress={() => setTabBarValue(item.value)} />
+        ))}
       </ControlGroup>
     );
   }
