@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { router, useLocalSearchParams } from "expo-router";
-import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
-import { Button, Card, Header, Icon, ListItemCell, Modal, Radio, TabBar } from "@/components/ui";
+import { Badge, Button, Card, Header, Icon, ListItemCell, Modal, Radio, TabBar, getListItemCellGroupPosition } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
@@ -13,6 +13,7 @@ import { formatRuDayMonth } from "@/utils/date";
 
 type PlanningModalStep = "closed" | "choice" | "client";
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+type TrainerTabValue = "home" | "clients" | "settings";
 
 type TodayWorkout = {
   id: string;
@@ -35,6 +36,7 @@ const repeatDayByNativeWeekday: Record<number, RepeatDay> = {
   6: "saturday"
 };
 const repeatDayKeys = new Set<RepeatDay>(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
+const trainerTabValues = new Set<TrainerTabValue>(["home", "clients", "settings"]);
 const FAB_SCROLL_REVEAL_DELAY = 140;
 const FAB_HIT_SLOP = theme.spacing.xxs;
 const FLOATING_ADD_SIZE = theme.sizes.buttonLgHeight;
@@ -253,6 +255,9 @@ export default function IndexScreen() {
   const [selectedDayKey, setSelectedDayKey] = useState(plannedDateKey ?? todayKey);
   const [planningStep, setPlanningStep] = useState<PlanningModalStep>("closed");
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
+  const [selectedTab, setSelectedTab] = useState<TrainerTabValue>("home");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [autoTimerEnabled, setAutoTimerEnabled] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const [fabHidden, setFabHidden] = useState(false);
   const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
@@ -299,7 +304,11 @@ export default function IndexScreen() {
   const hasVisibleWorkouts = selectedWorkouts.length > 0;
   const shouldShowDayPlan = isToday || originalWorkoutsCount === 0;
   const shouldShowAddWorkout = !isPast && originalWorkoutsCount > 0;
-  const shouldShowFloatingAddWorkout = shouldShowAddWorkout;
+  const shouldShowFloatingAddWorkout = selectedTab === "home" && shouldShowAddWorkout;
+  const activeClientsCount = mockClients.filter((client) => client.status === "active").length;
+  const averageAttendanceRate = Math.round(
+    mockClients.reduce((total, client) => total + client.metrics.attendanceRate, 0) / mockClients.length
+  );
   const nextWorkoutMeta = useMemo(
     () => getNextWorkoutMeta(workoutsByDay[selectedDayKey] ?? [], selectedDate, now),
     [now, selectedDate, selectedDayKey, workoutsByDay]
@@ -410,6 +419,12 @@ export default function IndexScreen() {
     });
   };
 
+  const selectTab = (value: string) => {
+    if (trainerTabValues.has(value as TrainerTabValue)) {
+      setSelectedTab(value as TrainerTabValue);
+    }
+  };
+
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ScrollView
@@ -423,48 +438,145 @@ export default function IndexScreen() {
         {...scrollProps}
       >
         <View style={styles.body}>
-          <View style={styles.headerRow}>
-            <Header title="Тренировки" showSubtitle={false} size="xl" style={styles.header} />
-            {!isToday ? (
-              <Button label="Сегодня" type="secondaryNeutral" size="medium" style={styles.todayButton} onPress={selectToday} accessibilityLabel="Показать сегодняшний день" />
-            ) : null}
-          </View>
+          {selectedTab === "home" ? (
+            <>
+              <View style={styles.headerRow}>
+                <Header title="Тренировки" showSubtitle={false} size="xl" style={styles.header} />
+                {!isToday ? (
+                  <Button label="Сегодня" type="secondaryNeutral" size="medium" style={styles.todayButton} onPress={selectToday} accessibilityLabel="Показать сегодняшний день" />
+                ) : null}
+              </View>
 
-          <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={selectDay} />
+              <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={selectDay} />
 
-          <View style={styles.cards}>
-            {shouldShowDayPlan ? (
-              <Card
-                variant="dayPlan"
-                dayPlanState={originalWorkoutsCount === 0 && !isPast ? "planNext" : "plan"}
-                dayTitle={`План ${formatRuDayMonth(selectedDate)}`}
-                dayCount={getPlanCount(originalWorkoutsCount)}
-                dayMeta={originalWorkoutsCount > 0 ? nextWorkoutMeta : ""}
-                onAddWorkout={openPlanningChoice}
-              />
-            ) : null}
-
-            {hasVisibleWorkouts
-              ? selectedWorkouts.map((workout) => (
+              <View style={styles.cards}>
+                {shouldShowDayPlan ? (
                   <Card
-                    key={workout.id}
-                    variant="workout"
-                    workoutStatus={workout.status}
-                    muscleGroup={workout.title}
-                    clientName={workout.clientName}
-                    workoutTime={workout.time}
-                    exerciseCount={workout.exercisesCount}
-                    completedExercises={workout.completedExercises}
-                    totalExercises={workout.exercisesCount}
-                    showAction={!isPast && workout.status !== "completed"}
-                    showMenu={!isPast}
-                    onStart={() => openWorkoutSession(workout.id)}
-                    onContinue={() => openWorkoutSession(workout.id)}
+                    variant="dayPlan"
+                    dayPlanState={originalWorkoutsCount === 0 && !isPast ? "planNext" : "plan"}
+                    dayTitle={`План ${formatRuDayMonth(selectedDate)}`}
+                    dayCount={getPlanCount(originalWorkoutsCount)}
+                    dayMeta={originalWorkoutsCount > 0 ? nextWorkoutMeta : ""}
+                    onAddWorkout={openPlanningChoice}
                   />
-                ))
-              : null}
+                ) : null}
 
-          </View>
+                {hasVisibleWorkouts
+                  ? selectedWorkouts.map((workout) => (
+                      <Card
+                        key={workout.id}
+                        variant="workout"
+                        workoutStatus={workout.status}
+                        muscleGroup={workout.title}
+                        clientName={workout.clientName}
+                        workoutTime={workout.time}
+                        exerciseCount={workout.exercisesCount}
+                        completedExercises={workout.completedExercises}
+                        totalExercises={workout.exercisesCount}
+                        showAction={!isPast && workout.status !== "completed"}
+                        showMenu={!isPast}
+                        onStart={() => openWorkoutSession(workout.id)}
+                        onContinue={() => openWorkoutSession(workout.id)}
+                      />
+                    ))
+                  : null}
+              </View>
+            </>
+          ) : null}
+
+          {selectedTab === "clients" ? (
+            <>
+              <View style={styles.headerRow}>
+                <Header title="Клиенты" showSubtitle={false} size="xl" style={styles.header} />
+                <Button label="Новый" type="secondaryNeutral" size="medium" style={styles.todayButton} onPress={openNewClient} accessibilityLabel="Создать клиента" />
+              </View>
+
+              <View style={styles.metricsRow}>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricLabel}>Активные</Text>
+                  <Text style={styles.metricValue}>{activeClientsCount}</Text>
+                </View>
+                <View style={styles.metricCard}>
+                  <Text style={styles.metricLabel}>Посещаемость</Text>
+                  <Text style={styles.metricValue}>{averageAttendanceRate}%</Text>
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>Список клиентов</Text>
+                  <Badge label={`${mockClients.length}`} tone="primary" size="s" icon={false} />
+                </View>
+                <View style={styles.listGroup}>
+                  {mockClients.map((client, index) => (
+                    <ListItemCell
+                      key={client.id}
+                      title={client.name}
+                      subtitle={client.goal}
+                      leading="avatar"
+                      avatarType="initials"
+                      avatarInitials={client.avatarInitials}
+                      trailing="text"
+                      trailingText={`${client.metrics.attendanceRate}%`}
+                      groupPosition={getListItemCellGroupPosition(index, mockClients.length)}
+                    />
+                  ))}
+                </View>
+              </View>
+            </>
+          ) : null}
+
+          {selectedTab === "settings" ? (
+            <>
+              <View style={styles.headerRow}>
+                <Header title="Настройки" showSubtitle={false} size="xl" style={styles.header} />
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Профиль</Text>
+                <View style={styles.listGroup}>
+                  <ListItemCell
+                    title="Тренер"
+                    subtitle="Базовый профиль приложения"
+                    leading="avatar"
+                    avatarType="icon"
+                    leadingIconName="user"
+                    trailing="icon"
+                    trailingIconName="chevron right"
+                    groupPosition="single"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Основные параметры</Text>
+                <View style={styles.listGroup}>
+                  <ListItemCell
+                    title="Уведомления"
+                    subtitle="Напоминания о тренировках"
+                    leading="icon"
+                    leadingIconName="bell"
+                    trailing="switch"
+                    selected={notificationsEnabled}
+                    onSelectedChange={setNotificationsEnabled}
+                    groupPosition="first"
+                  />
+                  <ListItemCell
+                    title="Автозапуск таймера"
+                    subtitle="После старта подхода"
+                    leading="icon"
+                    leadingIconName="clock"
+                    trailing="switch"
+                    selected={autoTimerEnabled}
+                    onSelectedChange={setAutoTimerEnabled}
+                    groupPosition="middle"
+                  />
+                  <ListItemCell title="Единицы измерения" leading="icon" leadingIconName="chart" trailing="text" trailingText="кг / см" groupPosition="middle" />
+                  <ListItemCell title="Тема" leading="icon" leadingIconName="settings" trailing="text" trailingText="Системная" groupPosition="last" />
+                </View>
+              </View>
+            </>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -502,7 +614,7 @@ export default function IndexScreen() {
       ) : null}
 
       <View pointerEvents="box-none" style={[styles.tabBarHost, { bottom: tabBarBottomInset }]}>
-        <TabBar selectedValue="home" />
+        <TabBar selectedValue={selectedTab} onValueChange={selectTab} />
       </View>
 
       <Modal
@@ -619,6 +731,42 @@ const styles = StyleSheet.create({
   },
   cards: {
     gap: theme.spacing.md
+  },
+  metricsRow: {
+    flexDirection: "row",
+    gap: theme.spacing.md
+  },
+  metricCard: {
+    flex: 1,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.lg,
+    borderRadius: theme.radius.xl,
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  metricLabel: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.body
+  },
+  metricValue: {
+    ...theme.typography.display.xs,
+    color: theme.colors.content.inkDeep
+  },
+  section: {
+    gap: theme.spacing.sm
+  },
+  sectionHeader: {
+    minHeight: theme.sizes.buttonSmHeight,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md
+  },
+  sectionTitle: {
+    ...theme.typography.body.lg,
+    color: theme.colors.content.ink
+  },
+  listGroup: {
+    gap: theme.spacing.xxs
   },
   floatingAdd: {
     position: "absolute",
