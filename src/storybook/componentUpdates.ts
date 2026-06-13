@@ -19,7 +19,7 @@ export const componentUpdates = {
   "Alert": "23:45 09.06",
   "Button": "23:45 09.06",
   "Navigation": "23:45 09.06",
-  "TabBar": "21:48 13.06",
+  "TabBar": "22:13 13.06",
   "Header": "14:41 13.06",
   "Select": "23:45 09.06",
   "Loader": "23:45 09.06",
