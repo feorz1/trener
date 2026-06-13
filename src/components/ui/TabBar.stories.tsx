@@ -29,7 +29,7 @@ export const Interactive: Story = {
     const [selectedValue, setSelectedValue] = useState("home");
 
     return (
-      <View style={{ alignItems: "stretch", gap: theme.spacing.lg, width: "100%" }}>
+      <View style={{ alignItems: "stretch", width: "100%", padding: theme.spacing.md, backgroundColor: theme.colors.background.canvasSoft }}>
         <TabBar selectedValue={selectedValue} onValueChange={setSelectedValue} />
       </View>
     );

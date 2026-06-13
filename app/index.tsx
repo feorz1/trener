@@ -259,6 +259,8 @@ export default function IndexScreen() {
   const fabProgress = useRef(new Animated.Value(1)).current;
   const fabRevealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { scrollProps } = useConditionalScroll();
+  const tabBarBottomInset = Math.max(insets.bottom - theme.spacing.xl, theme.spacing[0]);
+  const tabBarVisualHeight = theme.spacing.lg + theme.sizes.tabBarItemMinHeight + theme.spacing.xl;
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -473,7 +475,7 @@ export default function IndexScreen() {
           style={[
             styles.floatingAdd,
             {
-              bottom: Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing["2xl"],
+              bottom: tabBarBottomInset + tabBarVisualHeight + theme.spacing.lg,
               opacity: fabProgress,
               pointerEvents: fabHidden ? "none" : "auto",
               transform: reduceMotionEnabled
@@ -499,8 +501,8 @@ export default function IndexScreen() {
         </Animated.View>
       ) : null}
 
-      <View pointerEvents="box-none" style={styles.tabBarHost}>
-        <TabBar selectedValue="home" style={{ paddingBottom: Math.max(insets.bottom, theme.spacing.xl) }} />
+      <View pointerEvents="box-none" style={[styles.tabBarHost, { bottom: tabBarBottomInset }]}>
+        <TabBar selectedValue="home" />
       </View>
 
       <Modal

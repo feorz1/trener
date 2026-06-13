@@ -42,56 +42,56 @@ export function TabBar({
 
   return (
     <View accessibilityLabel={accessibilityLabel} accessibilityRole="tablist" style={[styles.root, style]}>
-      <LiquidGlassView
-        animated
-        colorScheme="light"
-        effect="regular"
-        style={[styles.glassRoot, !isLiquidGlassSupported && styles.fallbackGlassRoot]}
-        tintColor={theme.colors.background.glass}
-      >
-        {!isLiquidGlassSupported ? <View pointerEvents="none" style={styles.glassLayer} /> : null}
-        <View style={styles.items}>
-          {visibleItems.map((item, index) => {
-            const selected = item.value === selectedValue;
-            const isOverlapped = index < visibleItems.length - 1;
+      <View style={styles.shell}>
+        <View pointerEvents="none" style={styles.shadowPlate} />
+        <LiquidGlassView
+          animated
+          colorScheme="light"
+          effect="regular"
+          style={[styles.glassRoot, !isLiquidGlassSupported && styles.fallbackGlassRoot]}
+          tintColor={theme.colors.background.glass}
+        >
+          {!isLiquidGlassSupported ? <View pointerEvents="none" style={styles.glassLayer} /> : null}
+          <View style={styles.items}>
+            {visibleItems.map((item, index) => {
+              const selected = item.value === selectedValue;
+              const isOverlapped = index < visibleItems.length - 1;
+              const contentColor = item.disabled ? theme.colors.content.disabled : theme.colors.content.inkDeep;
 
-            return (
-              <Pressable
-                key={item.value}
-                accessibilityLabel={item.accessibilityLabel ?? item.label}
-                accessibilityRole="tab"
-                accessibilityState={{ selected, disabled: item.disabled }}
-                disabled={item.disabled}
-                hitSlop={theme.spacing.xs}
-                onPress={() => onValueChange?.(item.value)}
-                style={({ pressed }) => [
-                  styles.item,
-                  hasFixedItems ? styles.fixedItem : styles.fluidItem,
-                  isOverlapped && styles.overlappedItem,
-                  pressed && !item.disabled && styles.pressedItem,
-                  item.disabled && styles.disabledItem
-                ]}
-                testID={item.testID}
-              >
-                {selected ? <View pointerEvents="none" style={styles.selection} /> : null}
-                <Icon
-                  name={item.icon}
-                  size={theme.sizes.tabBarIcon}
-                  color={item.disabled ? theme.colors.content.disabled : theme.colors.content.inkDeep}
-                />
-                <Text
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.85}
-                  numberOfLines={1}
-                  style={[styles.label, item.disabled && styles.disabledLabel]}
+              return (
+                <Pressable
+                  key={item.value}
+                  accessibilityLabel={item.accessibilityLabel ?? item.label}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected, disabled: item.disabled }}
+                  disabled={item.disabled}
+                  hitSlop={theme.spacing.xs}
+                  onPress={() => onValueChange?.(item.value)}
+                  style={({ pressed }) => [
+                    styles.item,
+                    hasFixedItems ? styles.fixedItem : styles.fluidItem,
+                    isOverlapped && styles.overlappedItem,
+                    pressed && !item.disabled && styles.pressedItem,
+                    item.disabled && styles.disabledItem
+                  ]}
+                  testID={item.testID}
                 >
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      </LiquidGlassView>
+                  {selected ? <View pointerEvents="none" style={styles.selection} /> : null}
+                  <Icon name={item.icon} size={theme.sizes.tabBarIcon} color={contentColor} />
+                  <Text
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                    numberOfLines={1}
+                    style={[styles.label, { color: contentColor }, item.disabled && styles.disabledLabel]}
+                  >
+                    {item.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </LiquidGlassView>
+      </View>
     </View>
   );
 }
@@ -104,12 +104,26 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xl,
     paddingHorizontal: theme.spacing.xl
   },
+  shell: {
+    position: "relative",
+    maxWidth: "100%",
+    overflow: "visible"
+  },
+  shadowPlate: {
+    position: "absolute",
+    top: -theme.spacing.xs,
+    right: -theme.spacing.xs,
+    bottom: -theme.spacing.xs,
+    left: -theme.spacing.xs,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.canvas,
+    ...theme.shadows.glass
+  },
   glassRoot: {
     maxWidth: "100%",
     borderRadius: theme.radius.pill,
     overflow: "hidden",
-    backgroundColor: theme.colors.background.glass,
-    ...theme.shadows.glass
+    backgroundColor: theme.colors.background.glass
   },
   fallbackGlassRoot: {
     backgroundColor: theme.colors.background.glass
@@ -129,7 +143,7 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.tabBarItemMinHeight,
     alignItems: "center",
     justifyContent: "center",
-    gap: theme.spacing.xxs,
+    gap: theme.spacing.xxs / 2,
     paddingTop: theme.spacing.xs + theme.spacing.xxs,
     paddingBottom: theme.spacing.sm - theme.spacing.xxs / 2,
     paddingHorizontal: theme.spacing.sm
@@ -157,7 +171,6 @@ const styles = StyleSheet.create({
     ...theme.typography.captionStrong,
     lineHeight: theme.spacing.md,
     minWidth: "100%",
-    color: theme.colors.content.inkDeep,
     textAlign: "center"
   },
   pressedItem: {

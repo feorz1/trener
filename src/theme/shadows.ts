@@ -55,6 +55,9 @@ export const shadows = {
     android: {
       elevation: 6
     },
+    web: {
+      boxShadow: "0px 8px 40px rgba(0, 0, 0, 0.12)"
+    },
     default: {}
   }),
   glassAction: Platform.select({
