@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { router, useLocalSearchParams } from "expo-router";
-import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Badge, Button, Card, Header, Icon, ListItemCell, Modal, Radio, TabBar, getListItemCellGroupPosition } from "@/components/ui";
@@ -211,6 +211,7 @@ export default function IndexScreen() {
     plannedRepeatDays?: string;
   }>();
   const insets = useSafeAreaInsets();
+  const { width: viewportWidth } = useWindowDimensions();
   const today = useMemo(() => startOfDay(new Date()), []);
   const plannedDateKey = firstParam(plannedDate);
   const plannedAnchorDate = useMemo(() => parseDateKey(plannedDateKey), [plannedDateKey]);
@@ -266,6 +267,8 @@ export default function IndexScreen() {
   const { scrollProps } = useConditionalScroll();
   const tabBarBottomInset = Math.max(insets.bottom - theme.spacing.xl, theme.spacing[0]);
   const tabBarVisualHeight = theme.spacing.lg + theme.sizes.tabBarItemMinHeight + theme.spacing.xl;
+  const bodyContentWidth = Math.max(viewportWidth - theme.spacing.lg - theme.spacing.lg, theme.spacing[0]);
+  const calendarStripWidth = Math.min(theme.sizes.calendarDayStripWidth, bodyContentWidth);
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -447,7 +450,7 @@ export default function IndexScreen() {
                 ) : null}
               </View>
 
-              <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" onSelect={selectDay} />
+              <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width={calendarStripWidth} style={styles.calendarStrip} onSelect={selectDay} />
 
               <View style={styles.cards}>
                 {shouldShowDayPlan ? (
@@ -731,6 +734,9 @@ const styles = StyleSheet.create({
   },
   cards: {
     gap: theme.spacing.md
+  },
+  calendarStrip: {
+    alignSelf: "center"
   },
   metricsRow: {
     flexDirection: "row",
