@@ -53,7 +53,7 @@ export function TabBar({
   const hasFixedItems = visibleItems.length <= 3;
   const selectedIndex = visibleItems.findIndex((item) => item.value === selectedValue);
   const hasSelectedItem = selectedIndex >= 0;
-  const selectedOffset = hasSelectedItem ? selectedIndex * (theme.sizes.tabBarItemWidth - theme.spacing.sm) : 0;
+  const selectedOffset = hasSelectedItem ? selectedIndex * theme.sizes.tabBarItemWidth : 0;
   const selectionTranslateX = useRef(new Animated.Value(selectedOffset)).current;
 
   useEffect(() => {
@@ -93,7 +93,6 @@ export function TabBar({
               ) : null}
               {visibleItems.map((item, index) => {
                 const selected = item.value === selectedValue;
-                const isOverlapped = index < visibleItems.length - 1;
                 const contentColor = item.disabled ? theme.colors.content.disabled : theme.colors.content.inkDeep;
 
               return (
@@ -110,7 +109,6 @@ export function TabBar({
                     styles.item,
                     webTabItemReset,
                     hasFixedItems ? styles.fixedItem : styles.fluidItem,
-                    isOverlapped && styles.overlappedItem,
                     pressed && !item.disabled && styles.pressedItem,
                     item.disabled && styles.disabledItem
                   ]}
@@ -215,15 +213,12 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: theme.spacing[0]
   },
-  overlappedItem: {
-    marginRight: -theme.spacing.sm
-  },
   selection: {
     position: "absolute",
     top: theme.spacing[0],
     bottom: theme.spacing[0],
     left: theme.spacing.xxs,
-    width: theme.sizes.tabBarItemWidth + theme.spacing.xxs + theme.spacing.xxs,
+    width: theme.sizes.tabBarItemWidth,
     zIndex: 0,
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.content.primary
