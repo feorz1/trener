@@ -82,6 +82,10 @@ const components = [
     files: ["src/components/ui/Navigation.tsx", "src/components/ui/Navigation.stories.tsx"]
   },
   {
+    name: "TabBar",
+    files: ["src/components/ui/TabBar.tsx", "src/components/ui/TabBar.stories.tsx"]
+  },
+  {
     name: "Header",
     files: ["src/components/ui/Header.tsx", "src/components/ui/Header.stories.tsx"]
   },

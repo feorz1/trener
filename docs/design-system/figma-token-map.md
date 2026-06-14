@@ -19,16 +19,20 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/content/mute` | `#868685` | `theme.colors.content.mute` |
 | `color/content/disabled` | `#CFCFCF` | `theme.colors.content.disabled` |
 | `color/background/canvas` | `#FFFFFF` | `theme.colors.background.canvas` |
-| `color/background/canvas-soft` | `#F3F3F3` | `theme.colors.background.canvasSoft` |
+| `color/background/canvas-soft` | `#EFEFEF` | `theme.colors.background.canvasSoft` |
+| `color/background/border` | `#E9E9E9` | `theme.colors.background.border` |
 | `card-divider` | `#F5F4F2` | `theme.colors.background.cardDivider` |
 | `color/status/positive` | `#2EAD4B` | `theme.colors.status.positive` |
 | `color/status/positive-deep` | `#054D28` | `theme.colors.status.positiveDeep` |
 | `color/status/warning` | `#FFD11A` | `theme.colors.status.warning` |
 | `color/status/warning-deep` | `#F38800` | `theme.colors.status.warningDeep` |
+| `color/status/warning-deep-soft` | `#FDE7CC` | `theme.colors.status.warningDeepSoft` |
+| `color/status/warning-darkest` | `#9A5600` | `theme.colors.status.warningDarkest` |
 | `color/status/warning-content` | `#4A3B1C` | `theme.colors.status.warningContent` |
 | `color/status/negative` | `#D03238` | `theme.colors.status.negative` |
 | `color/status/negative-deep` | `#A72027` | `theme.colors.status.negativeDeep` |
 | `color/status/negative-darkest` | `#A7000D` | `theme.colors.status.negativeDarkest` |
+| `color/status/negative-soft` | `#F6D6D7` | `theme.colors.status.negativeSoft` |
 | `color/status/negative-bg` | `#320707` | `theme.colors.status.negativeBg` |
 | `color/accent/orange` | `#FFC091` | `theme.colors.accent.orange` |
 | `color/accent/cyan` | `#38C8FF` | `theme.colors.accent.cyan` |
@@ -88,6 +92,7 @@ Figma slash names map to nested `theme.*` paths:
 color/content/primary            -> theme.colors.content.primary
 color/content/disabled           -> theme.colors.content.disabled
 color/background/canvas             -> theme.colors.background.canvas
+color/background/border             -> theme.colors.background.border
 color/status/positive           -> theme.colors.status.positive
 color/accent/cyan        -> theme.colors.accent.cyan
 spacing/md              -> theme.spacing.md

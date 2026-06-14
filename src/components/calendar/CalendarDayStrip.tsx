@@ -37,16 +37,33 @@ export type CalendarDayStripProps = {
 };
 
 const DEFAULT_ITEMS: CalendarDayStripItem[] = [
-  { key: "2026-05-11", weekday: "Mon", dayNumber: "11", temporalState: "past" },
-  { key: "2026-05-12", weekday: "Tue", dayNumber: "12", temporalState: "past" },
-  { key: "2026-05-13", weekday: "Wed", dayNumber: "13", temporalState: "default" },
-  { key: "2026-05-14", weekday: "Thu", dayNumber: "14", temporalState: "default" },
-  { key: "2026-05-15", weekday: "Fri", dayNumber: "15", temporalState: "future" },
-  { key: "2026-05-16", weekday: "Sat", dayNumber: "16", temporalState: "future" },
-  { key: "2026-05-17", weekday: "Sun", dayNumber: "17", temporalState: "future" }
+  { key: "2026-05-11", weekday: "Пн", dayNumber: "11", temporalState: "past" },
+  { key: "2026-05-12", weekday: "Вт", dayNumber: "12", temporalState: "past" },
+  { key: "2026-05-13", weekday: "Ср", dayNumber: "13", temporalState: "default" },
+  { key: "2026-05-14", weekday: "Чт", dayNumber: "14", temporalState: "default" },
+  { key: "2026-05-15", weekday: "Пт", dayNumber: "15", temporalState: "future" },
+  { key: "2026-05-16", weekday: "Сб", dayNumber: "16", temporalState: "future" },
+  { key: "2026-05-17", weekday: "Вс", dayNumber: "17", temporalState: "future" }
 ];
 
 const SELECTION_ANIMATION_DURATION = 180;
+const TODAY_DOT_TOP =
+  theme.spacing.sm +
+  theme.typography.body.smCaption.lineHeight +
+  theme.spacing.xxs +
+  theme.typography.body.mdStrong.lineHeight +
+  theme.spacing.xs +
+  theme.sizes.calendarDayDot / 4;
+const MONTHS_GENITIVE = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+const WEEKDAYS_FULL: Record<string, string> = {
+  Пн: "Понедельник",
+  Вт: "Вторник",
+  Ср: "Среда",
+  Чт: "Четверг",
+  Пт: "Пятница",
+  Сб: "Суббота",
+  Вс: "Воскресенье"
+};
 
 function getBaseColor(item: CalendarDayStripItem) {
   if (item.temporalState === "past") {
@@ -62,6 +79,15 @@ function getWeekPages(items?: CalendarDayStripItem[], weeks?: CalendarDayStripIt
   }
 
   return [(items?.length ? items : DEFAULT_ITEMS).slice(0, 7)];
+}
+
+function getAccessibilityLabel(item: CalendarDayStripItem, today: boolean, selected: boolean) {
+  const [year, month, day] = item.key.split("-").map(Number);
+  const weekday = WEEKDAYS_FULL[item.weekday] ?? item.weekday;
+  const date = year && month && day ? `${day} ${MONTHS_GENITIVE[month - 1] ?? ""}`.trim() : item.dayNumber;
+  const states = [today ? "сегодня" : undefined, selected ? "выбрано" : undefined].filter(Boolean).join(", ");
+
+  return states ? `${weekday}, ${date}, ${states}` : `${weekday}, ${date}`;
 }
 
 function CalendarDayCell({
@@ -96,7 +122,7 @@ function CalendarDayCell({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${item.weekday}, ${item.dayNumber}${today ? ", today" : ""}${selected ? ", selected" : ""}`}
+      accessibilityLabel={getAccessibilityLabel(item, today, selected)}
       accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -149,8 +175,8 @@ export function CalendarDayStrip({
   const resolvedSelectedKey = selectedKey ?? internalSelectedKey;
   const rootWidthStyle: ViewStyle = width === "full" ? { alignSelf: "stretch" } : { width };
   const pageWidth = width === "full" ? measuredWidth : width;
-  const safePageWidth = Math.max(pageWidth, theme.spacing.xxs * 2 + theme.spacing.xs * 6 + 7);
-  const cellWidth = (safePageWidth - theme.spacing.xxs * 2 - theme.spacing.xs * 6) / 7;
+  const availableCellWidth = Math.max(pageWidth - theme.spacing.xxs * 2 - theme.spacing.xs * 6, 0);
+  const cellWidth = availableCellWidth / 7;
   const hasPaging = pages.length > 1;
   const selectedPageIndex = Math.max(
     pages.findIndex((week) => week.some((item) => item.key === resolvedSelectedKey)),
@@ -261,7 +287,7 @@ const styles = StyleSheet.create({
   day: {
     height: theme.sizes.calendarDayHeight,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     gap: theme.spacing.xxs,
     overflow: "hidden",
     padding: theme.spacing.sm,
@@ -274,7 +300,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.content.primary
   },
   weekday: {
-    ...theme.typography.caption,
+    ...theme.typography.body.smCaption,
     zIndex: 1
   },
   dayNumber: {
@@ -283,7 +309,7 @@ const styles = StyleSheet.create({
   },
   todayDot: {
     position: "absolute",
-    bottom: theme.spacing.sm,
+    top: TODAY_DOT_TOP,
     alignSelf: "center",
     zIndex: 1,
     width: theme.sizes.calendarDayDot,

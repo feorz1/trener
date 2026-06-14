@@ -5,8 +5,10 @@ import {
   Text,
   TextInput as NativeTextInput,
   View,
+  type StyleProp,
   type TextInputProps,
-  type TextStyle
+  type TextStyle,
+  type ViewStyle
 } from "react-native";
 import { theme } from "@/theme";
 
@@ -21,6 +23,7 @@ export type TextAreaProps = Omit<TextInputProps, "editable" | "multiline" | "onC
   showLabel?: boolean;
   showMessage?: boolean;
   width?: "fixed" | "fill";
+  style?: StyleProp<ViewStyle>;
   onChangeText?: (value: string) => void;
 };
 
@@ -41,6 +44,7 @@ export function TextArea({
   showLabel = true,
   showMessage = true,
   width = "fixed",
+  style,
   placeholder = "Value",
   onChangeText,
   ...textInputProps
@@ -66,7 +70,7 @@ export function TextArea({
   const resolvedMessage = message ?? (resolvedState === "error" ? "Error message" : "Message");
 
   return (
-    <View style={[styles.root, width === "fill" && styles.rootFill]}>
+    <View style={[styles.root, width === "fill" && styles.rootFill, style]}>
       {showLabel ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
 
       <View style={[styles.field, disabled && styles.disabledField]}>
@@ -144,6 +148,7 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.body.md.fontFamily,
     fontSize: theme.typography.body.md.fontSize,
     fontWeight: theme.typography.body.md.fontWeight,
+    lineHeight: theme.typography.body.mdStrong.lineHeight,
     letterSpacing: theme.typography.body.md.letterSpacing,
     minHeight: theme.sizes.textAreaFieldMinHeight - theme.spacing.md * 2,
     padding: theme.spacing[0],

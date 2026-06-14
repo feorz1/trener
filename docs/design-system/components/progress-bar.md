@@ -31,6 +31,10 @@ Canonical progress indicator for workout completion inside trainer cards.
 | low progress | `color/status/negative` | `theme.colors.status.negative` |
 | medium progress | `color/status/warning-deep` | `theme.colors.status.warningDeep` |
 | complete progress | `color/content/primary` | `theme.colors.content.primary` |
+| low progress badge surface | `color/status/negative` at 20% over canvas | `theme.colors.status.negativeSoft` |
+| low progress badge text | `color/status/negative-darkest` | `theme.colors.status.negativeDarkest` |
+| medium progress badge surface | `color/status/warning-deep` at 20% over canvas | `theme.colors.status.warningDeepSoft` |
+| medium progress badge text | `color/status/warning-darkest` | `theme.colors.status.warningDarkest` |
 | empty track | `color/content/disabled` | `theme.colors.content.disabled` |
 | fill separator | `product/background/screen` | `theme.colors.background.canvas` |
 | track height | `spacing/xs` | `theme.spacing.xs` |

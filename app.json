@@ -14,7 +14,8 @@
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.trainerfoundation"
     },
     "android": {
       "adaptiveIcon": {

@@ -11,3 +11,5 @@ Current first-phase rule: surface contrast is preferred over heavy shadows.
 - `theme.shadows.raised`: active dragged or raised surface.
 - `theme.shadows.dividerOverlay`: Android-only stacking layer for decorative divider masks; it must not create a visible shadow.
 - `theme.shadows.switchThumb`: switch thumb elevation.
+- `theme.shadows.glass`: elevated glass surface.
+- `theme.shadows.glassAction`: compact circular glass action shadow from the add-workout design.

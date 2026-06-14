@@ -13,8 +13,8 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 
 ## Anatomy
 
-- `root`: 359px white card with 8px padding, 8px gap, 24px radius, and canvas-soft stroke.
-- `header`: 40x40 rounded exercise thumbnail slot, title/note text stack, and 32x24 edit note button.
+- `root`: 359px white card with 8px padding, 8px gap, 24px radius, and subtle border stroke.
+- `header`: 40x40 thumbnail slot with 16px rounding, title/note text stack, and 32x24 edit note button.
 - `set list`: vertical stack of 65px rows with 4px gap; in Move state rows can be reordered by long press drag.
 - `set row`: number chip, two editable metric fields, and status/move affordance.
 - `add action`: full-width secondary neutral button with plus icon.
@@ -38,7 +38,8 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 | Usage | Figma token | Code token |
 |---|---|---|
 | root surface | `color/background/canvas` | `theme.colors.background.canvas` |
-| root stroke / move row | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
+| root stroke | `color/background/border` | `theme.colors.background.border` |
+| move row | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | selected row | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
 | title/value text | `color/content/ink` | `theme.colors.content.ink` |
 | note/unit text | `color/content/mute` | `theme.colors.content.mute` |
@@ -47,7 +48,8 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 | delete action | `color/status/negative` | `theme.colors.status.negative` |
 | add/save label | `color/content/primary` | `theme.colors.content.primary` |
 | thumbnail surface | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
-| thumbnail radius | `radius/sm` | `theme.radius.sm` |
+| root stroke width | `1` | `theme.sizes.approachBorderWidth` |
+| thumbnail radius | `radius/lg` | `theme.radius.lg` |
 | root padding / gap | `spacing/sm` | `theme.spacing.sm` |
 | row horizontal padding | `spacing/md` | `theme.spacing.md` |
 | row vertical padding | `spacing/sm` | `theme.spacing.sm` |

@@ -1,5 +1,5 @@
 import * as Haptics from "expo-haptics";
-import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Image,
   Platform,
@@ -17,8 +17,6 @@ import {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   Easing as ReanimatedEasing,
-  Extrapolation,
-  interpolate,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -29,6 +27,7 @@ import { theme } from "@/theme";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { StagedSwipeDelete } from "./StagedSwipeDelete";
 import { TextArea } from "./TextArea";
 
 export type ApproachCountState = "default" | "selected" | "move";
@@ -106,17 +105,8 @@ const metricInputReset =
         outlineStyle: "none"
       } as TextStyle & { boxShadow: "none"; outlineStyle: "none" })
     : undefined;
-const DELETE_WIDTH = theme.sizes.approachDeleteWidth;
 const ROW_SLOT_HEIGHT = theme.sizes.approachCountRowMinHeight + theme.spacing.xs;
-const SWIPE_REVEAL_THRESHOLD = theme.spacing.xl;
-const SWIPE_COMMIT_RATIO = 0.72;
-const SWIPE_VELOCITY_THRESHOLD = 0.35;
-const SWIPE_COMMIT_VELOCITY = 0.85;
 const TIMING_CONFIG = { duration: 180, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) };
-
-type DeleteRowHandle = {
-  close: () => void;
-};
 
 type DragState = {
   id: string;
@@ -205,9 +195,9 @@ export function Approach({
   const dragTargetIndex = useSharedValue<number>(theme.spacing[0]);
   const orderedSetsRef = useRef(sets);
   const dragSession = useRef<DragSession | null>(null);
-  const rowRefs = useRef<Record<string, DeleteRowHandle | null>>({});
-  const openRowId = useRef<string | null>(null);
+  const [openDeleteRowId, setOpenDeleteRowId] = useState<string | null>(null);
   const resolvedNote = note ?? savedNote;
+  const notePreview = resolvedNote.trim().replace(/\s+/g, " ");
   const draggedSet = dragState ? orderedSets.find((set) => set.id === dragState.id) : undefined;
   const dragOverlayTop = dragState ? dragState.startIndex * ROW_SLOT_HEIGHT : theme.spacing[0];
 
@@ -241,35 +231,28 @@ export function Approach({
   }, [noteModalVisible, resolvedNote]);
 
   const closeOpenRow = useCallback(() => {
-    const currentOpenRowId = openRowId.current;
-    if (!currentOpenRowId) return;
-
-    rowRefs.current[currentOpenRowId]?.close();
-    openRowId.current = null;
+    setOpenDeleteRowId(null);
   }, []);
 
-  const handleRowWillOpen = useCallback((id: string) => {
-    const currentOpenRowId = openRowId.current;
-    if (currentOpenRowId && currentOpenRowId !== id) {
-      rowRefs.current[currentOpenRowId]?.close();
-    }
-    openRowId.current = id;
+  const handleRowSwipePressHoldChange = useCallback((id: string, pressed: boolean) => {
+    if (!pressed) return;
+    setOpenDeleteRowId((current) => (current && current !== id ? null : current));
   }, []);
 
-  const handleRowClose = useCallback((id: string) => {
-    if (openRowId.current === id) {
-      openRowId.current = null;
-    }
+  const handleRowOpenChange = useCallback((id: string, open: boolean) => {
+    setOpenDeleteRowId((current) => {
+      if (open) return id;
+      return current === id ? null : current;
+    });
   }, []);
 
   const handleRowDelete = useCallback(
     (id: string) => {
-      rowRefs.current[id]?.close();
-      handleRowClose(id);
+      setOpenDeleteRowId(null);
       setOrderedSets((current) => normalizeSetIndexes(current.filter((set) => set.id !== id)));
       onDeleteSet?.(id);
     },
-    [handleRowClose, onDeleteSet]
+    [onDeleteSet]
   );
 
   const startRowDrag = useCallback(
@@ -369,9 +352,9 @@ export function Approach({
           <Text numberOfLines={2} style={styles.title}>
             {title}
           </Text>
-          {resolvedNote ? (
+          {notePreview ? (
             <Text numberOfLines={1} style={styles.note}>
-              {resolvedNote}
+              {notePreview}
             </Text>
           ) : null}
         </View>
@@ -408,6 +391,7 @@ export function Approach({
                   set={{ ...set, index: index + 1, state: resolvedState }}
                   values={valueById[set.id] ?? { reps: "", weight: "" }}
                   showDeleteAction={showDeleteAction}
+                  deleteOpen={openDeleteRowId === set.id}
                   dragY={dragY}
                   dragBounds={{
                     startIndex: index,
@@ -416,17 +400,14 @@ export function Approach({
                     max: (orderedSets.length - 1 - index) * ROW_SLOT_HEIGHT
                   }}
                   dragTargetIndex={dragTargetIndex}
-                  deleteRowRef={(handle) => {
-                    rowRefs.current[set.id] = handle;
-                  }}
                   onDelete={onDeleteSet ? () => handleRowDelete(set.id) : undefined}
                   onFocus={closeOpenRow}
                   onMetricChange={(key, value) => updateSetValue(set.id, key, value)}
                   onMoveEnd={finishRowDrag}
                   onMoveStart={() => startRowDrag(set.id, index)}
                   onMoveTargetChange={updateRowDragTarget}
-                  onSwipeableClose={() => handleRowClose(set.id)}
-                  onSwipeableWillOpen={() => handleRowWillOpen(set.id)}
+                  onSwipePressHoldChange={(pressed) => handleRowSwipePressHoldChange(set.id, pressed)}
+                  onDeleteOpenChange={(open) => handleRowOpenChange(set.id, open)}
                   onToggle={() => toggleSet(set.id)}
                 />
               </ApproachRowLayer>
@@ -478,6 +459,8 @@ export function Approach({
         actionLayout="single"
         primaryAction={{ label: noteSaveLabel, onPress: saveNote }}
         onClose={() => setNoteModalVisible(false)}
+        bodyStyle={styles.noteModalBody}
+        actionStyle={styles.noteModalAction}
       >
         <TextArea
           label={noteTitle}
@@ -486,6 +469,7 @@ export function Approach({
           width="fill"
           value={draftNote}
           placeholder=""
+          style={styles.noteModalTextArea}
           onChangeText={setDraftNote}
         />
       </Modal>
@@ -543,35 +527,35 @@ function ApproachCount({
   set,
   values,
   showDeleteAction,
+  deleteOpen,
   dragY,
   dragBounds,
   dragTargetIndex,
-  deleteRowRef,
   onDelete,
+  onDeleteOpenChange,
   onFocus,
   onMetricChange,
   onMoveEnd,
   onMoveStart,
   onMoveTargetChange,
-  onSwipeableClose,
-  onSwipeableWillOpen,
+  onSwipePressHoldChange,
   onToggle
 }: {
   set: ApproachSet;
   values: { reps: string; weight: string };
   showDeleteAction: boolean;
+  deleteOpen?: boolean;
   dragY: SharedValue<number>;
   dragBounds: DragBounds;
   dragTargetIndex: SharedValue<number>;
-  deleteRowRef?: (handle: DeleteRowHandle | null) => void;
   onDelete?: () => void;
+  onDeleteOpenChange?: (open: boolean) => void;
   onFocus?: () => void;
   onMetricChange: (key: "reps" | "weight", value: string) => void;
   onMoveEnd?: () => void;
   onMoveStart?: () => void;
   onMoveTargetChange?: (targetIndex: number) => void;
-  onSwipeableClose?: () => void;
-  onSwipeableWillOpen?: () => void;
+  onSwipePressHoldChange?: (pressed: boolean) => void;
   onToggle: () => void;
 }) {
   const isSelected = set.state === "selected";
@@ -585,6 +569,13 @@ function ApproachCount({
   const handleDelete = useCallback(() => {
     onDelete?.();
   }, [onDelete]);
+
+  const handleSwipePressHoldChange = useCallback(
+    (pressed: boolean) => {
+      onSwipePressHoldChange?.(pressed);
+    },
+    [onSwipePressHoldChange]
+  );
 
   const moveGesture = useMemo(
     () =>
@@ -673,7 +664,11 @@ function ApproachCount({
       {statusControl}
     </>
   );
-  const rowRootStyle = [styles.countRoot, isMove && styles.countRootMove, isSelected && styles.countRootSelected];
+  const rowRootStyle = [
+    styles.countRoot,
+    isMove && styles.countRootMove,
+    isSelected && styles.countRootSelected
+  ];
   const rowContent = <View style={rowRootStyle}>{rowBody}</View>;
 
   if (!canDelete) {
@@ -681,167 +676,19 @@ function ApproachCount({
   }
 
   return (
-    <SwipeDeleteRow ref={deleteRowRef} onClose={onSwipeableClose} onDelete={handleDelete} onOpen={onSwipeableWillOpen} onOpenStart={onSwipeableWillOpen}>
+    <StagedSwipeDelete
+      accessibilityLabel="Delete set"
+      deleteWidth={theme.sizes.approachDeleteWidth}
+      open={deleteOpen}
+      onDelete={handleDelete}
+      onOpenChange={onDeleteOpenChange}
+      onSwipePressHoldChange={handleSwipePressHoldChange}
+      style={styles.countRow}
+    >
       {rowContent}
-    </SwipeDeleteRow>
+    </StagedSwipeDelete>
   );
 }
-
-const SwipeDeleteRow = forwardRef<DeleteRowHandle, {
-  children: ReactNode;
-  onClose?: () => void;
-  onDelete: () => void;
-  onOpen?: () => void;
-  onOpenStart?: () => void;
-}>(function SwipeDeleteRow({ children, onClose, onDelete, onOpen, onOpenStart }, ref) {
-  const translateX = useSharedValue<number>(theme.spacing[0]);
-  const gestureStartTranslate = useSharedValue<number>(theme.spacing[0]);
-  const commitHapticFired = useSharedValue<boolean>(false);
-  const isOpen = useSharedValue<boolean>(false);
-  const rowWidth = useSharedValue<number>(theme.sizes.approachWidth);
-
-  const notifyClose = useCallback(() => {
-    onClose?.();
-  }, [onClose]);
-
-  const notifyOpen = useCallback(() => {
-    onOpen?.();
-  }, [onOpen]);
-
-  const notifyOpenStart = useCallback(() => {
-    onOpenStart?.();
-  }, [onOpenStart]);
-
-  const deleteAfterCommit = useCallback(() => {
-    onDelete();
-    onClose?.();
-  }, [onClose, onDelete]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      close: () => {
-        isOpen.value = false;
-        translateX.value = withTiming(theme.spacing[0], TIMING_CONFIG, (finished) => {
-          if (finished) {
-            runOnJS(notifyClose)();
-          }
-        });
-      }
-    }),
-    [isOpen, notifyClose, translateX]
-  );
-
-  const commitDelete = useCallback(() => {
-    triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
-    isOpen.value = false;
-    translateX.value = withTiming(-rowWidth.value, TIMING_CONFIG, (finished) => {
-      if (finished) {
-        translateX.value = theme.spacing[0];
-        runOnJS(deleteAfterCommit)();
-      }
-    });
-  }, [deleteAfterCommit, isOpen, rowWidth, translateX]);
-
-  const swipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-theme.spacing.sm, theme.spacing.sm])
-        .failOffsetY([-theme.spacing.lg, theme.spacing.lg])
-        .onBegin(() => {
-          runOnJS(notifyOpenStart)();
-          gestureStartTranslate.value = translateX.value;
-        })
-        .onUpdate((event) => {
-          const fullTranslate = -rowWidth.value;
-          const commitTranslate = fullTranslate * SWIPE_COMMIT_RATIO;
-          const nextTranslate = clampWorklet(gestureStartTranslate.value + event.translationX, fullTranslate, theme.spacing[0]);
-          translateX.value = nextTranslate;
-
-          if (nextTranslate <= commitTranslate && !commitHapticFired.value) {
-            commitHapticFired.value = true;
-            runOnJS(triggerImpact)(Haptics.ImpactFeedbackStyle.Medium);
-          } else if (nextTranslate > commitTranslate) {
-            commitHapticFired.value = false;
-          }
-        })
-        .onEnd((event) => {
-          const fullTranslate = -rowWidth.value;
-          const commitTranslate = fullTranslate * SWIPE_COMMIT_RATIO;
-          const shouldCommit = translateX.value <= commitTranslate || (event.velocityX < -SWIPE_COMMIT_VELOCITY && translateX.value < -DELETE_WIDTH);
-
-          if (shouldCommit) {
-            isOpen.value = false;
-            translateX.value = withTiming(fullTranslate, TIMING_CONFIG, (finished) => {
-              if (finished) {
-                translateX.value = theme.spacing[0];
-                runOnJS(deleteAfterCommit)();
-              }
-            });
-            return;
-          }
-
-          const shouldOpen = translateX.value <= -SWIPE_REVEAL_THRESHOLD || (event.velocityX < -SWIPE_VELOCITY_THRESHOLD && translateX.value < theme.spacing[0]);
-          if (shouldOpen) {
-            isOpen.value = true;
-            translateX.value = withTiming(-DELETE_WIDTH, TIMING_CONFIG, (finished) => {
-              if (finished) {
-                runOnJS(notifyOpen)();
-              }
-            });
-            return;
-          }
-
-          isOpen.value = false;
-          translateX.value = withTiming(theme.spacing[0], TIMING_CONFIG, (finished) => {
-            if (finished) {
-              runOnJS(notifyClose)();
-            }
-          });
-        })
-        .onFinalize(() => {
-          commitHapticFired.value = false;
-        }),
-    [commitHapticFired, deleteAfterCommit, gestureStartTranslate, isOpen, notifyClose, notifyOpen, notifyOpenStart, rowWidth, translateX]
-  );
-
-  const deleteIconStyle = useAnimatedStyle(() => {
-    const iconShift = -(rowWidth.value - DELETE_WIDTH) / 2;
-    return {
-      transform: [
-        {
-          translateX: interpolate(translateX.value, [-rowWidth.value, -DELETE_WIDTH, theme.spacing[0]], [iconShift, theme.spacing[0], theme.spacing[0]], Extrapolation.CLAMP)
-        }
-      ]
-    };
-  });
-  const contentStyle = useAnimatedStyle(() => {
-    const fullTranslate = -rowWidth.value;
-    const commitTranslate = fullTranslate * SWIPE_COMMIT_RATIO;
-    return {
-      opacity: interpolate(translateX.value, [fullTranslate, commitTranslate, theme.spacing[0]], [0, 1, 1], Extrapolation.CLAMP),
-      transform: [{ translateX: translateX.value }]
-    };
-  });
-
-  return (
-    <View
-      style={styles.countRow}
-      onLayout={(event) => {
-        rowWidth.value = event.nativeEvent.layout.width || theme.sizes.approachWidth;
-      }}
-    >
-      <Pressable accessibilityLabel="Delete set" accessibilityRole="button" onPress={commitDelete} style={styles.deleteActionFill}>
-        <Animated.View style={[styles.deleteIconLayer, deleteIconStyle]}>
-          <Icon name="trash" size={theme.sizes.approachStatusIcon} color={theme.colors.background.canvas} />
-        </Animated.View>
-      </Pressable>
-      <GestureDetector gesture={swipeGesture}>
-        <Animated.View style={[styles.swipeableChildren, contentStyle]}>{children}</Animated.View>
-      </GestureDetector>
-    </View>
-  );
-});
 
 function Metric({
   disabled,
@@ -864,7 +711,9 @@ function Metric({
 
     setSelection(nextSelection);
     requestAnimationFrame(() => {
-      inputRef.current?.setNativeProps({ selection: nextSelection });
+      if (typeof inputRef.current?.setNativeProps === "function") {
+        inputRef.current.setNativeProps({ selection: nextSelection });
+      }
     });
   }, [value]);
 
@@ -910,8 +759,8 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     gap: theme.spacing.sm,
     padding: theme.spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.colors.background.canvasSoft,
+    borderWidth: theme.sizes.approachBorderWidth,
+    borderColor: theme.colors.background.border,
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvas
   },
@@ -927,7 +776,7 @@ const styles = StyleSheet.create({
     height: theme.sizes.approachHeaderThumb,
     flexShrink: 0,
     overflow: "hidden",
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvasSoft
   },
   thumbnailImage: {
@@ -956,7 +805,7 @@ const styles = StyleSheet.create({
     color: theme.colors.content.ink
   },
   note: {
-    ...theme.typography.body.caption,
+    ...theme.typography.body.smCaption,
     color: theme.colors.content.mute
   },
   noteButton: {
@@ -1106,17 +955,14 @@ const styles = StyleSheet.create({
   statusCircleMuted: {
     backgroundColor: theme.colors.content.disabled
   },
-  deleteActionFill: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.status.negative
+  noteModalBody: {
+    paddingHorizontal: theme.spacing[0],
+    paddingVertical: theme.spacing.xs
   },
-  deleteIconLayer: {
-    width: theme.sizes.approachDeleteWidth,
-    height: "100%",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "flex-end"
+  noteModalTextArea: {
+    paddingBottom: theme.spacing.md
+  },
+  noteModalAction: {
+    padding: theme.spacing.lg
   }
 });

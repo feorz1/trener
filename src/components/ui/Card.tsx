@@ -93,13 +93,19 @@ export function Card({
   if (variant === "addWorkout") {
     return (
       <View style={[styles.addWorkoutRoot, style]}>
-        <Button
-          label={addWorkoutLabel}
-          type="tertiary"
-          size="medium"
-          width="fill"
+        <Pressable
+          accessibilityHint="Открывает планирование тренировки"
+          accessibilityLabel={addWorkoutLabel}
+          accessibilityRole="button"
           onPress={onAddWorkout}
-        />
+          style={({ pressed }) => [styles.addWorkoutAction, pressed && styles.addWorkoutActionPressed]}
+        >
+          <View pointerEvents="none" style={styles.addWorkoutActionShadow} />
+          <View pointerEvents="none" style={styles.addWorkoutActionFill}>
+            <View style={styles.addWorkoutActionOverlay} />
+            <Icon name="add" size={theme.sizes.cardAddWorkoutIcon} color={theme.colors.content.ink} />
+          </View>
+        </Pressable>
       </View>
     );
   }
@@ -127,6 +133,7 @@ export function Card({
               <Button
                 type="tertiary"
                 size="smallIcon"
+                accessibilityLabel="Действия тренировки"
                 icon={<Icon name="more" size={theme.sizes.buttonIconSmall} color={theme.colors.content.inkDeep} />}
                 onPress={() => setMenuOpen((value) => !value)}
               />
@@ -222,10 +229,40 @@ const styles = StyleSheet.create({
   addWorkoutRoot: {
     alignSelf: "stretch",
     minHeight: theme.sizes.cardAddWorkoutMinHeight,
-    justifyContent: "center",
-    padding: theme.spacing.lg,
     borderRadius: theme.radius.xl,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    overflow: "visible"
+  },
+  addWorkoutAction: {
+    position: "relative",
+    width: theme.sizes.buttonLgHeight,
+    height: theme.sizes.buttonLgHeight,
+    borderRadius: theme.radius.pill,
+    overflow: "visible",
     backgroundColor: theme.colors.background.canvasSoft
+  },
+  addWorkoutActionShadow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.canvasSoft,
+    ...theme.shadows.glassAction
+  },
+  addWorkoutActionPressed: {
+    opacity: 0.86
+  },
+  addWorkoutActionFill: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.glass
+  },
+  addWorkoutActionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.glassOverlay
   },
   pressed: {
     backgroundColor: theme.colors.content.primaryPale

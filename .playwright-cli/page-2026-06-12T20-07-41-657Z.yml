@@ -1,0 +1,242 @@
+- generic [ref=e18]:
+  - generic [ref=e21]:
+    - generic [ref=e22]:
+      - img [ref=e23]
+      - button [ref=e31] [cursor=pointer]:
+        - img [ref=e32]
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - generic:
+          - img
+        - textbox [ref=e38]
+      - generic [ref=e42]:
+        - generic [ref=e43]:
+          - generic [ref=e44] [cursor=pointer]:
+            - img [ref=e46]
+            - generic [ref=e48]: Components
+          - button "Collapse" [ref=e49] [cursor=pointer]:
+            - img [ref=e50]
+        - generic [ref=e52] [cursor=pointer]:
+          - generic [ref=e53]:
+            - img [ref=e55]
+            - img [ref=e57]
+          - generic [ref=e59]: Calendar Day Strip
+        - generic [ref=e61] [cursor=pointer]:
+          - img [ref=e63]
+          - generic [ref=e65]: Playground
+        - generic [ref=e67] [cursor=pointer]:
+          - img [ref=e69]
+          - generic [ref=e71]: Week Paging
+        - generic [ref=e72] [cursor=pointer]:
+          - generic [ref=e73]:
+            - img [ref=e75]
+            - img [ref=e77]
+          - generic [ref=e79]: Action
+        - generic [ref=e80] [cursor=pointer]:
+          - generic [ref=e81]:
+            - img [ref=e83]
+            - img [ref=e85]
+          - generic [ref=e87]: Alert
+        - generic [active] [ref=e88] [cursor=pointer]:
+          - generic [ref=e89]:
+            - img [ref=e91]
+            - img [ref=e93]
+          - generic [ref=e95]: Approach
+        - generic [ref=e403] [cursor=pointer]:
+          - img [ref=e405]
+          - generic [ref=e407]: Playground
+        - generic [ref=e409] [cursor=pointer]:
+          - img [ref=e411]
+          - generic [ref=e413]: Canonical
+        - generic [ref=e96] [cursor=pointer]:
+          - generic [ref=e97]:
+            - img [ref=e99]
+            - img [ref=e101]
+          - generic [ref=e103]: Approach Quick Values
+        - generic [ref=e104] [cursor=pointer]:
+          - generic [ref=e105]:
+            - img [ref=e107]
+            - img [ref=e109]
+          - generic [ref=e111]: Avatar
+        - generic [ref=e112] [cursor=pointer]:
+          - generic [ref=e113]:
+            - img [ref=e115]
+            - img [ref=e117]
+          - generic [ref=e119]: Badge
+        - generic [ref=e120] [cursor=pointer]:
+          - generic [ref=e121]:
+            - img [ref=e123]
+            - img [ref=e125]
+          - generic [ref=e127]: Button
+        - generic [ref=e128] [cursor=pointer]:
+          - generic [ref=e129]:
+            - img [ref=e131]
+            - img [ref=e133]
+          - generic [ref=e135]: Card
+        - generic [ref=e136] [cursor=pointer]:
+          - generic [ref=e137]:
+            - img [ref=e139]
+            - img [ref=e141]
+          - generic [ref=e143]: Checkbox
+        - generic [ref=e144] [cursor=pointer]:
+          - generic [ref=e145]:
+            - img [ref=e147]
+            - img [ref=e149]
+          - generic [ref=e151]: Chip
+        - generic [ref=e152] [cursor=pointer]:
+          - generic [ref=e153]:
+            - img [ref=e155]
+            - img [ref=e157]
+          - generic [ref=e159]: Chips List
+        - generic [ref=e160] [cursor=pointer]:
+          - generic [ref=e161]:
+            - img [ref=e163]
+            - img [ref=e165]
+          - generic [ref=e167]: Date Cell
+        - generic [ref=e168] [cursor=pointer]:
+          - generic [ref=e169]:
+            - img [ref=e171]
+            - img [ref=e173]
+          - generic [ref=e175]: Divider
+        - generic [ref=e176] [cursor=pointer]:
+          - generic [ref=e177]:
+            - img [ref=e179]
+            - img [ref=e181]
+          - generic [ref=e183]: Header
+        - generic [ref=e184] [cursor=pointer]:
+          - generic [ref=e185]:
+            - img [ref=e187]
+            - img [ref=e189]
+          - generic [ref=e191]: Icon
+        - generic [ref=e192] [cursor=pointer]:
+          - generic [ref=e193]:
+            - img [ref=e195]
+            - img [ref=e197]
+          - generic [ref=e199]: Input
+        - generic [ref=e200] [cursor=pointer]:
+          - generic [ref=e201]:
+            - img [ref=e203]
+            - img [ref=e205]
+          - generic [ref=e207]: List Item Cell
+        - generic [ref=e208] [cursor=pointer]:
+          - generic [ref=e209]:
+            - img [ref=e211]
+            - img [ref=e213]
+          - generic [ref=e215]: List Item Gym
+        - generic [ref=e216] [cursor=pointer]:
+          - generic [ref=e217]:
+            - img [ref=e219]
+            - img [ref=e221]
+          - generic [ref=e223]: Loader
+        - generic [ref=e224] [cursor=pointer]:
+          - generic [ref=e225]:
+            - img [ref=e227]
+            - img [ref=e229]
+          - generic [ref=e231]: Modal
+        - generic [ref=e232] [cursor=pointer]:
+          - generic [ref=e233]:
+            - img [ref=e235]
+            - img [ref=e237]
+          - generic [ref=e239]: Navigation
+        - generic [ref=e240] [cursor=pointer]:
+          - generic [ref=e241]:
+            - img [ref=e243]
+            - img [ref=e245]
+          - generic [ref=e247]: Progress Bar
+        - generic [ref=e248] [cursor=pointer]:
+          - generic [ref=e249]:
+            - img [ref=e251]
+            - img [ref=e253]
+          - generic [ref=e255]: Radio
+        - generic [ref=e256] [cursor=pointer]:
+          - generic [ref=e257]:
+            - img [ref=e259]
+            - img [ref=e261]
+          - generic [ref=e263]: Search
+        - generic [ref=e264] [cursor=pointer]:
+          - generic [ref=e265]:
+            - img [ref=e267]
+            - img [ref=e269]
+          - generic [ref=e271]: Segmented Control
+        - generic [ref=e272] [cursor=pointer]:
+          - generic [ref=e273]:
+            - img [ref=e275]
+            - img [ref=e277]
+          - generic [ref=e279]: Select
+        - generic [ref=e280] [cursor=pointer]:
+          - generic [ref=e281]:
+            - img [ref=e283]
+            - img [ref=e285]
+          - generic [ref=e287]: Set
+        - generic [ref=e288] [cursor=pointer]:
+          - generic [ref=e289]:
+            - img [ref=e291]
+            - img [ref=e293]
+          - generic [ref=e295]: State Select
+        - generic [ref=e296] [cursor=pointer]:
+          - generic [ref=e297]:
+            - img [ref=e299]
+            - img [ref=e301]
+          - generic [ref=e303]: Super Set
+        - generic [ref=e304] [cursor=pointer]:
+          - generic [ref=e305]:
+            - img [ref=e307]
+            - img [ref=e309]
+          - generic [ref=e311]: Switch
+        - generic [ref=e312] [cursor=pointer]:
+          - generic [ref=e313]:
+            - img [ref=e315]
+            - img [ref=e317]
+          - generic [ref=e319]: Text Area
+        - generic [ref=e320] [cursor=pointer]:
+          - generic [ref=e321]:
+            - img [ref=e323]
+            - img [ref=e325]
+          - generic [ref=e327]: Variant
+  - generic [ref=e328]:
+    - generic "components-calendardaystrip--playground" [ref=e330]:
+      - generic [ref=e335]:
+        - button "Mon, 12" [ref=e336] [cursor=pointer]:
+          - generic [ref=e337]: Mon
+          - generic [ref=e338]: "12"
+        - button "Tue, 12" [ref=e339] [cursor=pointer]:
+          - generic [ref=e340]: Tue
+          - generic [ref=e341]: "12"
+        - button "Wed, 15" [ref=e342] [cursor=pointer]:
+          - generic [ref=e343]: Wed
+          - generic [ref=e344]: "15"
+        - button "Thu, 14, selected" [ref=e345] [cursor=pointer]:
+          - generic [ref=e346]: Thu
+          - generic [ref=e347]: "14"
+        - button "Fri, 15, today" [ref=e348] [cursor=pointer]:
+          - generic [ref=e349]: Fri
+          - generic [ref=e350]: "15"
+        - button "Sat, 15" [ref=e352] [cursor=pointer]:
+          - generic [ref=e353]: Sat
+          - generic [ref=e354]: "15"
+        - button "Sun, 15" [ref=e355] [cursor=pointer]:
+          - generic [ref=e356]: Sun
+          - generic [ref=e357]: "15"
+    - generic [ref=e359]:
+      - generic [ref=e360]:
+        - generic [ref=e362]:
+          - generic [ref=e364] [cursor=pointer]: Controls
+          - generic [ref=e366] [cursor=pointer]: Actions
+        - button [ref=e367] [cursor=pointer]:
+          - img [ref=e368]
+      - generic [ref=e374]:
+        - generic [ref=e375]:
+          - generic [ref=e376]: Name
+          - generic [ref=e378]: Control
+        - generic [ref=e382]:
+          - generic [ref=e383]: selectedIndex
+          - textbox [ref=e385]: "3"
+        - generic [ref=e386]:
+          - generic [ref=e387]: todayIndex
+          - textbox [ref=e389]: "4"
+        - generic [ref=e390]:
+          - generic [ref=e391]: disabled
+          - switch [ref=e397] [cursor=pointer]
+        - generic [ref=e398]:
+          - generic [ref=e399]: width
+          - textbox [ref=e401]: "359"

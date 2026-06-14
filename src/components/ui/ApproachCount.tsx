@@ -162,6 +162,7 @@ function Metric({
   onFocus?: () => void;
 }) {
   const inputRef = useRef<NativeTextInput>(null);
+  const wasRequestedToFocusRef = useRef(false);
   const [focused, setFocused] = useState(false);
   const [selection, setSelection] = useState({ start: value.length, end: value.length });
   const moveCaretToEnd = useCallback(() => {
@@ -174,11 +175,19 @@ function Metric({
   }, [value]);
 
   useEffect(() => {
-    if (!shouldFocus) return;
+    const shouldRequestFocus = Boolean(shouldFocus) && !wasRequestedToFocusRef.current;
+    wasRequestedToFocusRef.current = Boolean(shouldFocus);
+
+    if (!shouldRequestFocus) return;
+
+    if (focused) {
+      moveCaretToEnd();
+      return;
+    }
 
     inputRef.current?.focus();
     moveCaretToEnd();
-  }, [moveCaretToEnd, shouldFocus]);
+  }, [focused, moveCaretToEnd, shouldFocus]);
 
   useEffect(() => {
     if (!focused) {
@@ -192,6 +201,7 @@ function Metric({
         ref={inputRef}
         accessibilityLabel={label}
         keyboardType="decimal-pad"
+        showSoftInputOnFocus
         onBlur={() => {
           setFocused(false);
           onBlur?.();

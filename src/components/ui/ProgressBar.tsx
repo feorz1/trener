@@ -22,10 +22,10 @@ function getTone(percent: number): { fill: string; badgeTone: BadgeTone } {
   }
 
   if (percent >= 50) {
-    return { fill: theme.colors.status.warningDeep, badgeTone: "warningDeep" };
+    return { fill: theme.colors.status.warningDeep, badgeTone: "warningDeepSoft" };
   }
 
-  return { fill: theme.colors.status.negative, badgeTone: "negativeSolid" };
+  return { fill: theme.colors.status.negative, badgeTone: "negativeSoft" };
 }
 
 export function ProgressBar({ completed, total, label, showBadge = true, tone: toneMode = "dynamic", style }: ProgressBarProps) {
