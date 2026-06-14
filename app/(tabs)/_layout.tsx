@@ -28,15 +28,15 @@ export default function TrainerTabsLayout() {
       tintColor={theme.colors.content.inkDeep}
     >
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: "house", selected: "house.fill" }} />
+        <Icon src={require("../../assets/tabs/home.png")} />
         <Label>Главная</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="clients">
-        <Icon sf={{ default: "person.2", selected: "person.2.fill" }} />
+        <Icon src={require("../../assets/tabs/clients.png")} />
         <Label>Клиенты</Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
-        <Icon sf={{ default: "gearshape", selected: "gearshape.fill" }} />
+        <Icon src={require("../../assets/tabs/settings.png")} />
         <Label>Настройки</Label>
       </NativeTabs.Trigger>
     </NativeTabs>
