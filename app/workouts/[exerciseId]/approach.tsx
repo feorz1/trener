@@ -233,7 +233,7 @@ export default function ExerciseApproachScreen() {
 
   const goBackToWorkout = useCallback(
     (nextExerciseIds = selectedExerciseIds, nextSupersetConnectionIds = selectedSupersetConnectionIds, nextApproachData = currentApproachData) => {
-      router.replace({
+      router.dismissTo({
         pathname: "/workouts/new",
         params: buildWorkoutParams(firstParam(clientId), firstParam(clientName), firstParam(date), nextExerciseIds, nextSupersetConnectionIds, nextApproachData)
       });

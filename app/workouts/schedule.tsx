@@ -181,7 +181,7 @@ export default function ScheduleWorkoutScreen() {
   const saveWorkout = () => {
     if (!scheduledTime) return;
 
-    router.replace({
+    router.dismissTo({
       pathname: "/",
       params: {
         plannedWorkout: "1",

@@ -35,9 +35,33 @@ export default function RootLayout() {
       <Stack
         screenOptions={{
           headerShown: false,
+          animation: "simple_push",
           contentStyle: { backgroundColor: theme.colors.background.canvasSoft }
         }}
-      />
+      >
+        <Stack.Screen
+          name="workouts/planning"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/client-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+      </Stack>
     </>
   );
 

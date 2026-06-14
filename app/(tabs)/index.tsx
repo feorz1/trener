@@ -4,14 +4,12 @@ import { router, useLocalSearchParams } from "expo-router";
 import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
-import { Button, Card, Header, Icon, ListItemCell, Modal, Radio } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
+import { Button, Card, Header, Icon } from "@/components/ui";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { WorkoutStatus } from "@/types";
 import { formatRuDayMonth } from "@/utils/date";
 
-type PlanningModalStep = "closed" | "choice" | "client";
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
 type TodayWorkout = {
@@ -176,7 +174,34 @@ function getDemoWorkouts(today: Date): Record<string, TodayWorkout[]> {
     ],
     [getDateKey(today)]: [
       {
-        id: "workout-today-planned",
+        id: "workout-today-completed",
+        clientName: "Мария Лебедева",
+        time: "09:00",
+        title: "Фулбоди",
+        exercisesCount: 5,
+        completedExercises: 5,
+        status: "completed"
+      },
+      {
+        id: "workout-today-in-progress",
+        clientName: "Илья Соколов",
+        time: "12:30",
+        title: "Грудь",
+        exercisesCount: 7,
+        completedExercises: 3,
+        status: "inProgress"
+      },
+      {
+        id: "workout-today-planned-legs",
+        clientName: "Анна Морозова",
+        time: "15:00",
+        title: "Ноги",
+        exercisesCount: 8,
+        completedExercises: 0,
+        status: "planned"
+      },
+      {
+        id: "workout-today-planned-arms",
         clientName: "Константин",
         time: "19:00",
         title: "Руки",
@@ -252,8 +277,6 @@ export default function IndexScreen() {
     return demoWorkouts;
   }, [plannedClientName, plannedDateKey, plannedExerciseCount, plannedRepeatDays, plannedTime, plannedWorkout, today, weekItems]);
   const [selectedDayKey, setSelectedDayKey] = useState(plannedDateKey ?? todayKey);
-  const [planningStep, setPlanningStep] = useState<PlanningModalStep>("closed");
-  const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
   const [now, setNow] = useState(() => new Date());
   const [fabHidden, setFabHidden] = useState(false);
   const [reduceMotionEnabled, setReduceMotionEnabled] = useState(false);
@@ -368,8 +391,10 @@ export default function IndexScreen() {
   };
 
   const openPlanningChoice = () => {
-    setSelectedClientId(undefined);
-    setPlanningStep("choice");
+    router.push({
+      pathname: "/workouts/planning",
+      params: { date: selectedDayKey }
+    });
   };
 
   const selectDay = (key: string) => {
@@ -385,33 +410,6 @@ export default function IndexScreen() {
     setSelectedDayKey(todayKey);
   };
 
-  const closePlanning = () => {
-    setPlanningStep("closed");
-  };
-
-  const saveClientSelection = () => {
-    if (!selectedClientId) return;
-    setPlanningStep("closed");
-    router.push({
-      pathname: "/workouts/new",
-      params: {
-        clientId: selectedClientId,
-        date: selectedDayKey
-      }
-    });
-  };
-
-  const openNewClient = () => {
-    setPlanningStep("closed");
-    router.push({
-      pathname: "/clients/new",
-      params: {
-        returnTo: "/workouts/new",
-        date: selectedDayKey
-      }
-    });
-  };
-
   return (
     <SafeAreaView edges={["top"]} style={styles.safeArea}>
       <ScrollView
@@ -419,7 +417,6 @@ export default function IndexScreen() {
         scrollEventThrottle={16}
         onMomentumScrollBegin={hideFloatingAddForScroll}
         onMomentumScrollEnd={() => revealFloatingAddAfterScroll(0)}
-        onScroll={hideFloatingAddForScroll}
         onScrollBeginDrag={hideFloatingAddForScroll}
         onScrollEndDrag={() => revealFloatingAddAfterScroll()}
         {...scrollProps}
@@ -502,59 +499,6 @@ export default function IndexScreen() {
         </Animated.View>
       ) : null}
 
-      <Modal
-        visible={planningStep !== "closed"}
-        presentation="overlay"
-        title={planningStep === "client" ? "Выбор клиента" : "Запланировать тренировку"}
-        showSubline={false}
-        showBodyText={false}
-        showCloseButton
-        showActions={planningStep === "client"}
-        actionLayout="stacked"
-        primaryAction={planningStep === "client" ? { label: "Сохранить", type: "primary", disabled: !selectedClientId, onPress: saveClientSelection } : undefined}
-        secondaryAction={planningStep === "client" ? { label: "Создать нового клиента", type: "secondaryNeutral", onPress: openNewClient } : undefined}
-        onClose={closePlanning}
-        bodyStyle={styles.modalBody}
-      >
-        {planningStep === "choice" ? (
-          <>
-            <ListItemCell
-              title="Создать новую"
-              leading="avatar"
-              avatarType="icon"
-              leadingIconName="edit"
-              trailing="icon"
-              trailingIconName="chevron right"
-              onPress={() => setPlanningStep("client")}
-            />
-            <ListItemCell
-              title="Выбрать из шаблона"
-              leading="avatar"
-              avatarType="icon"
-              leadingIconName="list"
-              trailing="icon"
-              trailingIconName="chevron right"
-            />
-          </>
-        ) : null}
-
-        {planningStep === "client"
-          ? mockClients.map((client) => {
-              const selected = client.id === selectedClientId;
-
-              return (
-                <ListItemCell
-                  key={client.id}
-                  title={client.name}
-                  leading="none"
-                  density="compact"
-                  trailingSlot={<Radio selected={selected} showLabel={false} onChange={() => setSelectedClientId(client.id)} />}
-                  onPress={() => setSelectedClientId(client.id)}
-                />
-              );
-            })
-          : null}
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -591,7 +535,7 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: theme.spacing["3xl"] + FLOATING_ADD_SIZE + theme.spacing["3xl"] + theme.spacing.xl
+    paddingBottom: theme.sizes.tabBarItemMinHeight + FLOATING_ADD_SIZE + theme.spacing["2xl"]
   },
   body: {
     gap: theme.spacing.md,
@@ -656,8 +600,5 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.background.glassOverlay
-  },
-  modalBody: {
-    gap: theme.spacing[0]
   }
 });
