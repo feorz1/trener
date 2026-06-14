@@ -61,6 +61,28 @@ export default function RootLayout() {
             contentStyle: { backgroundColor: theme.colors.background.canvas }
           }}
         />
+        <Stack.Screen
+          name="workouts/date-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/repeat-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
       </Stack>
     </>
   );
