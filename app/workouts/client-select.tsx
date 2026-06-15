@@ -23,7 +23,7 @@ export default function WorkoutClientSelectSheet() {
 
     router.dismissAll();
     router.push({
-      pathname: "/workouts/new",
+      pathname: "/workouts/schedule",
       params: {
         clientId: selectedClientId,
         ...(selectedDate ? { date: selectedDate } : {})
@@ -36,7 +36,7 @@ export default function WorkoutClientSelectSheet() {
     router.push({
       pathname: "/clients/new",
       params: {
-        returnTo: "/workouts/new",
+        returnTo: "/workouts/schedule",
         ...(selectedDate ? { date: selectedDate } : {})
       }
     });

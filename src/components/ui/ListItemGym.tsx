@@ -110,6 +110,7 @@ export function ListItemGym({
       {...pressableProps}
       accessibilityLabel={accessibilityLabel ?? title}
       accessibilityRole={pressableProps.onPress ? "button" : undefined}
+      accessibilityState={{ ...pressableProps.accessibilityState, selected: isSelected }}
       style={({ pressed }) => [
         styles.root,
         isSelected && styles.selected,
@@ -129,7 +130,13 @@ export function ListItemGym({
         (mode === "move" ? (
           <MoveHandle onMovePress={onMovePress} />
         ) : (
-          <Checkbox selected={isSelected} showLabel={false} onChange={onSelectedChange} />
+          <Checkbox
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            selected={isSelected}
+            showLabel={false}
+            onChange={onSelectedChange}
+          />
         ))}
     </Pressable>
   );
@@ -228,7 +235,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     minWidth: theme.spacing[0],
-    gap: theme.spacing.xxs
+    gap: theme.spacing.xs
   },
   title: {
     ...theme.typography.body.mdStrong,

@@ -100,6 +100,8 @@ Current text styles:
 - `Typography/Body/MD Strong`
 - `Typography/Body/SM`
 - `Typography/Body/SM Strong`
+- `Typography/Body/SM Caption`
+- `Typography/Body/Caption`
 - `Typography/Caption`
 - `Typography/Button/MD`
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
@@ -200,9 +200,19 @@ function getGoalSummary(form: ClientForm) {
   return goal;
 }
 
+function getClientContactSummary(form: ClientForm) {
+  const phone = [form.phonePrefix, form.phone].filter(Boolean).join(" ");
+  return [phone, form.telegram].filter(Boolean).join(", ");
+}
+
 export default function NewClientScreen() {
-  const { date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { returnTo, date, selectedDays, scheduleTimes, activeDay, dayExerciseIds, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+    returnTo?: string;
     date?: string;
+    selectedDays?: string;
+    scheduleTimes?: string;
+    activeDay?: string;
+    dayExerciseIds?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
@@ -242,11 +252,15 @@ export default function NewClientScreen() {
     const createdClientId = `demo-${Date.now()}`;
 
     router.replace({
-      pathname: "/workouts/new",
+      pathname: firstParam(returnTo) === "/workouts/schedule" ? "/workouts/schedule" : "/workouts/new",
       params: {
         clientId: createdClientId,
         clientName: form.name,
         ...(date ? { date: firstParam(date) } : {}),
+        ...(selectedDays ? { selectedDays: firstParam(selectedDays) } : {}),
+        ...(scheduleTimes ? { scheduleTimes: firstParam(scheduleTimes) } : {}),
+        ...(activeDay ? { activeDay: firstParam(activeDay) } : {}),
+        ...(dayExerciseIds ? { dayExerciseIds: firstParam(dayExerciseIds) } : {}),
         ...(exerciseIds ? { exerciseIds: firstParam(exerciseIds) } : {}),
         ...(supersetConnectionIds ? { supersetConnectionIds: firstParam(supersetConnectionIds) } : {}),
         ...(approachData ? { approachData: firstParam(approachData) } : {})
@@ -458,6 +472,7 @@ function LifestyleStep({
           value={form.workoutsPerWeek}
           columns={5}
           width="fill"
+          style={styles.workoutCountVariant}
           onChange={(value) => updateForm("workoutsPerWeek", value)}
         />
       </View>
@@ -478,7 +493,16 @@ function ExperienceStep({
       <RadioGroup items={experienceOptions} value={form.trainingExperience} onChange={(value) => updateForm("trainingExperience", value)} />
       <SectionTitle title="Какими видами спорта занимались" />
       <View style={styles.section}>
-        <ChoiceGrid items={sportOptions} selectedValues={form.sports} onToggle={(value) => updateForm("sports", toggleItem(form.sports, value))} />
+        <Variant
+          label="Виды спорта"
+          showLabel={false}
+          items={sportOptions}
+          values={form.sports}
+          selectionMode="multiple"
+          columns={2}
+          width="fill"
+          onChange={(value) => updateForm("sports", toggleItem(form.sports, value))}
+        />
         {form.sports.includes("other") ? (
           <TextArea
             label="Другой спорт"
@@ -520,7 +544,9 @@ function SummaryStep({
   selectedSportLabels: string[];
   restrictionLabels: string[];
 }) {
-  const allRestrictionLabels = Array.from(new Set([...selectedHealthLabels, ...restrictionLabels]));
+  const allRestrictionLabels = Array.from(
+    new Set([...selectedHealthLabels, ...restrictionLabels, form.healthOther, form.exerciseRestrictionsOther].filter(Boolean))
+  );
   const summaryRows = [
     ["Возраст", `${form.age} лет`],
     ["Рост / Вес", `${form.height} см / ${form.weight} кг`],
@@ -537,10 +563,8 @@ function SummaryStep({
     <View style={styles.body}>
       <ListItemCell
         title={form.name || "Новый клиент"}
-        subtitle={`${form.phonePrefix} ${form.phone}`}
-        leading="avatar"
-        avatarType="initials"
-        avatarInitials={getInitials(form.name)}
+        subtitle={getClientContactSummary(form)}
+        leading="none"
         trailing="none"
         density="compact"
       />
@@ -564,10 +588,8 @@ function SummaryStep({
         <Text style={styles.sectionTitle}>Ограничения</Text>
         <View style={styles.badgeWrap}>
           {allRestrictionLabels.map((label) => (
-            <Badge key={label} label={label} tone="negativeSolid" size="sm" icon={false} />
+            <Badge key={label} label={label} tone="negativeSoft" size="sm" icon={false} />
           ))}
-          {form.healthOther ? <Badge label={form.healthOther} tone="negativeSolid" size="sm" icon={false} /> : null}
-          {form.exerciseRestrictionsOther ? <Badge label={form.exerciseRestrictionsOther} tone="negativeSolid" size="sm" icon={false} /> : null}
         </View>
       </View>
     </View>
@@ -635,62 +657,12 @@ function RadioGroup<T extends string>({
   );
 }
 
-function ChoiceGrid<T extends string>({
-  items,
-  selectedValues,
-  onToggle
-}: {
-  items: { key: T; label: string }[];
-  selectedValues: T[];
-  onToggle: (value: T) => void;
-}) {
-  const rows = [];
-  for (let index = 0; index < items.length; index += 2) {
-    rows.push(items.slice(index, index + 2));
-  }
-
-  return (
-    <View style={styles.choiceGrid}>
-      {rows.map((row, rowIndex) => (
-        <View key={`row-${rowIndex}`} style={styles.choiceRow}>
-          {row.map((item) => {
-            const selected = selectedValues.includes(item.key);
-
-            return (
-              <Pressable
-                key={item.key}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: selected }}
-                onPress={() => onToggle(item.key)}
-                style={({ pressed }) => [styles.choiceTile, selected && styles.choiceTileSelected, pressed && styles.choiceTilePressed]}
-              >
-                <Text numberOfLines={1} style={styles.choiceTileLabel}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 function SectionTitle({ title }: { title: string }) {
   return (
     <View style={styles.sectionTitleWrap}>
       <Text style={styles.sectionTitle}>{title}</Text>
     </View>
   );
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "НК";
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 }
 
 const styles = StyleSheet.create({
@@ -729,8 +701,12 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xs,
+    paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg
+  },
+  workoutCountVariant: {
+    paddingHorizontal: theme.spacing[0],
+    paddingVertical: theme.spacing.sm
   },
   sliderCard: {
     alignSelf: "stretch",
@@ -752,55 +728,21 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     overflow: "hidden",
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvasSoft
   },
   badgeSection: {
-    gap: theme.spacing.md,
-    padding: theme.spacing.lg
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg
   },
   badgeWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm
-  },
-  choiceGrid: {
-    alignSelf: "stretch",
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm
-  },
-  choiceRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: theme.spacing.sm
-  },
-  choiceTile: {
-    flex: 1,
-    minWidth: theme.spacing[0],
-    height: theme.sizes.variantOptionHeight,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    borderWidth: 2,
-    borderRadius: theme.radius.md,
-    borderColor: theme.colors.background.canvasSoft,
-    backgroundColor: theme.colors.background.canvasSoft
-  },
-  choiceTileSelected: {
-    borderColor: theme.colors.content.inkDeep,
-    backgroundColor: theme.colors.background.canvas
-  },
-  choiceTilePressed: {
-    opacity: 0.84
-  },
-  choiceTileLabel: {
-    ...theme.typography.body.md,
-    minHeight: theme.typography.body.md.lineHeight,
-    color: theme.colors.content.ink,
-    textAlign: "center"
   },
   summaryGroup: {
     paddingVertical: theme.spacing.sm

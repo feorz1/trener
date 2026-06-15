@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Badge, Button } from "@/components/ui";
+import { Badge } from "@/components/ui";
 import {
   addMonths,
   buildMonthWeeks,
@@ -15,9 +15,6 @@ import {
 } from "@/features/workouts/scheduleOptions";
 import { theme } from "@/theme";
 import { formatRuMonth, formatRuSelectDate } from "@/utils/date";
-
-const calendarNavHeight = theme.spacing["3xl"] + theme.spacing.md;
-const calendarHeaderHeight = calendarNavHeight + theme.sizes.datePickerWeekdayRowHeight;
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -66,14 +63,23 @@ export default function WorkoutDateSelectSheet() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.calendarNav}>
-        <Pressable accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={closeSheet} style={styles.closeTextButton}>
+      <View style={styles.sheetHeader}>
+        <Pressable accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={closeSheet} style={styles.headerAction}>
           <Text style={styles.closeText}>Закрыть</Text>
         </Pressable>
-        <Text numberOfLines={1} style={styles.calendarTitle}>
+        <Text numberOfLines={1} style={styles.sheetTitle}>
           Дата тренировки
         </Text>
-        <View style={styles.closeTextButton} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !selectedSlot }}
+          disabled={!selectedSlot}
+          hitSlop={theme.spacing.sm}
+          onPress={saveDate}
+          style={styles.headerAction}
+        >
+          <Text style={[styles.saveText, !selectedSlot && styles.saveTextDisabled]}>Сохранить</Text>
+        </Pressable>
       </View>
 
       <View style={styles.weekdayRow}>
@@ -90,7 +96,7 @@ export default function WorkoutDateSelectSheet() {
         ))}
       </View>
 
-      <View style={styles.slotAction}>
+      <View style={styles.slotSection}>
         <View style={styles.slotContent}>
           <Text style={styles.slotTitle}>Свободное время</Text>
           <View style={styles.slotList}>
@@ -101,7 +107,6 @@ export default function WorkoutDateSelectSheet() {
             ))}
           </View>
         </View>
-        <Button label="Сохранить" type="primary" size="large" width="fill" state={selectedSlot ? "active" : "disabled"} onPress={saveDate} />
       </View>
     </View>
   );
@@ -156,39 +161,39 @@ const styles = StyleSheet.create({
     width: "100%",
     backgroundColor: theme.colors.background.canvas
   },
-  calendarNav: {
-    position: "absolute",
-    top: theme.spacing[0],
-    right: theme.spacing[0],
-    left: theme.spacing[0],
-    zIndex: 2,
-    height: calendarNavHeight,
+  sheetHeader: {
+    minHeight: theme.sizes.navigationHeight,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
     backgroundColor: theme.colors.background.canvas
   },
-  closeTextButton: {
-    width: theme.spacing["3xl"] + theme.spacing.lg,
+  headerAction: {
+    width: theme.spacing["3xl"] * 2,
+    minHeight: theme.sizes.touchTargetMin,
     justifyContent: "center"
   },
   closeText: {
     ...theme.typography.body.sm,
     color: theme.colors.content.ink
   },
-  calendarTitle: {
+  sheetTitle: {
     ...theme.typography.body.mdStrong,
     flex: 1,
     minWidth: theme.spacing[0],
     color: theme.colors.content.inkDeep,
     textAlign: "center"
   },
+  saveText: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.inkDeep,
+    textAlign: "right"
+  },
+  saveTextDisabled: {
+    color: theme.colors.content.disabled
+  },
   weekdayRow: {
-    position: "absolute",
-    top: calendarNavHeight,
-    right: theme.spacing[0],
-    left: theme.spacing[0],
-    zIndex: 2,
     height: theme.sizes.datePickerWeekdayRowHeight,
     flexDirection: "row",
     alignItems: "center",
@@ -207,21 +212,20 @@ const styles = StyleSheet.create({
     color: theme.colors.content.body
   },
   calendarContent: {
-    marginTop: calendarHeaderHeight,
-    paddingBottom: theme.spacing.lg
+    paddingBottom: theme.spacing.md
   },
   monthSection: {
-    paddingBottom: theme.spacing.lg
+    paddingBottom: theme.spacing.md
   },
   monthTitle: {
     ...theme.typography.body.lg,
     paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
     color: theme.colors.content.inkDeep
   },
   monthGrid: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     paddingHorizontal: theme.spacing.lg
   },
   monthWeek: {
@@ -254,9 +258,10 @@ const styles = StyleSheet.create({
   dateTextDisabled: {
     color: theme.colors.content.mute
   },
-  slotAction: {
-    gap: theme.spacing.lg,
-    padding: theme.spacing.lg,
+  slotSection: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
   },
   slotContent: {

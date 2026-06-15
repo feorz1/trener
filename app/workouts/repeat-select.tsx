@@ -70,6 +70,7 @@ export default function WorkoutRepeatSelectSheet() {
               key={option.key}
               title={option.label}
               leading="none"
+              density="compact"
               trailingSlot={<Checkbox selected={selected} showLabel={false} onChange={() => toggleRepeatDay(option.key)} />}
               selected={selected}
               groupPosition={getListItemCellSelectedGroupPosition(selected, previousSelected, nextSelected)}
@@ -91,6 +92,7 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   body: {
-    gap: theme.spacing.xs
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs
   }
 });

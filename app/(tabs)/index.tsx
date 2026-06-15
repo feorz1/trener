@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { router, useLocalSearchParams } from "expo-router";
-import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Button, Card, Header, Icon } from "@/components/ui";
@@ -47,6 +47,32 @@ function parseRepeatDays(value?: string) {
   return value
     .split(",")
     .filter((day): day is RepeatDay => repeatDayKeys.has(day as RepeatDay));
+}
+
+function parseScheduleTimes(value?: string) {
+  if (!value) return {};
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [RepeatDay, string] => repeatDayKeys.has(entry[0] as RepeatDay) && typeof entry[1] === "string")
+    ) as Partial<Record<RepeatDay, string>>;
+  } catch {
+    return {};
+  }
+}
+
+function parseExerciseCounts(value?: string) {
+  if (!value) return {};
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [RepeatDay, number] => repeatDayKeys.has(entry[0] as RepeatDay) && typeof entry[1] === "number" && Number.isFinite(entry[1]))
+    ) as Partial<Record<RepeatDay, number>>;
+  } catch {
+    return {};
+  }
 }
 
 function startOfDay(date: Date) {
@@ -225,18 +251,26 @@ function addWorkoutToDay(workoutsByDay: Record<string, TodayWorkout[]>, dayKey: 
 }
 
 export default function IndexScreen() {
-  const { plannedWorkout, plannedDate, plannedTime, plannedClientName, plannedExerciseCount, plannedRepeatDays } = useLocalSearchParams<{
+  const { plannedWorkout, plannedDate, plannedTime, plannedClientName, plannedExerciseCount, plannedExerciseCounts, plannedRepeatDays, plannedScheduleTimes } = useLocalSearchParams<{
     plannedWorkout?: string;
     plannedDate?: string;
     plannedTime?: string;
     plannedClientName?: string;
     plannedExerciseCount?: string;
+    plannedExerciseCounts?: string;
     plannedRepeatDays?: string;
+    plannedScheduleTimes?: string;
   }>();
   const insets = useSafeAreaInsets();
-  const { width: viewportWidth } = useWindowDimensions();
   const today = useMemo(() => startOfDay(new Date()), []);
   const plannedDateKey = firstParam(plannedDate);
+  const plannedWorkoutValue = firstParam(plannedWorkout);
+  const plannedTimeValue = firstParam(plannedTime);
+  const plannedClientNameValue = firstParam(plannedClientName);
+  const plannedExerciseCountValueParam = firstParam(plannedExerciseCount);
+  const plannedExerciseCountsValue = firstParam(plannedExerciseCounts);
+  const plannedRepeatDaysValue = firstParam(plannedRepeatDays);
+  const plannedScheduleTimesValue = firstParam(plannedScheduleTimes);
   const plannedAnchorDate = useMemo(() => parseDateKey(plannedDateKey), [plannedDateKey]);
   const [weekAnchorDate, setWeekAnchorDate] = useState(() => plannedAnchorDate ?? today);
   const weekPages = useMemo(() => getWeekPages(weekAnchorDate, today), [today, weekAnchorDate]);
@@ -245,10 +279,12 @@ export default function IndexScreen() {
   const workoutsByDay = useMemo(() => {
     const demoWorkouts = getDemoWorkouts(today);
 
-    if (firstParam(plannedWorkout) === "1" && plannedDateKey) {
-      const plannedExerciseCountValue = Number(firstParam(plannedExerciseCount) ?? 6);
+    if (plannedWorkoutValue === "1" && plannedDateKey) {
+      const plannedExerciseCountValue = Number(plannedExerciseCountValueParam ?? 6);
       const plannedStartDate = parseDateKey(plannedDateKey);
-      const repeatDays = parseRepeatDays(firstParam(plannedRepeatDays));
+      const repeatDays = parseRepeatDays(plannedRepeatDaysValue);
+      const scheduleTimes = parseScheduleTimes(plannedScheduleTimesValue);
+      const exerciseCounts = parseExerciseCounts(plannedExerciseCountsValue);
       const visibleDates = weekItems.flatMap((item) => parseDateKey(item.key) ?? []);
       const occurrenceKeys = new Set<string>([plannedDateKey]);
 
@@ -262,12 +298,15 @@ export default function IndexScreen() {
       }
 
       occurrenceKeys.forEach((dayKey) => {
+        const occurrenceDate = parseDateKey(dayKey);
+        const occurrenceDay = occurrenceDate ? repeatDayByNativeWeekday[occurrenceDate.getDay()] : undefined;
+
         addWorkoutToDay(demoWorkouts, dayKey, {
           id: `workout-new-planned-${dayKey}`,
-          clientName: firstParam(plannedClientName) ?? "Константин",
-          time: firstParam(plannedTime) ?? "17:00",
+          clientName: plannedClientNameValue ?? "Константин",
+          time: (occurrenceDay ? scheduleTimes[occurrenceDay] : undefined) ?? plannedTimeValue ?? "17:00",
           title: "Руки",
-          exercisesCount: Number.isFinite(plannedExerciseCountValue) ? plannedExerciseCountValue : 6,
+          exercisesCount: occurrenceDay ? (exerciseCounts[occurrenceDay] ?? (Number.isFinite(plannedExerciseCountValue) ? plannedExerciseCountValue : 6)) : Number.isFinite(plannedExerciseCountValue) ? plannedExerciseCountValue : 6,
           completedExercises: 0,
           status: "planned"
         });
@@ -275,7 +314,18 @@ export default function IndexScreen() {
     }
 
     return demoWorkouts;
-  }, [plannedClientName, plannedDateKey, plannedExerciseCount, plannedRepeatDays, plannedTime, plannedWorkout, today, weekItems]);
+  }, [
+    plannedClientNameValue,
+    plannedDateKey,
+    plannedExerciseCountValueParam,
+    plannedExerciseCountsValue,
+    plannedRepeatDaysValue,
+    plannedScheduleTimesValue,
+    plannedTimeValue,
+    plannedWorkoutValue,
+    today,
+    weekItems
+  ]);
   const [selectedDayKey, setSelectedDayKey] = useState(plannedDateKey ?? todayKey);
   const [now, setNow] = useState(() => new Date());
   const [fabHidden, setFabHidden] = useState(false);
@@ -284,13 +334,14 @@ export default function IndexScreen() {
   const fabRevealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { scrollProps } = useConditionalScroll();
   const floatingAddBottom = Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing.lg;
-  const bodyContentWidth = Math.max(viewportWidth - theme.spacing.lg - theme.spacing.lg, theme.spacing[0]);
-  const calendarStripWidth = Math.min(theme.sizes.calendarDayStripWidth, bodyContentWidth);
 
   useEffect(() => {
     if (plannedDateKey) {
-      setSelectedDayKey(plannedDateKey);
-      setWeekAnchorDate(plannedAnchorDate ?? today);
+      setSelectedDayKey((currentDayKey) => (currentDayKey === plannedDateKey ? currentDayKey : plannedDateKey));
+      setWeekAnchorDate((currentAnchorDate) => {
+        const nextAnchorDate = plannedAnchorDate ?? today;
+        return getDateKey(currentAnchorDate) === getDateKey(nextAnchorDate) ? currentAnchorDate : nextAnchorDate;
+      });
     }
   }, [plannedAnchorDate, plannedDateKey, today]);
 
@@ -392,7 +443,7 @@ export default function IndexScreen() {
 
   const openPlanningChoice = () => {
     router.push({
-      pathname: "/workouts/planning",
+      pathname: "/workouts/client-select",
       params: { date: selectedDayKey }
     });
   };
@@ -429,7 +480,7 @@ export default function IndexScreen() {
             ) : null}
           </View>
 
-          <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width={calendarStripWidth} style={styles.calendarStrip} onSelect={selectDay} />
+          <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" style={styles.calendarStrip} onSelect={selectDay} />
 
           <View style={styles.cards}>
             {shouldShowDayPlan ? (
@@ -562,7 +613,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md
   },
   calendarStrip: {
-    alignSelf: "center"
+    alignSelf: "stretch"
   },
   floatingAdd: {
     position: "absolute",

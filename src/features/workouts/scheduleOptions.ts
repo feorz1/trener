@@ -7,10 +7,43 @@ export type DateCell = {
   disabled?: boolean;
 };
 
-export type CalendarSlot = "15:00" | "16:00" | "17:00" | "18:00";
+export type CalendarSlot =
+  | "06:00"
+  | "07:00"
+  | "08:00"
+  | "09:00"
+  | "10:00"
+  | "11:00"
+  | "12:00"
+  | "13:00"
+  | "16:00"
+  | "17:00"
+  | "18:00"
+  | "19:00"
+  | "20:00"
+  | "21:00"
+  | "22:00"
+  | "23:00";
 export type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
-export const freeSlots: CalendarSlot[] = ["15:00", "16:00", "17:00", "18:00"];
+export const freeSlots: CalendarSlot[] = [
+  "06:00",
+  "07:00",
+  "08:00",
+  "09:00",
+  "10:00",
+  "11:00",
+  "12:00",
+  "13:00",
+  "16:00",
+  "17:00",
+  "18:00",
+  "19:00",
+  "20:00",
+  "21:00",
+  "22:00",
+  "23:00"
+];
 export const repeatOptions: { key: RepeatDay; label: string }[] = [
   { key: "monday", label: "Каждый понедельник" },
   { key: "tuesday", label: "Каждый вторник" },

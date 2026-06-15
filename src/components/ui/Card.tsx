@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   muscleText: {
     ...theme.typography.body.mdStrong,
     lineHeight: theme.typography.body.sm.lineHeight,
-    color: theme.colors.status.negative
+    color: theme.colors.content.ink
   },
   moreArea: {
     position: "relative",

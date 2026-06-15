@@ -42,7 +42,8 @@ Canonical trainer dashboard card. It covers the day plan block, workout entries,
 | plan title/meta | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
 | plan count | `color/content/primary` | `theme.colors.content.primary` |
 | primary text | `color/content/ink` | `theme.colors.content.ink` |
-| muscle icon/text | `color/status/negative` | `theme.colors.status.negative` |
+| muscle icon | `color/status/negative` | `theme.colors.status.negative` |
+| muscle text | `color/content/ink` | `theme.colors.content.ink` |
 | radius | `radius/xl` | `theme.radius.xl` |
 | content padding | `spacing/lg` | `theme.spacing.lg` |
 | day plan content gap | `spacing/xs` | `theme.spacing.xs` |

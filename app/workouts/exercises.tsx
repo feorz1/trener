@@ -1,16 +1,56 @@
 import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Chip, Divider, ListItemGym, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
 import { mockExercises } from "@/data/mockExercises";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
+type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+type DayExerciseIds = Partial<Record<RepeatDay, string[]>>;
+const repeatDays: RepeatDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const dayNames: Record<RepeatDay, string> = {
+  monday: "Понедельник",
+  tuesday: "Вторник",
+  wednesday: "Среда",
+  thursday: "Четверг",
+  friday: "Пятница",
+  saturday: "Суббота",
+  sunday: "Воскресенье"
+};
+
+function firstParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 function parseIds(value?: string | string[]) {
-  const raw = Array.isArray(value) ? value[0] : value;
+  const raw = firstParam(value);
   if (!raw) return [];
   return raw.split(",").filter(Boolean);
+}
+
+function parseDayExerciseIds(value?: string | string[]) {
+  const raw = firstParam(value);
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).flatMap(([day, ids]) => {
+        if (!repeatDays.includes(day as RepeatDay) || !Array.isArray(ids)) return [];
+        return [[day, ids.filter((id): id is string => typeof id === "string")]];
+      })
+    ) as DayExerciseIds;
+  } catch {
+    return {};
+  }
+}
+
+function serializeDayExerciseIds(data: DayExerciseIds) {
+  const entries = Object.entries(data).filter(([, ids]) => Array.isArray(ids) && ids.length > 0);
+  if (entries.length === 0) return undefined;
+  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
 }
 
 function getAdjacentConnectionIds(ids: string[]) {
@@ -18,15 +58,24 @@ function getAdjacentConnectionIds(ids: string[]) {
 }
 
 export default function ExerciseSelectionScreen() {
-  const { clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { clientId, clientName, date, selectedDays, scheduleTimes, activeDay, dayExerciseIds, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     clientId?: string;
     clientName?: string;
     date?: string;
+    selectedDays?: string;
+    scheduleTimes?: string;
+    activeDay?: string;
+    dayExerciseIds?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
   }>();
-  const selectedFromParams = useMemo(() => parseIds(exerciseIds), [exerciseIds]);
+  const activeWorkoutDay = repeatDays.includes(firstParam(activeDay) as RepeatDay) ? (firstParam(activeDay) as RepeatDay) : undefined;
+  const dayExerciseIdsFromParams = useMemo(() => parseDayExerciseIds(dayExerciseIds), [dayExerciseIds]);
+  const selectedFromParams = useMemo(() => {
+    if (activeWorkoutDay) return dayExerciseIdsFromParams[activeWorkoutDay] ?? parseIds(exerciseIds);
+    return parseIds(exerciseIds);
+  }, [activeWorkoutDay, dayExerciseIdsFromParams, exerciseIds]);
   const supersetConnectionIdsFromParams = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedFromParams);
   const [search, setSearch] = useState("");
@@ -46,6 +95,8 @@ export default function ExerciseSelectionScreen() {
   const saveSelection = () => {
     const validConnectionIds = getAdjacentConnectionIds(selectedIds);
     const nextSupersetConnectionIds = supersetConnectionIdsFromParams.filter((id) => validConnectionIds.includes(id));
+    const nextDayExerciseIds = activeWorkoutDay ? { ...dayExerciseIdsFromParams, [activeWorkoutDay]: selectedIds } : dayExerciseIdsFromParams;
+    const serializedDayExerciseIds = serializeDayExerciseIds(nextDayExerciseIds);
 
     router.replace({
       pathname: "/workouts/new",
@@ -53,6 +104,10 @@ export default function ExerciseSelectionScreen() {
         ...(clientId ? { clientId } : {}),
         ...(clientName ? { clientName } : {}),
         ...(date ? { date } : {}),
+        ...(selectedDays ? { selectedDays } : {}),
+        ...(scheduleTimes ? { scheduleTimes } : {}),
+        ...(activeDay ? { activeDay } : {}),
+        ...(serializedDayExerciseIds ? { dayExerciseIds: serializedDayExerciseIds } : {}),
         ...(selectedIds.length > 0 ? { exerciseIds: selectedIds.join(",") } : {}),
         ...(nextSupersetConnectionIds.length > 0 ? { supersetConnectionIds: nextSupersetConnectionIds.join(",") } : {}),
         ...(approachData ? { approachData } : {})
@@ -65,14 +120,15 @@ export default function ExerciseSelectionScreen() {
       <Navigation title="Упражнения" onBack={() => router.back()} />
 
       <View style={styles.filter}>
+        {activeWorkoutDay ? <Text style={styles.dayContext}>{dayNames[activeWorkoutDay]}</Text> : null}
         <Search value={search} width="fill" placeholder="Search..." onChangeText={setSearch} onClear={() => setSearch("")} />
         <View style={styles.chips}>
           <Chip label="Мышцы" dropdown />
         </View>
       </View>
 
+      <Divider width="fill" tone="canvasSoft" />
       <View style={styles.body}>
-        <Divider width="fill" tone="canvasSoft" />
         <View style={styles.bodyContent}>
           <StateSelect selectedCount={selectedIds.length} label="Выбрано" resetLabel="Сбросить" width="fill" onReset={() => setSelectedIds([])} />
           <ScrollView contentContainerStyle={styles.list} {...scrollProps}>
@@ -121,6 +177,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  dayContext: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.ink
   },
   chips: {
     flexDirection: "row",

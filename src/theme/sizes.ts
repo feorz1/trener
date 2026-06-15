@@ -128,6 +128,7 @@ export const sizes = {
   textAreaFieldMinHeight: 108,
   variantWidth: 375,
   variantOptionHeight: 48,
+  scheduleSlotWidth: 82,
   switchWidth: 52,
   switchHeight: 32,
   switchThumb: 28,

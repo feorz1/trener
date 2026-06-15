@@ -182,6 +182,7 @@ export function CalendarDayStrip({
     pages.findIndex((week) => week.some((item) => item.key === resolvedSelectedKey)),
     0
   );
+  const selectedPageStartKey = pages[selectedPageIndex]?.[0]?.key;
 
   useEffect(() => {
     if (!hasPaging) return;
@@ -191,7 +192,7 @@ export function CalendarDayStrip({
       y: 0,
       animated: false
     });
-  }, [hasPaging, pageWidth, selectedPageIndex]);
+  }, [hasPaging, pageWidth, selectedPageIndex, selectedPageStartKey]);
 
   const handlePress = (item: CalendarDayStripItem) => {
     setInternalSelectedKey(item.key);

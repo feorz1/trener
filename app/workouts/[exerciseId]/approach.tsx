@@ -49,6 +49,9 @@ type ActiveMetric = {
   setId: string;
   metric: ApproachMetric;
 };
+type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+type DayExerciseIds = Partial<Record<RepeatDay, string[]>>;
+const repeatDays: RepeatDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
 
 function getSetListMinHeight(itemCount: number) {
   if (itemCount === 0) return theme.spacing[0];
@@ -63,6 +66,37 @@ function parseIds(value?: string | string[]) {
   const raw = firstParam(value);
   if (!raw) return [];
   return raw.split(",").filter(Boolean);
+}
+
+function parseDayExerciseIds(value?: string) {
+  if (!value) return {};
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).flatMap(([day, ids]) => {
+        if (!repeatDays.includes(day as RepeatDay) || !Array.isArray(ids)) return [];
+        return [[day, ids.filter((id): id is string => typeof id === "string")]];
+      })
+    ) as DayExerciseIds;
+  } catch {
+    return {};
+  }
+}
+
+function serializeDayExerciseIds(data: DayExerciseIds) {
+  const entries = Object.entries(data).filter(([, ids]) => Array.isArray(ids) && ids.length > 0);
+  if (entries.length === 0) return undefined;
+  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
+}
+
+function syncActiveDayExerciseIds(value: string | undefined, activeDay: string | undefined, exerciseIds: string[]) {
+  if (!activeDay || !repeatDays.includes(activeDay as RepeatDay)) return value;
+
+  return serializeDayExerciseIds({
+    ...parseDayExerciseIds(value),
+    [activeDay]: exerciseIds
+  });
 }
 
 function parseApproachData(value?: string | string[]) {
@@ -126,16 +160,25 @@ function buildWorkoutParams(
   clientId: string | undefined,
   clientName: string | undefined,
   date: string | undefined,
+  selectedDays: string | undefined,
+  scheduleTimes: string | undefined,
+  activeDay: string | undefined,
+  dayExerciseIds: string | undefined,
   exerciseIds: string[],
   supersetConnectionIds: string[],
   approachData?: ApproachData
 ) {
   const serializedApproachData = approachData ? serializeApproachData(approachData) : undefined;
+  const syncedDayExerciseIds = syncActiveDayExerciseIds(dayExerciseIds, activeDay, exerciseIds);
 
   return {
     ...(clientId ? { clientId } : {}),
     ...(clientName ? { clientName } : {}),
     ...(date ? { date } : {}),
+    ...(selectedDays ? { selectedDays } : {}),
+    ...(scheduleTimes ? { scheduleTimes } : {}),
+    ...(activeDay ? { activeDay } : {}),
+    ...(syncedDayExerciseIds ? { dayExerciseIds: syncedDayExerciseIds } : {}),
     ...(exerciseIds.length > 0 ? { exerciseIds: exerciseIds.join(",") } : {}),
     ...(supersetConnectionIds.length > 0 ? { supersetConnectionIds: supersetConnectionIds.join(",") } : {}),
     ...(serializedApproachData ? { approachData: serializedApproachData } : {})
@@ -163,20 +206,26 @@ function createAddedSet(index: number, template?: ApproachCountItem): ApproachCo
 }
 
 export default function ExerciseApproachScreen() {
-  const { exerciseId, clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { exerciseId, clientId, clientName, date, selectedDays, scheduleTimes, activeDay, dayExerciseIds, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     exerciseId?: string;
     clientId?: string;
     clientName?: string;
     date?: string;
+    selectedDays?: string;
+    scheduleTimes?: string;
+    activeDay?: string;
+    dayExerciseIds?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
   }>();
   const currentExerciseId = firstParam(exerciseId);
+  const currentActiveDay = firstParam(activeDay);
+  const currentApproachKey = currentExerciseId && currentActiveDay && repeatDays.includes(currentActiveDay as RepeatDay) ? `${currentActiveDay}:${currentExerciseId}` : currentExerciseId;
   const selectedExerciseIds = useMemo(() => parseIds(exerciseIds), [exerciseIds]);
   const selectedSupersetConnectionIds = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
   const currentApproachData = useMemo(() => parseApproachData(approachData), [approachData]);
-  const initialExerciseSets = currentExerciseId && currentApproachData[currentExerciseId] ? currentApproachData[currentExerciseId] : initialSets;
+  const initialExerciseSets = currentApproachKey && currentApproachData[currentApproachKey] ? currentApproachData[currentApproachKey] : currentExerciseId && currentApproachData[currentExerciseId] ? currentApproachData[currentExerciseId] : initialSets;
   const exercise = mockExercises.find((item) => item.id === currentExerciseId);
   const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
   const [sets, setSets] = useState(initialExerciseSets);
@@ -235,21 +284,32 @@ export default function ExerciseApproachScreen() {
     (nextExerciseIds = selectedExerciseIds, nextSupersetConnectionIds = selectedSupersetConnectionIds, nextApproachData = currentApproachData) => {
       router.dismissTo({
         pathname: "/workouts/new",
-        params: buildWorkoutParams(firstParam(clientId), firstParam(clientName), firstParam(date), nextExerciseIds, nextSupersetConnectionIds, nextApproachData)
+        params: buildWorkoutParams(
+          firstParam(clientId),
+          firstParam(clientName),
+          firstParam(date),
+          firstParam(selectedDays),
+          firstParam(scheduleTimes),
+          currentActiveDay,
+          firstParam(dayExerciseIds),
+          nextExerciseIds,
+          nextSupersetConnectionIds,
+          nextApproachData
+        )
       });
     },
-    [clientId, clientName, currentApproachData, date, selectedExerciseIds, selectedSupersetConnectionIds]
+    [clientId, clientName, currentActiveDay, currentApproachData, date, dayExerciseIds, scheduleTimes, selectedDays, selectedExerciseIds, selectedSupersetConnectionIds]
   );
 
   const saveSets = () => {
-    if (!currentExerciseId) {
+    if (!currentApproachKey) {
       goBackToWorkout();
       return;
     }
 
     goBackToWorkout(selectedExerciseIds, selectedSupersetConnectionIds, {
       ...currentApproachData,
-      [currentExerciseId]: setsRef.current
+      [currentApproachKey]: setsRef.current
     });
   };
 
@@ -344,7 +404,7 @@ export default function ExerciseApproachScreen() {
     const nextExerciseIds = selectedExerciseIds.filter((id) => id !== currentExerciseId);
     const validConnectionIds = getAdjacentConnectionIds(nextExerciseIds);
     const nextConnectionIds = selectedSupersetConnectionIds.filter((id) => validConnectionIds.includes(id));
-    const { [currentExerciseId]: _removed, ...nextApproachData } = currentApproachData;
+    const { [currentApproachKey ?? currentExerciseId]: _removed, [currentExerciseId]: _legacyRemoved, ...nextApproachData } = currentApproachData;
     goBackToWorkout(nextExerciseIds, nextConnectionIds, nextApproachData);
   };
 

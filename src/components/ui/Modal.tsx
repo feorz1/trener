@@ -318,7 +318,7 @@ function ModalOverlay({ visible, onClose, children }: { visible: boolean; onClos
     <NativeModal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlayBackdrop, { opacity: backdropOpacity }]} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Close modal overlay" style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill} onPress={onClose} />
         <Animated.View style={[styles.overlaySheet, { bottom: theme.spacing.xl, transform: [{ translateY: sheetTranslateY }] }]}>
           {renderedChildren}
         </Animated.View>

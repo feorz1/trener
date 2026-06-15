@@ -108,6 +108,7 @@ export function ApproachCount({
 
       <View style={styles.metrics}>
         <Metric
+          accessibilityLabel={`${item.unit ?? "КГ"}, подход ${item.index}`}
           label={item.unit ?? "КГ"}
           shouldFocus={focusedMetric === "weight"}
           value={weight}
@@ -119,6 +120,7 @@ export function ApproachCount({
           onFocus={() => onMetricFocus?.("weight")}
         />
         <Metric
+          accessibilityLabel={`Повторов, подход ${item.index}`}
           label="ПОВТОРОВ"
           shouldFocus={focusedMetric === "reps"}
           value={reps}
@@ -131,7 +133,11 @@ export function ApproachCount({
         />
       </View>
 
-      {trailingSlot ?? <Icon name="move" size={theme.sizes.approachStatusIcon} color={theme.colors.content.body} />}
+      {trailingSlot ?? (
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Icon name="move" size={theme.sizes.approachStatusIcon} color={theme.colors.content.body} />
+        </View>
+      )}
     </View>
   );
 
@@ -148,6 +154,7 @@ export function ApproachCount({
 
 function Metric({
   label,
+  accessibilityLabel,
   shouldFocus,
   value,
   onBlur,
@@ -155,6 +162,7 @@ function Metric({
   onFocus
 }: {
   label: string;
+  accessibilityLabel?: string;
   shouldFocus?: boolean;
   value: string;
   onBlur?: () => void;
@@ -199,7 +207,7 @@ function Metric({
     <View style={styles.metric}>
       <NativeTextInput
         ref={inputRef}
-        accessibilityLabel={label}
+        accessibilityLabel={accessibilityLabel ?? label}
         keyboardType="decimal-pad"
         showSoftInputOnFocus
         onBlur={() => {

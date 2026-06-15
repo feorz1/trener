@@ -1,7 +1,7 @@
 ---
 version: alpha
 name: Wise-design-analysis
-description: An inspired interpretation of Wise's design language — a global money-transfer brand whose surface combines an unusually heavy near-black display sans (weight 900 at 64–126 px) with a vivid lime-green brand accent, sage-tinted surface neutrals, and rounded white cards on a pale green-tinted canvas; the whole system reads more like a Scandinavian fintech magazine than a bank.
+description: An inspired interpretation of Wise's design language — a global money-transfer brand whose surface combines SF Pro Display typography with a vivid lime-green brand accent, sage-tinted surface neutrals, and rounded white cards on a pale green-tinted canvas; the whole system reads more like a Scandinavian fintech magazine than a bank.
 
 colors:
   primary: "#9fe870"
@@ -35,88 +35,97 @@ colors:
 
 typography:
   display-mega:
-    fontFamily: Wise Sans, Inter, system-ui, -apple-system, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 126px
-    fontWeight: 900
+    fontWeight: 700
     lineHeight: 107.1px
   display-xxl:
-    fontFamily: Wise Sans, Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 96px
-    fontWeight: 900
+    fontWeight: 700
     lineHeight: 81.6px
   display-xl:
-    fontFamily: Wise Sans, Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 64px
-    fontWeight: 900
+    fontWeight: 700
     lineHeight: 54.4px
+    letterSpacing: 0.22px
   display-lg:
-    fontFamily: Wise Sans, Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 47px
     fontWeight: 400
     lineHeight: 70.5px
-    letterSpacing: -0.108px
+    letterSpacing: 0.37px
   display-md:
-    fontFamily: Wise Sans, Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 40px
-    fontWeight: 900
+    fontWeight: 700
     lineHeight: 34px
+    letterSpacing: 0.37px
   display-sm:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 32px
     fontWeight: 600
     lineHeight: 38.4px
-    letterSpacing: -0.96px
+    letterSpacing: 0.4px
   display-xs:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 24px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 31.2px
-    letterSpacing: -0.48px
+    letterSpacing: 0.35px
   body-lg:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 20px
     fontWeight: 600
     lineHeight: 24px
+    letterSpacing: 0.38px
   body-md:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 16px
     fontWeight: 400
     lineHeight: 24px
+    letterSpacing: -0.32px
   body-md-strong:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 16px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 20px
+    letterSpacing: -0.32px
   body-sm:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 14px
     fontWeight: 400
     lineHeight: 20px
+    letterSpacing: -0.15px
   body-sm-strong:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 14px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 18px
+    letterSpacing: -0.15px
   body-sm-caption:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 12px
-    fontWeight: 600
+    fontWeight: 500
     lineHeight: 16px
   body-caption:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 10px
     fontWeight: 600
     lineHeight: 16px
+    letterSpacing: 0.12px
   caption:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 12px
     fontWeight: 400
     lineHeight: 16px
   button-md:
-    fontFamily: Inter, system-ui, sans-serif
+    fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 16px
     fontWeight: 600
     lineHeight: 20px
+    letterSpacing: -0.32px
 
 rounded:
   none: 0px
@@ -308,15 +317,15 @@ components:
 
 ## Overview
 
-Wise — the global money-transfer brand — wears its identity in a single signature pairing: a vivid lime-green `{colors.primary}` (`#9fe870`) used as the CTA pill and brand accent, set against a pale sage-tinted canvas `{colors.canvas-soft}` (`#efefef`) that runs across the hero band, and a near-black ink `{colors.ink}` (`#0e0f0c`) with a hint of warmth from the brand's underlying olive cast. The brand reads more like a calm Scandinavian magazine than a bank — generous whitespace, large rounded cards, and an unusually heavy display sans set at weight 900 carrying every hero headline.
+Wise — the global money-transfer brand — wears its identity in a single signature pairing: a vivid lime-green `{colors.primary}` (`#9fe870`) used as the CTA pill and brand accent, set against a pale sage-tinted canvas `{colors.canvas-soft}` (`#efefef`) that runs across the hero band, and a near-black ink `{colors.ink}` (`#0e0f0c`) with a hint of warmth from the brand's underlying olive cast. The brand reads more like a calm Scandinavian magazine than a bank — generous whitespace, large rounded cards, and SF Pro Display typography carrying every hero headline.
 
-Display typography is the second decisive voice. The proprietary `Wise Sans` family carries hero displays at weight 900 in scales from 64 px up to 126 px on the largest hero. The brand pairs Wise Sans 900 with Inter at weight 600 for sub-displays — the contrast between the chunky proprietary face and Inter's neutrality creates a particular hierarchy: Wise Sans for the brand moment, Inter for everything else.
+Display typography is the second decisive voice. SF Pro Display carries the full hierarchy from hero displays to compact labels, with weight, scale, and Apple-inspired tracking doing the work instead of switching families.
 
 Cards are universally pill-rounded — `{rounded.xl}` 24 px is the brand's signature card radius. Buttons use tighter control radii: `{rounded.lg}` for large / medium text buttons, `{rounded.md}` for small text buttons, and `{rounded.pill}` for tertiary and icon-only buttons. The brand never uses sharp corners on UI elements; the visual softness is part of the friendly fintech voice.
 
 **Key Characteristics:**
 - A single lime-green CTA accent `{colors.primary}` (`#9fe870`) — the brand's universal primary action color. No second accent.
-- Two-face display typography — Wise Sans (proprietary, weight 900, hero scale) + Inter (weight 600, sub-display scale). The contrast is the brand's typographic story.
+- Single-family typography — SF Pro Display across display, body, labels, captions, and buttons. Weight, size, and tracking create hierarchy.
 - `{rounded.xl}` 24 px is the canonical card radius; buttons use `{rounded.lg}` / `{rounded.md}` / `{rounded.pill}` by size and type.
 - Sage-tinted canvas `{colors.canvas-soft}` (`#efefef`) is the brand's hero surface; white `{colors.canvas}` is reserved for cards within the sage band.
 - A full semantic palette: positive green family, warning yellow family, negative red family — each documented with content / hover / active variants for in-product use.
@@ -361,39 +370,33 @@ Cards are universally pill-rounded — `{rounded.xl}` 24 px is the brand's signa
 ## Typography
 
 ### Font Family
-Two faces ladder the system:
-1. **Wise Sans** — proprietary geometric sans with an unusually heavy weight 900 used for all hero displays. The face is the brand's typographic signature. Always at weight 900, never lighter on the marketing surface.
-2. **Inter** — used for sub-displays (weight 600), all body, and form labels. Loaded with `font-feature-settings: "calt"` for contextual alternates.
+SF Pro Display is the single typography family across the design system. In Figma, use the explicit `SF Pro Display` family. In code, iOS targets `SF Pro Display`; non-Apple platforms fall back to their system sans family. Hierarchy comes from the existing token weights, sizes, line heights, and Apple-inspired tracking.
 
 ### Hierarchy
 
 | Token | Size | Weight | Line Height | Letter Spacing | Use |
 |---|---|---|---|---|---|
-| `{typography.display-mega}` | 126px | 900 | 107.1px | 0 | Hero stencil at maximum scale. |
-| `{typography.display-xxl}` | 96px | 900 | 81.6px | 0 | Sub-hero scale. |
-| `{typography.display-xl}` | 64px | 900 | 54.4px | 0 | Standard hero headline. |
-| `{typography.display-lg}` | 47px | 400 | 70.5px | -0.108px | Lighter sub-display. |
-| `{typography.display-md}` | 40px | 900 | 34px | 0 | Section / card headlines. |
-| `{typography.display-sm}` | 32px | 600 | 38.4px | -0.96px | Inter-rendered section headings. |
-| `{typography.display-xs}` | 24px | 600 | 31.2px | -0.48px | Sub-section displays. |
-| `{typography.body-lg}` | 20px | 600 | 24px | 0 | Lead paragraphs. |
-| `{typography.body-md}` | 16px | 400 | 24px | 0 | Default body. |
-| `{typography.body-md-strong}` | 16px | 600 | 20px | 0 | Bold inline body. |
-| `{typography.body-sm}` | 14px | 400 | 20px | 0 | Secondary body. |
-| `{typography.body-sm-strong}` | 14px | 600 | 18px | 0 | Compact semibold labels and approach values. |
-| `{typography.body-sm-caption}` | 12px | 600 | 16px | 0 | Small semibold number chips. |
-| `{typography.body-caption}` | 10px | 600 | 16px | 0 | Compact unit labels and helper captions. |
+| `{typography.display-mega}` | 126px | 700 | 107.1px | 0 | Hero stencil at maximum scale. |
+| `{typography.display-xxl}` | 96px | 700 | 81.6px | 0 | Sub-hero scale. |
+| `{typography.display-xl}` | 64px | 700 | 54.4px | 0.22px | Standard hero headline. |
+| `{typography.display-lg}` | 47px | 400 | 70.5px | 0.37px | Lighter sub-display. |
+| `{typography.display-md}` | 40px | 700 | 34px | 0.37px | Section / card headlines. |
+| `{typography.display-sm}` | 32px | 600 | 38.4px | 0.4px | Section headings. |
+| `{typography.display-xs}` | 24px | 500 | 31.2px | 0.35px | Sub-section displays. |
+| `{typography.body-lg}` | 20px | 600 | 24px | 0.38px | Lead paragraphs. |
+| `{typography.body-md}` | 16px | 400 | 24px | -0.32px | Default body. |
+| `{typography.body-md-strong}` | 16px | 500 | 20px | -0.32px | Medium inline body. |
+| `{typography.body-sm}` | 14px | 400 | 20px | -0.15px | Secondary body. |
+| `{typography.body-sm-strong}` | 14px | 500 | 18px | -0.15px | Compact medium labels and approach values. |
+| `{typography.body-sm-caption}` | 12px | 500 | 16px | 0 | Small medium number chips. |
+| `{typography.body-caption}` | 10px | 600 | 16px | 0.12px | Compact unit labels and helper captions. |
 | `{typography.caption}` | 12px | 400 | 16px | 0 | Fine print. |
-| `{typography.button-md}` | 16px | 600 | 20px | 0 | Button label. |
+| `{typography.button-md}` | 16px | 600 | 20px | -0.32px | Button label. |
 
 ### Principles
-- **Weight 900 for hero, weight 600 for everything else.** The brand's display ceiling is full-black weight; everything below is semibold.
-- **Wise Sans for the brand voice, Inter for utility.** Strict role separation.
-
-### Note on Font Substitutes
-Wise Sans is proprietary. Open-source substitutes:
-- **Display** — *Inter* at weight 900 or *Manrope* at weight 800 / 900 captures the geometric heaviness. *Geist* weight 800 is a passable second choice.
-- **Sub-display + body** — *Inter* is the brand's actual second face.
+- **Weight 700 for hero, weight 600 / 500 for utility emphasis.** The brand's display ceiling is bold; selected strong and compact styles use medium to keep dense UI calm.
+- **Track by size.** Display text follows Apple-style neutral or slightly positive tracking; 16px and 14px UI text tightens; 12px text stays neutral; 10px helper text opens slightly for legibility.
+- **SF Pro Display everywhere in design.** Do not introduce component-local font families or alternate display faces.
 
 ## Layout
 
@@ -531,7 +534,7 @@ The brand uses surface contrast (`{colors.canvas-soft}` background vs `{colors.c
 ### Signature Components
 
 **`hero-band`** — the sage-canvas hero band.
-- Background `{colors.canvas-soft}`, text `{colors.ink}`, padding `{spacing.3xl} {spacing.xl}`. Headline in `{typography.display-mega}` (Wise Sans weight 900).
+- Background `{colors.canvas-soft}`, text `{colors.ink}`, padding `{spacing.3xl} {spacing.xl}`. Headline in `{typography.display-mega}`.
 
 **`hero-band-dark`** — the polarity-flipped dark hero.
 - Background `{colors.ink}`, text `{colors.primary}` (Wise green headline on near-black!), same padding / scale.
@@ -584,14 +587,14 @@ The brand uses surface contrast (`{colors.canvas-soft}` background vs `{colors.c
 
 ### Do
 - Reserve `{colors.primary}` Wise green for every primary CTA. The lime-green pill IS the brand's conversion signature.
-- Set hero headlines in `{typography.display-mega}` / `{typography.display-xl}` Wise Sans weight 900. Never lighter.
+- Set hero headlines in `{typography.display-mega}` / `{typography.display-xl}`.
 - Use `{rounded.xl}` 24 px for cards; use the Button component's canonical radii for actions: `{rounded.lg}`, `{rounded.md}`, and `{rounded.pill}`.
 - Cycle page surfaces in `{colors.canvas-soft}` sage canvas → `{colors.canvas}` white cards. Surface contrast carries elevation.
 - Use the full semantic palette (positive / warning / negative) for in-product status — never repurpose Wise green as success indicator since it IS the brand CTA.
 
 ### Don't
 - Don't introduce a second brand accent. Wise green is the sole identity colour.
-- Don't render the hero in weight 700 or lighter. The brand's display weight is 900.
+- Don't render the hero lighter than weight 700. The brand's display weight is bold.
 - Don't render CTAs as sharp rectangles. The 24 px pill geometry is non-negotiable.
 - Don't pair the green CTA with a green background. The brand always sits Wise green on neutral surfaces (sage / white / ink).
-- Don't replace Wise Sans with a generic geometric sans for hero typography — the proprietary face IS the brand's voice.
+- Don't introduce alternate font families for hero typography; use SF Pro Display.

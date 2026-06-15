@@ -67,22 +67,22 @@ Current Figma collection: `Wise / Trainer Tokens`.
 
 | Figma text style | Font | Size | Line height | Letter spacing | Code target |
 |---|---|---:|---:|---:|---|
-| `Typography/Display/Mega` | Inter Bold | `126` | `107.1` | `0` | `theme.typography.display.mega` |
-| `Typography/Display/XXL` | Inter Bold | `96` | `81.6` | `0` | `theme.typography.display.xxl` |
-| `Typography/Display/XL` | Inter Bold | `64` | `54.4` | `0` | `theme.typography.display.xl` |
-| `Typography/Display/LG` | Inter Regular | `47` | `70.5` | `-0.108` | `theme.typography.display.lg` |
-| `Typography/Display/MD` | Inter Bold | `40` | `34` | `0` | `theme.typography.display.md` |
-| `Typography/Display/SM` | Inter Semi Bold | `32` | `38.4` | `-0.96` | `theme.typography.display.sm` |
-| `Typography/Display/XS` | Inter Semi Bold | `24` | `31.2` | `-0.48` | `theme.typography.display.xs` |
-| `Typography/Body/LG` | Inter Semi Bold | `20` | `24` | `0` | `theme.typography.body.lg` |
-| `Typography/Body/MD` | Inter Regular | `16` | `24` | `0` | `theme.typography.body.md` |
-| `Typography/Body/MD Strong` | Inter Semi Bold | `16` | `20` | `0` | `theme.typography.body.mdStrong` |
-| `Typography/Body/SM` | Inter Regular | `14` | `20` | `0` | `theme.typography.body.sm` |
-| `Typography/Body/SM Strong` | Inter Semi Bold | `14` | `18` | `0` | `theme.typography.body.smStrong` |
-| `Typography/Body/SM Caption` | Inter Semi Bold | `12` | `16` | `0` | `theme.typography.body.smCaption` |
-| `Typography/Body/Caption` | Inter Semi Bold | `10` | `16` | `0` | `theme.typography.body.caption` |
-| `Typography/Caption` | Inter Regular | `12` | `16` | `0` | `theme.typography.caption` |
-| `Typography/Button/MD` | Inter Semi Bold | `16` | `20` | `0` | `theme.typography.button.md` |
+| `Typography/Display/Mega` | SF Pro Display Bold | `126` | `107.1` | `0` | `theme.typography.display.mega` |
+| `Typography/Display/XXL` | SF Pro Display Bold | `96` | `81.6` | `0` | `theme.typography.display.xxl` |
+| `Typography/Display/XL` | SF Pro Display Bold | `64` | `54.4` | `0.22` | `theme.typography.display.xl` |
+| `Typography/Display/LG` | SF Pro Display Regular | `47` | `70.5` | `0.37` | `theme.typography.display.lg` |
+| `Typography/Display/MD` | SF Pro Display Bold | `40` | `34` | `0.37` | `theme.typography.display.md` |
+| `Typography/Display/SM` | SF Pro Display Semibold | `32` | `38.4` | `0.4` | `theme.typography.display.sm` |
+| `Typography/Display/XS` | SF Pro Display Medium | `24` | `31.2` | `0.35` | `theme.typography.display.xs` |
+| `Typography/Body/LG` | SF Pro Display Semibold | `20` | `24` | `0.38` | `theme.typography.body.lg` |
+| `Typography/Body/MD` | SF Pro Display Regular | `16` | `24` | `-0.32` | `theme.typography.body.md` |
+| `Typography/Body/MD Strong` | SF Pro Display Medium | `16` | `20` | `-0.32` | `theme.typography.body.mdStrong` |
+| `Typography/Body/SM` | SF Pro Display Regular | `14` | `20` | `-0.15` | `theme.typography.body.sm` |
+| `Typography/Body/SM Strong` | SF Pro Display Medium | `14` | `18` | `-0.15` | `theme.typography.body.smStrong` |
+| `Typography/Body/SM Caption` | SF Pro Display Medium | `12` | `16` | `0` | `theme.typography.body.smCaption` |
+| `Typography/Body/Caption` | SF Pro Display Semibold | `10` | `16` | `0.12` | `theme.typography.body.caption` |
+| `Typography/Caption` | SF Pro Display Regular | `12` | `16` | `0` | `theme.typography.caption` |
+| `Typography/Button/MD` | SF Pro Display Semibold | `16` | `20` | `-0.32` | `theme.typography.button.md` |
 
 ## Code Mapping Rules
 

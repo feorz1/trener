@@ -11,13 +11,11 @@ import {
   Divider,
   Header,
   Icon,
-  ListItemCell,
   ListItemGym,
-  Modal,
   Navigation,
-  Radio,
   Select,
-  SuperSet
+  SuperSet,
+  Variant
 } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { mockExercises } from "@/data/mockExercises";
@@ -27,10 +25,32 @@ import type { ApproachCountItem } from "@/components/ui";
 
 type ApproachData = Record<string, ApproachCountItem[]>;
 type WorkoutExercise = (typeof mockExercises)[number];
+type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+type DayExerciseIds = Partial<Record<RepeatDay, string[]>>;
+type ScheduleTimes = Partial<Record<RepeatDay, string>>;
 const EXERCISE_ROW_GAP = theme.spacing.xxs;
 const EXERCISE_ROW_HEIGHT = theme.sizes.listItemGymSwipeMinHeight - EXERCISE_ROW_GAP;
 const EXERCISE_SLOT_HEIGHT = theme.sizes.listItemGymSwipeMinHeight;
-
+const EMPTY_EXERCISE_IDS: string[] = [];
+const repeatDays: RepeatDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const dayLabels: Record<RepeatDay, string> = {
+  monday: "Пн",
+  tuesday: "Вт",
+  wednesday: "Ср",
+  thursday: "Чт",
+  friday: "Пт",
+  saturday: "Сб",
+  sunday: "Вс"
+};
+const repeatDayByNativeWeekday: Record<number, RepeatDay> = {
+  0: "sunday",
+  1: "monday",
+  2: "tuesday",
+  3: "wednesday",
+  4: "thursday",
+  5: "friday",
+  6: "saturday"
+};
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -39,6 +59,101 @@ function parseIds(value?: string | string[]) {
   const raw = firstParam(value);
   if (!raw) return [];
   return raw.split(",").filter(Boolean);
+}
+
+function parseDays(value?: string | string[]) {
+  const raw = firstParam(value);
+  if (!raw) return [];
+  const daySet = new Set(repeatDays);
+  return raw
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item): item is RepeatDay => daySet.has(item as RepeatDay));
+}
+
+function parseDayExerciseIds(value?: string | string[]) {
+  const raw = firstParam(value);
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(raw)) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed).flatMap(([day, ids]) => {
+        if (!repeatDays.includes(day as RepeatDay) || !Array.isArray(ids)) return [];
+        return [[day, ids.filter((id): id is string => typeof id === "string")]];
+      })
+    ) as DayExerciseIds;
+  } catch {
+    return {};
+  }
+}
+
+function serializeDayExerciseIds(data: DayExerciseIds) {
+  const entries = Object.entries(data).filter(([, ids]) => Array.isArray(ids) && ids.length > 0);
+  if (entries.length === 0) return undefined;
+  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
+}
+
+function parseScheduleTimes(value?: string | string[]): ScheduleTimes {
+  const raw = firstParam(value);
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(decodeURIComponent(raw)) as ScheduleTimes;
+  } catch {
+    return {};
+  }
+}
+
+function startOfDay(date: Date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
+
+function addDays(date: Date, days: number) {
+  const value = new Date(date);
+  value.setDate(value.getDate() + days);
+  return value;
+}
+
+function parseDateKey(value?: string) {
+  if (!value) return startOfDay(new Date());
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return startOfDay(new Date());
+
+  return startOfDay(new Date(year, month - 1, day));
+}
+
+function getDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekStart(date: Date) {
+  const value = startOfDay(date);
+  const nativeDay = value.getDay();
+  const mondayOffset = nativeDay === 0 ? -6 : 1 - nativeDay;
+  return addDays(value, mondayOffset);
+}
+
+function getFirstPlannedDateKey(anchorDate: Date, selectedDays: RepeatDay[]) {
+  if (selectedDays.length === 0) return getDateKey(anchorDate);
+
+  for (let offset = 0; offset < repeatDays.length; offset += 1) {
+    const candidateDate = addDays(anchorDate, offset);
+    const candidateDay = repeatDayByNativeWeekday[candidateDate.getDay()];
+    if (selectedDays.includes(candidateDay)) return getDateKey(candidateDate);
+  }
+
+  return getDateKey(anchorDate);
+}
+
+function getApproachDataKey(day: RepeatDay, exerciseId: string) {
+  return `${day}:${exerciseId}`;
 }
 
 function parseApproachData(value?: string | string[]) {
@@ -150,21 +265,49 @@ function triggerSelection() {
 }
 
 export default function NewWorkoutScreen() {
-  const { clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { clientId, clientName, date, selectedDays, scheduleTimes, activeDay, dayExerciseIds, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
     clientId?: string;
     clientName?: string;
     date?: string;
+    selectedDays?: string;
+    scheduleTimes?: string;
+    activeDay?: string;
+    dayExerciseIds?: string;
     exerciseIds?: string;
     supersetConnectionIds?: string;
     approachData?: string;
   }>();
-  const initialClientId = firstParam(clientId);
-  const selectedExerciseIds = useMemo(() => parseIds(exerciseIds), [exerciseIds]);
-  const selectedSupersetConnectionIds = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
-  const selectedApproachData = useMemo(() => parseApproachData(approachData), [approachData]);
-  const selectedExerciseKey = selectedExerciseIds.join(",");
+  const clientIdValue = firstParam(clientId);
+  const clientNameValue = firstParam(clientName);
+  const dateValue = firstParam(date);
+  const selectedDaysValue = firstParam(selectedDays);
+  const scheduleTimesValue = firstParam(scheduleTimes);
+  const activeDayValue = firstParam(activeDay);
+  const dayExerciseIdsValue = firstParam(dayExerciseIds);
+  const exerciseIdsValue = firstParam(exerciseIds);
+  const supersetConnectionIdsValue = firstParam(supersetConnectionIds);
+  const approachDataValue = firstParam(approachData);
+  const initialClientId = clientIdValue;
+  const selectedExerciseIds = useMemo(() => parseIds(exerciseIdsValue), [exerciseIdsValue]);
+  const selectedWorkoutDays = useMemo<RepeatDay[]>(() => {
+    const parsedDays = parseDays(selectedDaysValue);
+    return parsedDays.length > 0 ? parsedDays : ["monday"];
+  }, [selectedDaysValue]);
+  const selectedWorkoutDaysKey = selectedWorkoutDays.join(",");
+  const selectedScheduleTimes = useMemo(() => parseScheduleTimes(scheduleTimesValue), [scheduleTimesValue]);
+  const dayExerciseIdsFromParams = useMemo(() => parseDayExerciseIds(dayExerciseIdsValue), [dayExerciseIdsValue]);
+  const initialActiveDay = repeatDays.includes(activeDayValue as RepeatDay) ? (activeDayValue as RepeatDay) : selectedWorkoutDays[0];
+  const [activeWorkoutDay, setActiveWorkoutDay] = useState<RepeatDay>(initialActiveDay);
+  const [localDayExerciseIds, setLocalDayExerciseIds] = useState<DayExerciseIds>(() => ({
+    ...dayExerciseIdsFromParams,
+    [initialActiveDay]: dayExerciseIdsFromParams[initialActiveDay] ?? selectedExerciseIds
+  }));
+  const activeDayExerciseIds = localDayExerciseIds[activeWorkoutDay] ?? EMPTY_EXERCISE_IDS;
+  const selectedSupersetConnectionIds = useMemo(() => parseIds(supersetConnectionIdsValue), [supersetConnectionIdsValue]);
+  const selectedApproachData = useMemo(() => parseApproachData(approachDataValue), [approachDataValue]);
+  const selectedExerciseKey = activeDayExerciseIds.join(",");
   const selectedSupersetConnectionKey = selectedSupersetConnectionIds.join(",");
-  const [orderedExerciseIds, setOrderedExerciseIds] = useState<string[]>(selectedExerciseIds);
+  const [orderedExerciseIds, setOrderedExerciseIds] = useState<string[]>(activeDayExerciseIds);
   const [localSupersetConnectionIds, setLocalSupersetConnectionIds] = useState<string[]>(selectedSupersetConnectionIds);
   const [localApproachData, setLocalApproachData] = useState<ApproachData>(selectedApproachData);
   const [exerciseRowHeights, setExerciseRowHeights] = useState<Record<string, number>>({});
@@ -178,12 +321,20 @@ export default function NewWorkoutScreen() {
   );
   const exerciseLayout = useMemo(() => getExerciseLayoutRows(selectedExercises, exerciseRowHeights), [exerciseRowHeights, selectedExercises]);
   const exerciseItemHeights = useMemo(() => exerciseLayout.rows.map((row) => row.height), [exerciseLayout.rows]);
-  const [selectedClientId, setSelectedClientId] = useState<string | undefined>(initialClientId);
-  const [pendingClientId, setPendingClientId] = useState<string | undefined>(initialClientId);
-  const [clientModalVisible, setClientModalVisible] = useState(false);
+  const selectedClientId = initialClientId;
   const selectedClient = mockClients.find((client) => client.id === selectedClientId);
-  const selectedClientName = selectedClient?.name ?? firstParam(clientName);
+  const selectedClientName = selectedClient?.name ?? clientNameValue;
   const hasExercises = selectedExercises.length > 0;
+  const activeDayHasTime = Boolean(selectedScheduleTimes[activeWorkoutDay]);
+  const allSelectedDaysHaveTimes = selectedWorkoutDays.every((day) => Boolean(selectedScheduleTimes[day]));
+  const allSelectedDaysHaveExercises = selectedWorkoutDays.every((day) => {
+    const exerciseIdsForDay = day === activeWorkoutDay ? orderedExerciseIds : (localDayExerciseIds[day] ?? EMPTY_EXERCISE_IDS);
+    return exerciseIdsForDay.length > 0;
+  });
+  const selectedDayItems = useMemo(() => selectedWorkoutDays.map((day) => ({ key: day, label: dayLabels[day] })), [selectedWorkoutDays]);
+  const activeDayIndex = selectedWorkoutDays.indexOf(activeWorkoutDay);
+  const nextWorkoutDay = activeDayIndex >= 0 ? selectedWorkoutDays[activeDayIndex + 1] : undefined;
+  const canUseFooterAction = nextWorkoutDay ? hasExercises && activeDayHasTime : allSelectedDaysHaveExercises && allSelectedDaysHaveTimes;
   const supersetConnections = useMemo(
     () =>
       selectedExercises.slice(0, -1).map((exercise, index) => {
@@ -196,80 +347,96 @@ export default function NewWorkoutScreen() {
   );
 
   useEffect(() => {
-    setOrderedExerciseIds(selectedExerciseIds);
+    const nextActiveDay = repeatDays.includes(activeDayValue as RepeatDay) && selectedWorkoutDays.includes(activeDayValue as RepeatDay)
+      ? (activeDayValue as RepeatDay)
+      : selectedWorkoutDays[0];
+
+    setActiveWorkoutDay((current) => (selectedWorkoutDays.includes(current) ? nextActiveDay : selectedWorkoutDays[0]));
+    setLocalDayExerciseIds((current) => {
+      const merged = { ...current, ...dayExerciseIdsFromParams };
+      return Object.fromEntries(Object.entries(merged).filter(([day]) => selectedWorkoutDays.includes(day as RepeatDay))) as DayExerciseIds;
+    });
+  }, [activeDayValue, dayExerciseIdsFromParams, selectedWorkoutDays, selectedWorkoutDaysKey]);
+
+  useEffect(() => {
+    setOrderedExerciseIds(activeDayExerciseIds);
     setExerciseRowHeights({});
     setLocalSupersetConnectionIds((current) => {
-      const validIds = getAdjacentConnectionIds(selectedExerciseIds);
+      const validIds = getAdjacentConnectionIds(activeDayExerciseIds);
       const sourceIds = selectedSupersetConnectionIds.length > 0 ? selectedSupersetConnectionIds : current;
 
       return sourceIds.filter((id) => validIds.includes(id));
     });
     setLocalApproachData(selectedApproachData);
-  }, [selectedApproachData, selectedExerciseKey, selectedSupersetConnectionKey]);
+  }, [activeDayExerciseIds, selectedApproachData, selectedExerciseKey, selectedSupersetConnectionKey]);
 
-  const openClientModal = () => {
-    setPendingClientId(selectedClientId);
-    setClientModalVisible(true);
-  };
+  const getSyncedDayExerciseIds = useCallback(
+    (nextExerciseIds = orderedExerciseIds) => ({
+      ...localDayExerciseIds,
+      [activeWorkoutDay]: nextExerciseIds
+    }),
+    [activeWorkoutDay, localDayExerciseIds, orderedExerciseIds]
+  );
 
-  const closeClientModal = () => {
-    setClientModalVisible(false);
-  };
+  const getSharedParams = useCallback(
+    (nextExerciseIds = orderedExerciseIds, nextDayExerciseIds = getSyncedDayExerciseIds(nextExerciseIds)) => {
+      const serializedApproachData = serializeApproachData(localApproachData);
+      const serializedDayExerciseIds = serializeDayExerciseIds(nextDayExerciseIds);
 
-  const saveClientSelection = () => {
-    if (!pendingClientId) return;
-
-    setSelectedClientId(pendingClientId);
-    router.setParams({ clientId: pendingClientId });
-    setClientModalVisible(false);
-  };
-
-  const openNewClient = useCallback(() => {
-    const serializedApproachData = serializeApproachData(localApproachData);
-
-    setClientModalVisible(false);
-    router.push({
-      pathname: "/clients/new",
-      params: {
-        returnTo: "/workouts/new",
-        ...(date ? { date } : {}),
-        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
+      return {
+        ...(selectedClientId ? { clientId: selectedClientId } : {}),
+        ...(selectedClientName ? { clientName: selectedClientName } : {}),
+        ...(dateValue ? { date: dateValue } : {}),
+        selectedDays: selectedWorkoutDays.join(","),
+        ...(scheduleTimesValue ? { scheduleTimes: scheduleTimesValue } : {}),
+        activeDay: activeWorkoutDay,
+        ...(nextExerciseIds.length > 0 ? { exerciseIds: nextExerciseIds.join(",") } : {}),
+        ...(serializedDayExerciseIds ? { dayExerciseIds: serializedDayExerciseIds } : {}),
         ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
         ...(serializedApproachData ? { approachData: serializedApproachData } : {})
-      }
-    });
-  }, [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds]);
+      };
+    },
+    [
+      activeWorkoutDay,
+      dateValue,
+      getSyncedDayExerciseIds,
+      localApproachData,
+      localSupersetConnectionIds,
+      orderedExerciseIds,
+      scheduleTimesValue,
+      selectedClientId,
+      selectedClientName,
+      selectedWorkoutDays
+    ]
+  );
 
   const openExerciseSelection = useCallback(() => {
-    const serializedApproachData = serializeApproachData(localApproachData);
-
     router.push({
       pathname: "/workouts/exercises",
-      params: {
-        ...(selectedClientId ? { clientId: selectedClientId } : {}),
-        ...(selectedClientName ? { clientName: selectedClientName } : {}),
-        ...(date ? { date } : {}),
-        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-        ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
-        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
-      }
+      params: getSharedParams()
     });
-  }, [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId, selectedClientName]);
+  }, [getSharedParams]);
 
-  const openSchedule = useCallback(() => {
-    const serializedApproachData = serializeApproachData(localApproachData);
-
+  const openDayEdit = useCallback(() => {
     router.push({
-      pathname: "/workouts/schedule",
-      params: {
-        ...(selectedClientId ? { clientId: selectedClientId } : {}),
-        ...(selectedClientName ? { clientName: selectedClientName } : {}),
-        ...(date ? { date } : {}),
-        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
-      }
+      pathname: "/workouts/day-edit",
+      params: getSharedParams()
     });
-  }, [date, localApproachData, orderedExerciseIds, selectedClientId, selectedClientName]);
+  }, [getSharedParams]);
+
+  const openSlotSelection = useCallback(
+    (day: RepeatDay) => {
+      router.push({
+        pathname: "/workouts/slot-select",
+        params: {
+          ...getSharedParams(),
+          returnTo: "workout-new",
+          slotDay: day
+        }
+      });
+    },
+    [getSharedParams]
+  );
 
   const openExerciseApproach = useCallback(
     (exerciseId: string) => {
@@ -279,28 +446,25 @@ export default function NewWorkoutScreen() {
         pathname: "/workouts/[exerciseId]/approach",
         params: {
           exerciseId,
-          ...(selectedClientId ? { clientId: selectedClientId } : {}),
-          ...(selectedClientName ? { clientName: selectedClientName } : {}),
-          ...(date ? { date } : {}),
-          ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-          ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
+          ...getSharedParams(),
           ...(serializedApproachData ? { approachData: serializedApproachData } : {})
         }
       });
     },
-    [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId, selectedClientName]
+    [getSharedParams, localApproachData]
   );
 
   const removeExercise = useCallback((exerciseId: string) => {
     setOrderedExerciseIds((currentIds) => {
       const nextIds = currentIds.filter((id) => id !== exerciseId);
 
+      setLocalDayExerciseIds((current) => ({ ...current, [activeWorkoutDay]: nextIds }));
       setLocalSupersetConnectionIds((currentConnectionIds) => {
         const validConnectionIds = getAdjacentConnectionIds(nextIds);
         return currentConnectionIds.filter((id) => validConnectionIds.includes(id));
       });
       setLocalApproachData((current) => {
-        const { [exerciseId]: _removed, ...rest } = current;
+        const { [getApproachDataKey(activeWorkoutDay, exerciseId)]: _removed, ...rest } = current;
         return rest;
       });
 
@@ -310,7 +474,7 @@ export default function NewWorkoutScreen() {
       const { [exerciseId]: _removed, ...rest } = current;
       return rest;
     });
-  }, []);
+  }, [activeWorkoutDay]);
 
   const toggleSupersetConnection = useCallback((id: string) => {
     setLocalSupersetConnectionIds((current) => (current.includes(id) ? current.filter((connectionId) => connectionId !== id) : [...current, id]));
@@ -334,9 +498,10 @@ export default function NewWorkoutScreen() {
     setOrderedExerciseIds((currentIds) => {
       const nextIds = order(currentIds);
       setLocalSupersetConnectionIds((current) => preserveSupersetConnectionsAfterReorder(currentIds, nextIds, current));
+      setLocalDayExerciseIds((current) => ({ ...current, [activeWorkoutDay]: nextIds }));
       return nextIds;
     });
-  }, []);
+  }, [activeWorkoutDay]);
 
   const handleExerciseDragStart = useCallback(() => {
     setExerciseDragging(true);
@@ -352,59 +517,143 @@ export default function NewWorkoutScreen() {
     triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
+  const goToNextDay = useCallback(() => {
+    if (!nextWorkoutDay) return;
+
+    const nextDayExerciseIds = getSyncedDayExerciseIds();
+    setLocalDayExerciseIds(nextDayExerciseIds);
+    setActiveWorkoutDay(nextWorkoutDay);
+    setOrderedExerciseIds(nextDayExerciseIds[nextWorkoutDay] ?? []);
+    setExerciseRowHeights({});
+    router.setParams({
+      activeDay: nextWorkoutDay,
+      dayExerciseIds: serializeDayExerciseIds(nextDayExerciseIds)
+    });
+  }, [getSyncedDayExerciseIds, nextWorkoutDay]);
+
+  const saveWorkout = useCallback(() => {
+    const nextDayExerciseIds = getSyncedDayExerciseIds();
+    const plannedAnchorDate = parseDateKey(dateValue);
+    const firstPlannedDate = getFirstPlannedDateKey(plannedAnchorDate, selectedWorkoutDays);
+    const plannedExerciseCounts = Object.fromEntries(selectedWorkoutDays.map((day) => [day, nextDayExerciseIds[day]?.length ?? 0]));
+    const plannedExerciseCount = Math.max(...Object.values(plannedExerciseCounts), orderedExerciseIds.length, 0);
+    const firstScheduledTime = selectedWorkoutDays.map((day) => selectedScheduleTimes[day]).find(Boolean);
+
+    router.dismissTo({
+      pathname: "/",
+      params: {
+        plannedWorkout: "1",
+        plannedDate: firstPlannedDate,
+        plannedClientName: selectedClientName ?? "Константин",
+        plannedExerciseCount: String(plannedExerciseCount || 1),
+        plannedExerciseCounts: encodeURIComponent(JSON.stringify(plannedExerciseCounts)),
+        plannedRepeatDays: selectedWorkoutDays.join(","),
+        ...(firstScheduledTime ? { plannedTime: firstScheduledTime } : {}),
+        plannedScheduleTimes: encodeURIComponent(JSON.stringify(selectedScheduleTimes))
+      }
+    });
+  }, [dateValue, getSyncedDayExerciseIds, orderedExerciseIds.length, selectedClientName, selectedScheduleTimes, selectedWorkoutDays]);
+
+  const handleFooterPress = () => {
+    if (nextWorkoutDay) {
+      goToNextDay();
+      return;
+    }
+
+    saveWorkout();
+  };
+
   const renderExercise = useCallback(
-    (item: WorkoutExercise) => (
-      <MeasuredExerciseRow
-        exerciseId={item.id}
-        onHeightChange={updateExerciseRowHeight}
-      >
+    (item: WorkoutExercise) => {
+      const approachDataKey = getApproachDataKey(activeWorkoutDay, item.id);
+      const itemApproachData = localApproachData[approachDataKey];
+
+      return (
+        <MeasuredExerciseRow
+          exerciseId={item.id}
+          onHeightChange={updateExerciseRowHeight}
+        >
         <ListItemGym
           title={item.name}
           mode="move"
           width="fill"
-          setVariant={localApproachData[item.id]?.length > 0 ? "set" : "new"}
-          setValues={localApproachData[item.id] ? formatSetValues(localApproachData[item.id]) : undefined}
-          onPress={localApproachData[item.id]?.length > 0 ? () => openExerciseApproach(item.id) : undefined}
+          setVariant={itemApproachData?.length > 0 ? "set" : "new"}
+          setValues={itemApproachData ? formatSetValues(itemApproachData) : undefined}
+          onPress={itemApproachData?.length > 0 ? () => openExerciseApproach(item.id) : undefined}
           suppressPressedStyle
           onAddSetPress={() => openExerciseApproach(item.id)}
           onDelete={() => removeExercise(item.id)}
           style={styles.exerciseCard}
           trailingSlot={
             <Sortable.Handle>
-              <View accessibilityLabel="Move exercise" accessibilityRole="button" style={styles.dragHandle}>
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.dragHandle}>
                 <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.mute} />
               </View>
             </Sortable.Handle>
           }
         />
-      </MeasuredExerciseRow>
-    ),
-    [localApproachData, openExerciseApproach, removeExercise, updateExerciseRowHeight]
+        </MeasuredExerciseRow>
+      );
+    },
+    [activeWorkoutDay, localApproachData, openExerciseApproach, removeExercise, updateExerciseRowHeight]
   );
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title="Создание тренировки" onBack={() => router.back()} />
 
+      <View style={styles.daySelectorHeader}>
+        <View style={styles.daySelectorTitleRow}>
+          <Text style={styles.daySelectorTitle}>Дни тренировок</Text>
+          <Button
+            type="secondaryNeutral"
+            size="smallIcon"
+            accessibilityLabel="Редактировать дни тренировок"
+            icon={<Icon name="edit" size={theme.sizes.buttonIconSmall} color={theme.colors.content.ink} />}
+            onPress={openDayEdit}
+          />
+        </View>
+        <Variant<RepeatDay>
+          label="Дни тренировок"
+          items={selectedDayItems}
+          value={activeWorkoutDay}
+          columns={selectedWorkoutDays.length}
+          width="fill"
+          showLabel={false}
+          onChange={(day) => {
+            const nextDayExerciseIds = getSyncedDayExerciseIds();
+            setLocalDayExerciseIds(nextDayExerciseIds);
+            setActiveWorkoutDay(day);
+            setOrderedExerciseIds(nextDayExerciseIds[day] ?? []);
+            setExerciseRowHeights({});
+            router.setParams({
+              activeDay: day,
+              dayExerciseIds: serializeDayExerciseIds(nextDayExerciseIds)
+            });
+          }}
+        />
+        {!activeDayHasTime ? (
+          <View style={styles.timeFallback}>
+            <Select
+              label="Время"
+              placeholder="Выбери время"
+              value={selectedScheduleTimes[activeWorkoutDay]}
+              width="fill"
+              showMessage={false}
+              onPress={() => openSlotSelection(activeWorkoutDay)}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      <Divider width="fill" tone="canvasSoft" />
       <Animated.ScrollView
         ref={scrollableRef as never}
         contentContainerStyle={styles.content}
         {...scrollProps}
       >
-        <View>
-          <Select
-            label="Клиент"
-            value={selectedClientName}
-            placeholder="Выберите клиента"
-            width="fill"
-            showMessage={false}
-            onPress={openClientModal}
-          />
-        </View>
-
         {hasExercises ? (
           <View style={styles.exerciseSection}>
-            <Divider width="fill" tone="canvasSoft" />
             <View style={styles.exerciseHeader}>
               <Text style={styles.exerciseHeaderTitle}>Упражнения</Text>
               <Badge label={String(selectedExercises.length)} tone="neutral" size="s" icon={false} />
@@ -468,7 +717,6 @@ export default function NewWorkoutScreen() {
           </View>
         ) : (
           <View style={styles.exercises}>
-            <Divider width="fill" tone="canvasSoft" />
             <Header title="Упражнения" size="lg" showSubtitle={false} style={styles.sectionHeader} />
             <View style={styles.emptyState}>
               <Icon name="muscle arms" size={theme.sizes.approachHeaderThumb + theme.spacing["3xl"]} color={theme.colors.status.negativeDarkest} />
@@ -484,43 +732,14 @@ export default function NewWorkoutScreen() {
 
       <View style={styles.footer}>
         <Button
-          label="Сохранить и запланировать"
+          label={nextWorkoutDay ? "Следующий день" : "Сохранить и запланировать"}
           type="primary"
           size="large"
           width="fill"
-          state={hasExercises ? "active" : "disabled"}
-          onPress={openSchedule}
+          state={canUseFooterAction ? "active" : "disabled"}
+          onPress={handleFooterPress}
         />
       </View>
-
-      <Modal
-        visible={clientModalVisible}
-        presentation="overlay"
-        title="Выбор клиента"
-        showSubline={false}
-        showBodyText={false}
-        showCloseButton
-        actionLayout="stacked"
-        primaryAction={{ label: "Сохранить", type: "primary", disabled: !pendingClientId, onPress: saveClientSelection }}
-        secondaryAction={{ label: "Создать нового клиента", type: "secondaryNeutral", onPress: openNewClient }}
-        onClose={closeClientModal}
-        bodyStyle={styles.modalBody}
-      >
-        {mockClients.map((client) => {
-          const selected = client.id === pendingClientId;
-
-          return (
-            <ListItemCell
-              key={client.id}
-              title={client.name}
-              leading="none"
-              density="compact"
-              trailingSlot={<Radio selected={selected} showLabel={false} onChange={() => setPendingClientId(client.id)} />}
-              onPress={() => setPendingClientId(client.id)}
-            />
-          );
-        })}
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -555,6 +774,25 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1
+  },
+  daySelectorHeader: {
+    backgroundColor: theme.colors.background.canvas
+  },
+  daySelectorTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm
+  },
+  daySelectorTitle: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.ink
+  },
+  timeFallback: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.md
   },
   exercises: {
     flex: 1,

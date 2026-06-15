@@ -8,7 +8,7 @@
 
 - Root: vertical field container with optional label and optional message.
 - Label: field label using `Typography/Body/SM Strong`.
-- Grid: one to five rows, each row containing one to five option cells.
+- Grid: one to five rows, each row containing one to seven option cells.
 - Option: pressable value cell with default, selected, pressed, and disabled states.
 - Message: optional helper row below the grid.
 
@@ -18,19 +18,23 @@
 |---|---|---:|---|
 | `label` | `string` | yes | Field label. |
 | `items` | `Array<{ label: string; value?: string; key?: string; disabled?: boolean }>` | yes | Values to render. Maximum 25. |
-| `value` | `string` | yes | Selected value. |
+| `value` | `string` | no | Selected value for single-select mode. |
+| `values` | `string[]` | no | Selected values for multiple-select mode. |
+| `selectionMode` | `"single" \| "multiple"` | no | Selection behavior. Defaults to `single`. |
 | `onChange` | `(value: string) => void` | yes | Selection callback. |
-| `columns` | `number` | no | Preferred values per row. Clamped from 1 to 5 and increased when needed to keep the grid within five rows. Defaults to the item count up to 5. |
+| `columns` | `number` | no | Preferred values per row. Clamped from 1 to 7 and increased when needed to keep the grid within five rows. Defaults to the item count up to 7. |
 | `message` | `string` | no | Helper text. |
 | `showLabel` | `boolean` | no | Shows the label. Defaults to `true`. |
 | `showMessage` | `boolean` | no | Shows the helper message. Defaults to `false`. |
 | `disabled` | `boolean` | no | Disables all options. |
 | `width` | `"fixed" \| "fill"` | no | Fixed 375px field width or stretch to parent. |
+| `inset` | `"default" \| "none"` | no | Keeps canonical internal padding by default. Use `none` only when the parent container owns exact padding, such as modal bodies. |
+| `style` | `StyleProp<ViewStyle>` | no | Optional root override for placement and parent-owned spacing only. |
 
 ## Variants And States
 
 - `state=Default`: unselected option, canvas-soft fill and border.
-- `state=Selected`: selected option, primary-pale fill and ink-deep border.
+- `state=Selected`: selected option, primary-pale fill and primary-pale border.
 - `state=Disabled`: option opacity is reduced and press handling is disabled.
 - `showMessage=true`: renders the helper row.
 
@@ -39,7 +43,7 @@
 | Usage | Figma token | Code token |
 |---|---|---|
 | selected option background | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
-| selected option border | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected option border | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
 | default option background | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | option text | `color/content/ink` | `theme.colors.content.ink` |
 | helper text | `color/content/body` | `theme.colors.content.body` |
@@ -81,6 +85,7 @@
 ## Do And Don't
 
 - Do use this component for visible, mutually exclusive option sets with up to 25 values.
-- Do use `columns={5}` for dense five-column grids like the Figma matrix.
+- Do use `columns={5}` for dense five-column grids like the Figma matrix and `columns={7}` for the weekly training-day selector.
+- Do use `selectionMode="multiple"` with `values` for compact multi-day choices.
 - Do not use it for switching app views; use `SegmentedControl` for that.
 - Do not pass long free-form labels that cannot fit inside compact option cells.
