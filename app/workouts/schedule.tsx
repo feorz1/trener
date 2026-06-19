@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, Navigation, Select, Variant } from "@/components/ui";
+import { useWorkoutActions, useWorkoutDraft } from "@/data";
 import { isCalendarSlot, parseDateKey, repeatDayLabels, repeatOptions, type CalendarSlot, type RepeatDay } from "@/features/workouts/scheduleOptions";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
 type ScheduleTimes = Partial<Record<RepeatDay, CalendarSlot>>;
+const defaultCalendarSlot: CalendarSlot = "17:00";
 
 const dayItems = repeatOptions.map((option) => ({
   key: option.key,
@@ -50,50 +52,45 @@ function parseDays(value?: string) {
     .filter((item): item is RepeatDay => daySet.has(item as RepeatDay));
 }
 
-function parseScheduleTimes(value?: string): ScheduleTimes {
-  if (!value) return {};
-
-  try {
-    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, string>;
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [RepeatDay, CalendarSlot] => parseDays(entry[0]).length === 1 && isCalendarSlot(entry[1]))
-    ) as ScheduleTimes;
-  } catch {
-    return {};
-  }
+function withDefaultScheduleTimes(days: RepeatDay[], scheduleTimes: ScheduleTimes) {
+  return days.reduce<ScheduleTimes>(
+    (nextTimes, day) => ({
+      ...nextTimes,
+      [day]: nextTimes[day] ?? defaultCalendarSlot
+    }),
+    { ...scheduleTimes }
+  );
 }
 
-function serializeScheduleTimes(value: ScheduleTimes) {
-  return encodeURIComponent(JSON.stringify(value));
+function buildStartsAt(date: Date | undefined, time: string | undefined) {
+  const value = date ? new Date(date) : new Date();
+  const [hours, minutes] = (time ?? "17:00").split(":").map(Number);
+  value.setHours(Number.isFinite(hours) ? hours : 17, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+  return value.toISOString();
 }
 
 export default function ScheduleWorkoutScreen() {
-  const { clientId, clientName, date, selectedDays: selectedDaysParam, scheduleTimes: scheduleTimesParam } = useLocalSearchParams<{
-    clientId?: string;
-    clientName?: string;
-    date?: string;
-    selectedDays?: string;
-    scheduleTimes?: string;
+  const { draftId } = useLocalSearchParams<{
+    draftId?: string;
   }>();
-  const selectedDate = useMemo(() => parseDateKey(firstParam(date)), [date]);
+  const draftIdValue = firstParam(draftId);
+  const workouts = useWorkoutActions();
+  const { draft } = useWorkoutDraft(draftIdValue);
+  const selectedDate = useMemo(() => parseDateKey(draft?.startsAt), [draft?.startsAt]);
   const fallbackDay = getNativeWeekdayDay(selectedDate);
   const initialDays = useMemo(() => {
-    const parsedDays = parseDays(firstParam(selectedDaysParam));
-    if (parsedDays.length > 0) return parsedDays;
+    if (draft?.repeatDays && draft.repeatDays.length > 0) return draft.repeatDays;
     return fallbackDay ? [fallbackDay] : [];
-  }, [fallbackDay, selectedDaysParam]);
+  }, [draft?.repeatDays, fallbackDay]);
   const [selectedDays, setSelectedDays] = useState<RepeatDay[]>(initialDays);
-  const [scheduleTimes, setScheduleTimes] = useState<ScheduleTimes>(() => parseScheduleTimes(firstParam(scheduleTimesParam)));
+  const [scheduleTimes, setScheduleTimes] = useState<ScheduleTimes>(() => withDefaultScheduleTimes(initialDays, (draft?.scheduleTimes ?? {}) as ScheduleTimes));
   const { scrollProps } = useConditionalScroll();
-  const canContinue = selectedDays.length > 0 && selectedDays.every((day) => Boolean(scheduleTimes[day]));
+  const canContinue = selectedDays.length > 0;
 
   useEffect(() => {
     setSelectedDays(initialDays);
-  }, [initialDays]);
-
-  useEffect(() => {
-    setScheduleTimes(parseScheduleTimes(firstParam(scheduleTimesParam)));
-  }, [scheduleTimesParam]);
+    setScheduleTimes(withDefaultScheduleTimes(initialDays, (draft?.scheduleTimes ?? {}) as ScheduleTimes));
+  }, [draft?.scheduleTimes, initialDays]);
 
   const toggleDay = (day: RepeatDay) => {
     setSelectedDays((current) => {
@@ -106,7 +103,9 @@ export default function ScheduleWorkoutScreen() {
         return nextDays;
       }
 
-      return repeatOptions.map((option) => option.key).filter((item) => item === day || current.includes(item));
+      const nextDays = repeatOptions.map((option) => option.key).filter((item) => item === day || current.includes(item));
+      setScheduleTimes((currentTimes) => withDefaultScheduleTimes(nextDays, currentTimes));
+      return nextDays;
     });
   };
 
@@ -114,28 +113,26 @@ export default function ScheduleWorkoutScreen() {
     router.push({
       pathname: "/workouts/slot-select",
       params: {
-        ...(firstParam(clientId) ? { clientId: firstParam(clientId) } : {}),
-        ...(firstParam(clientName) ? { clientName: firstParam(clientName) } : {}),
-        ...(firstParam(date) ? { date: firstParam(date) } : {}),
-        selectedDays: selectedDays.join(","),
-        scheduleTimes: serializeScheduleTimes(scheduleTimes),
+        ...(draftIdValue ? { draftId: draftIdValue } : {}),
         slotDay: day
       }
     });
   };
 
-  const continueToExercises = () => {
-    if (!canContinue) return;
+  const continueToExercises = async () => {
+    if (!canContinue || !draftIdValue) return;
+    const firstDay = selectedDays[0];
+    const effectiveScheduleTimes = withDefaultScheduleTimes(selectedDays, scheduleTimes);
+    await workouts.updateDraft(draftIdValue, {
+      startsAt: buildStartsAt(selectedDate, firstDay ? effectiveScheduleTimes[firstDay] : undefined),
+      repeatDays: selectedDays,
+      scheduleTimes: effectiveScheduleTimes
+    });
 
     router.replace({
       pathname: "/workouts/new",
       params: {
-        ...(firstParam(clientId) ? { clientId: firstParam(clientId) } : {}),
-        ...(firstParam(clientName) ? { clientName: firstParam(clientName) } : {}),
-        ...(firstParam(date) ? { date: firstParam(date) } : {}),
-        selectedDays: selectedDays.join(","),
-        scheduleTimes: serializeScheduleTimes(scheduleTimes),
-        activeDay: selectedDays[0]
+        draftId: draftIdValue
       }
     });
   };

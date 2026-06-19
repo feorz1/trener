@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, View } from "react-native";
 import { ListItemCell, Modal } from "@/components/ui";
+import { useWorkoutActions } from "@/data";
 import { theme } from "@/theme";
 
 function firstParam(value?: string | string[]) {
@@ -10,15 +11,20 @@ function firstParam(value?: string | string[]) {
 export default function WorkoutPlanningSheet() {
   const { date } = useLocalSearchParams<{ date?: string }>();
   const selectedDate = firstParam(date);
+  const workouts = useWorkoutActions();
 
   const closeSheet = () => {
     router.back();
   };
 
-  const createNewWorkout = () => {
+  const createNewWorkout = async () => {
+    const draft = await workouts.createDraft({
+      startsAt: selectedDate ? new Date(selectedDate).toISOString() : undefined
+    });
+
     router.push({
       pathname: "/workouts/client-select",
-      params: selectedDate ? { date: selectedDate } : {}
+      params: { draftId: draft.id }
     });
   };
 

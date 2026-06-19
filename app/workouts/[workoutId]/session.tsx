@@ -3,17 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
-import { mockWorkouts } from "@/data/mockWorkouts";
-import {
-  formatTimerDuration,
-  parseWorkoutResult,
-  parseWorkoutSessionSnapshots,
-  serializeWorkoutResult,
-  serializeWorkoutSessionSnapshots,
-  type SessionResultSet,
-  type WorkoutResultSnapshot
-} from "@/features/workouts/sessionResult";
+import { useClient, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
+import { formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -23,8 +14,7 @@ const kgUnit = "кг";
 
 type RouteParams = {
   workoutId?: string | string[];
-  sessionSnapshot?: string | string[];
-  activeWorkoutSnapshots?: string | string[];
+  sessionId?: string | string[];
 };
 
 type SessionExercise = Omit<Workout["exercises"][number], "sets"> & {
@@ -64,18 +54,46 @@ function buildSessionWorkout(workout?: Workout) {
 }
 
 export default function WorkoutSessionScreen() {
-  const { workoutId: rawWorkoutId, sessionSnapshot: rawSessionSnapshot, activeWorkoutSnapshots: rawActiveWorkoutSnapshots } = useLocalSearchParams<RouteParams>();
-  const workoutId = firstParam(rawWorkoutId);
-  const workout = useMemo(() => mockWorkouts.find((item) => item.id === workoutId), [workoutId]);
-  const clientName = useMemo(() => mockClients.find((item) => item.id === workout?.clientId)?.name ?? "Клиент", [workout?.clientId]);
-  const sessionSnapshot = useMemo(() => {
-    const parsedSnapshot = parseWorkoutResult(rawSessionSnapshot);
-    return parsedSnapshot?.workoutId === workout?.id ? parsedSnapshot : null;
-  }, [rawSessionSnapshot, workout?.id]);
-  const activeWorkoutSnapshotMap = useMemo(() => parseWorkoutSessionSnapshots(rawActiveWorkoutSnapshots), [rawActiveWorkoutSnapshots]);
+  const { workoutId: rawWorkoutId, sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
+  const sessionId = firstParam(rawSessionId) ?? firstParam(rawWorkoutId);
+  const { session } = useSession(sessionId);
+  const { workout } = useWorkout(session?.workoutId);
+  const { client } = useClient(session?.clientId ?? workout?.clientId);
+  const { results } = useSessionResults(sessionId);
+  const resultActions = useResultActions();
+  const sessionActions = useSessionActions();
+  const clientName = client?.name ?? "Клиент";
   const initialSessionExercises = useMemo<SessionExercise[]>(
-    () => sessionSnapshot?.exercises.map((exercise) => ({ ...exercise, sets: normalizeSetIndexes(exercise.sets) })) ?? buildSessionWorkout(workout),
-    [sessionSnapshot, workout]
+    () => {
+      if (!session) return [];
+
+      return session.exercises.map((exercise) => {
+        const exerciseResults = results
+          .filter((result) => result.exerciseId === exercise.exerciseId)
+          .sort((left, right) => left.setIndex - right.setIndex);
+        const workoutExercise = workout?.exercises.find((item) => item.exerciseId === exercise.exerciseId);
+        const sets: SessionResultSet[] = exerciseResults.length > 0
+          ? exerciseResults.map((result) => ({
+              id: result.setId ?? result.id,
+              index: result.setIndex,
+              reps: result.repetitions,
+              weight: result.weight,
+              unit: result.unit ?? kgUnit,
+              state: result.completed ? "selected" as const : "default" as const,
+              logged: Boolean(result.repetitions || result.weight)
+            }))
+          : buildSessionExerciseSets(workoutExercise?.sets ?? []);
+
+        return {
+          id: exercise.id,
+          exerciseId: exercise.exerciseId,
+          exerciseName: exercise.exerciseName,
+          comment: exercise.comment,
+          sets: normalizeSetIndexes(sets.length > 0 ? sets : [{ id: `${exercise.id}-set-1`, index: 1, unit: kgUnit, state: "default", logged: false }])
+        };
+      });
+    },
+    [results, session, workout?.exercises]
   );
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
@@ -104,21 +122,40 @@ export default function WorkoutSessionScreen() {
     );
   }, []);
 
+  const persistSet = useCallback(
+    (exercise: SessionExercise, set: ApproachSet) => {
+      if (!sessionId) return;
+
+      void resultActions.upsertSetResult({
+        sessionId,
+        exerciseId: exercise.exerciseId,
+        setIndex: set.index,
+        setId: set.id,
+        weight: set.weight,
+        repetitions: set.reps,
+        unit: set.unit,
+        completed: set.state === "selected"
+      }).catch(() => undefined);
+    },
+    [resultActions, sessionId]
+  );
+
   const handleSetStateChange = useCallback(
     (exerciseId: string, setId: string, state: ApproachSet["state"]) => {
       setSessionExercises((current) =>
         current.map((exercise) => {
           if (exercise.id !== exerciseId) return exercise;
+          const nextSets = normalizeSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, state } : set)));
+          const changedSet = nextSets.find((set) => set.id === setId);
+          if (changedSet) persistSet(exercise, changedSet);
           return {
             ...exercise,
-            sets: normalizeSetIndexes(
-              exercise.sets.map((set) => (set.id === setId ? { ...set, state } : set))
-            )
+            sets: nextSets
           };
         })
       );
     },
-    []
+    [persistSet]
   );
 
   const handleSetValueChange = useCallback(
@@ -126,16 +163,17 @@ export default function WorkoutSessionScreen() {
       setSessionExercises((current) =>
         current.map((exercise) => {
           if (exercise.id !== exerciseId) return exercise;
+          const nextSets = normalizeSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch, logged: true } : set)));
+          const changedSet = nextSets.find((set) => set.id === setId);
+          if (changedSet) persistSet(exercise, changedSet);
           return {
             ...exercise,
-            sets: normalizeSetIndexes(
-              exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch, logged: true } : set))
-            )
+            sets: nextSets
           };
         })
       );
     },
-    []
+    [persistSet]
   );
 
   const handleSetReorder = useCallback(
@@ -173,92 +211,46 @@ export default function WorkoutSessionScreen() {
           reps: templateSet?.reps
         };
 
-        return {
+        const nextExercise = {
           ...exercise,
           sets: normalizeSetIndexes([...exercise.sets, nextSet])
         };
+        persistSet(nextExercise, nextSet);
+        return nextExercise;
       })
     );
-  }, []);
+  }, [persistSet]);
 
-  const getCurrentSnapshot = useCallback(
-    (durationSeconds: number): WorkoutResultSnapshot | undefined => {
-      if (!workout) return undefined;
+  const finishSession = useCallback(async () => {
+    if (!sessionId) return;
 
-      return {
-        workoutId: workout.id,
-        clientName,
-        durationSeconds,
-        exercises: sessionExercises.map((exercise) => ({
-          id: exercise.id,
-          exerciseId: exercise.exerciseId,
-          exerciseName: exercise.exerciseName,
-          sets: exercise.sets
-        }))
-      };
-    },
-    [clientName, sessionExercises, workout]
-  );
-
-  const finishSession = useCallback(() => {
-    if (!workout) return;
-
-    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
-    const snapshot = getCurrentSnapshot(durationSeconds);
-    const nextSnapshotMap = { ...activeWorkoutSnapshotMap };
-    delete nextSnapshotMap[workout.id];
+    await sessionActions.complete(sessionId);
 
     router.replace({
       pathname: "/workouts/[workoutId]/summary",
       params: {
-        workoutId: workout.id,
-        ...(snapshot ? { snapshot: serializeWorkoutResult(snapshot) } : {}),
-        ...(serializeWorkoutSessionSnapshots(nextSnapshotMap) ? { activeWorkoutSnapshots: serializeWorkoutSessionSnapshots(nextSnapshotMap) } : {})
+        workoutId: sessionId,
+        sessionId
       }
     });
-  }, [activeWorkoutSnapshotMap, getCurrentSnapshot, workout]);
+  }, [sessionActions, sessionId]);
 
   const addExercise = useCallback(() => {
-    if (!workout) return;
-
-    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
-    const snapshot = getCurrentSnapshot(durationSeconds);
+    if (!sessionId) return;
 
     router.push({
       pathname: "/workouts/exercises",
       params: {
-        mode: "session",
-        workoutId: workout.id,
-        ...(snapshot ? { sessionSnapshot: serializeWorkoutResult(snapshot) } : {}),
-        ...(firstParam(rawActiveWorkoutSnapshots) ? { activeWorkoutSnapshots: firstParam(rawActiveWorkoutSnapshots) } : {})
+        sessionId
       }
     });
-  }, [getCurrentSnapshot, rawActiveWorkoutSnapshots, workout]);
+  }, [sessionId]);
 
   const closeActiveSession = useCallback(() => {
-    if (!workout) {
-      router.back();
-      return;
-    }
+    router.dismissTo("/");
+  }, []);
 
-    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
-    const snapshot = getCurrentSnapshot(durationSeconds);
-    const serializedSnapshot = snapshot ? serializeWorkoutResult(snapshot) : undefined;
-    const nextSnapshotMap = serializedSnapshot ? { ...activeWorkoutSnapshotMap, [workout.id]: serializedSnapshot } : activeWorkoutSnapshotMap;
-    const serializedSnapshotMap = serializeWorkoutSessionSnapshots(nextSnapshotMap);
-
-    router.dismissTo({
-      pathname: "/",
-      params: {
-        activeWorkoutId: workout.id,
-        activeCompletedExercises: String(completedExercises),
-        activeTotalExercises: String(exerciseCount),
-        ...(serializedSnapshotMap ? { activeWorkoutSnapshots: serializedSnapshotMap } : {})
-      }
-    });
-  }, [activeWorkoutSnapshotMap, completedExercises, exerciseCount, getCurrentSnapshot, workout]);
-
-  if (!workout) {
+  if (!session) {
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <Navigation title="Тренировка" onBack={() => router.back()} />

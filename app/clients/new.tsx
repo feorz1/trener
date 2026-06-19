@@ -17,6 +17,7 @@ import {
   TextArea,
   Variant
 } from "@/components/ui";
+import { useClientActions, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
@@ -206,19 +207,14 @@ function getClientContactSummary(form: ClientForm) {
 }
 
 export default function NewClientScreen() {
-  const { returnTo, date, selectedDays, scheduleTimes, activeDay, dayExerciseIds, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { returnTo, draftId } = useLocalSearchParams<{
     returnTo?: string;
-    date?: string;
-    selectedDays?: string;
-    scheduleTimes?: string;
-    activeDay?: string;
-    dayExerciseIds?: string;
-    exerciseIds?: string;
-    supersetConnectionIds?: string;
-    approachData?: string;
+    draftId?: string;
   }>();
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<ClientForm>(initialForm);
+  const clients = useClientActions();
+  const workouts = useWorkoutActions();
   const step = STEPS[stepIndex];
   const sectionStep = sectionByStep[step];
   const selectedHealthLabels = form.healthConstraints.map((key) => getLabel(healthOptions, key));
@@ -248,23 +244,32 @@ export default function NewClientScreen() {
     }
   };
 
-  const createClient = () => {
-    const createdClientId = `demo-${Date.now()}`;
+  const createClient = async () => {
+    const createdClient = await clients.create({
+      name: form.name,
+      goal: getGoalSummary(form),
+      status: "new",
+      notes: getRestrictionLabels(form).join(", "),
+      metrics: {
+        weightKg: form.weight,
+        heightCm: form.height,
+        attendanceRate: 100
+      }
+    });
+
+    if (!firstParam(returnTo)) {
+      router.back();
+      return;
+    }
+
+    const draftIdValue = firstParam(draftId);
+    if (draftIdValue) {
+      await workouts.setDraftClient(draftIdValue, createdClient.id);
+    }
 
     router.replace({
       pathname: firstParam(returnTo) === "/workouts/schedule" ? "/workouts/schedule" : "/workouts/new",
-      params: {
-        clientId: createdClientId,
-        clientName: form.name,
-        ...(date ? { date: firstParam(date) } : {}),
-        ...(selectedDays ? { selectedDays: firstParam(selectedDays) } : {}),
-        ...(scheduleTimes ? { scheduleTimes: firstParam(scheduleTimes) } : {}),
-        ...(activeDay ? { activeDay: firstParam(activeDay) } : {}),
-        ...(dayExerciseIds ? { dayExerciseIds: firstParam(dayExerciseIds) } : {}),
-        ...(exerciseIds ? { exerciseIds: firstParam(exerciseIds) } : {}),
-        ...(supersetConnectionIds ? { supersetConnectionIds: firstParam(supersetConnectionIds) } : {}),
-        ...(approachData ? { approachData: firstParam(approachData) } : {})
-      }
+      params: draftIdValue ? { draftId: draftIdValue } : { clientId: createdClient.id }
     });
   };
 

@@ -1,5 +1,4 @@
 import * as Haptics from "expo-haptics";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
@@ -7,7 +6,7 @@ import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboa
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ApproachCount, ApproachQuickValues, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem, type ApproachMetric } from "@/components/ui";
-import { mockExercises } from "@/data/mockExercises";
+import { useExercise, useQuickValue, useQuickValueActions, useWorkoutActions, useWorkoutDraft } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
@@ -49,10 +48,6 @@ type ActiveMetric = {
   setId: string;
   metric: ApproachMetric;
 };
-type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
-type DayExerciseIds = Partial<Record<RepeatDay, string[]>>;
-const repeatDays: RepeatDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
-
 function getSetListMinHeight(itemCount: number) {
   if (itemCount === 0) return theme.spacing[0];
   return itemCount * theme.sizes.approachCountRowMinHeight + (itemCount - 1) * theme.spacing.sm;
@@ -60,64 +55,6 @@ function getSetListMinHeight(itemCount: number) {
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function parseIds(value?: string | string[]) {
-  const raw = firstParam(value);
-  if (!raw) return [];
-  return raw.split(",").filter(Boolean);
-}
-
-function parseDayExerciseIds(value?: string) {
-  if (!value) return {};
-
-  try {
-    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(parsed).flatMap(([day, ids]) => {
-        if (!repeatDays.includes(day as RepeatDay) || !Array.isArray(ids)) return [];
-        return [[day, ids.filter((id): id is string => typeof id === "string")]];
-      })
-    ) as DayExerciseIds;
-  } catch {
-    return {};
-  }
-}
-
-function serializeDayExerciseIds(data: DayExerciseIds) {
-  const entries = Object.entries(data).filter(([, ids]) => Array.isArray(ids) && ids.length > 0);
-  if (entries.length === 0) return undefined;
-  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
-}
-
-function syncActiveDayExerciseIds(value: string | undefined, activeDay: string | undefined, exerciseIds: string[]) {
-  if (!activeDay || !repeatDays.includes(activeDay as RepeatDay)) return value;
-
-  return serializeDayExerciseIds({
-    ...parseDayExerciseIds(value),
-    [activeDay]: exerciseIds
-  });
-}
-
-function parseApproachData(value?: string | string[]) {
-  const raw = firstParam(value);
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(decodeURIComponent(raw)) as ApproachData;
-  } catch {
-    try {
-      return JSON.parse(raw) as ApproachData;
-    } catch {
-      return {};
-    }
-  }
-}
-
-function serializeApproachData(data: ApproachData) {
-  const entries = Object.entries(data).filter(([, sets]) => sets.length > 0);
-  if (entries.length === 0) return undefined;
-  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
 }
 
 function normalizeMetricHistory(value: unknown): Record<ApproachMetric, number[]> {
@@ -147,42 +84,20 @@ function rememberMetricValue(values: number[], value: number | undefined) {
   return [value, ...values.filter((item) => item !== value)].slice(0, MAX_FREQUENT_VALUE_COUNT);
 }
 
-function getAdjacentConnectionIds(ids: string[]) {
-  return ids.slice(0, -1).map((id, index) => `${id}:${ids[index + 1]}`);
+function ensureUniqueApproachSets(items: ApproachCountItem[], scope = "set") {
+  const seen = new Set<string>();
+
+  return items.map((item, index) => {
+    const baseId = item.id || `${scope}-${index + 1}`;
+    const id = seen.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+    seen.add(id);
+    return { ...item, id, index: index + 1 };
+  });
 }
 
 function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
   if (Platform.OS === "web") return;
   void Haptics.impactAsync(style).catch(() => undefined);
-}
-
-function buildWorkoutParams(
-  clientId: string | undefined,
-  clientName: string | undefined,
-  date: string | undefined,
-  selectedDays: string | undefined,
-  scheduleTimes: string | undefined,
-  activeDay: string | undefined,
-  dayExerciseIds: string | undefined,
-  exerciseIds: string[],
-  supersetConnectionIds: string[],
-  approachData?: ApproachData
-) {
-  const serializedApproachData = approachData ? serializeApproachData(approachData) : undefined;
-  const syncedDayExerciseIds = syncActiveDayExerciseIds(dayExerciseIds, activeDay, exerciseIds);
-
-  return {
-    ...(clientId ? { clientId } : {}),
-    ...(clientName ? { clientName } : {}),
-    ...(date ? { date } : {}),
-    ...(selectedDays ? { selectedDays } : {}),
-    ...(scheduleTimes ? { scheduleTimes } : {}),
-    ...(activeDay ? { activeDay } : {}),
-    ...(syncedDayExerciseIds ? { dayExerciseIds: syncedDayExerciseIds } : {}),
-    ...(exerciseIds.length > 0 ? { exerciseIds: exerciseIds.join(",") } : {}),
-    ...(supersetConnectionIds.length > 0 ? { supersetConnectionIds: supersetConnectionIds.join(",") } : {}),
-    ...(serializedApproachData ? { approachData: serializedApproachData } : {})
-  };
 }
 
 const initialSets: ApproachCountItem[] = [
@@ -206,28 +121,35 @@ function createAddedSet(index: number, template?: ApproachCountItem): ApproachCo
 }
 
 export default function ExerciseApproachScreen() {
-  const { exerciseId, clientId, clientName, date, selectedDays, scheduleTimes, activeDay, dayExerciseIds, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { exerciseId, draftId, exerciseItemId } = useLocalSearchParams<{
     exerciseId?: string;
-    clientId?: string;
-    clientName?: string;
-    date?: string;
-    selectedDays?: string;
-    scheduleTimes?: string;
-    activeDay?: string;
-    dayExerciseIds?: string;
-    exerciseIds?: string;
-    supersetConnectionIds?: string;
-    approachData?: string;
+    draftId?: string;
+    exerciseItemId?: string;
   }>();
   const currentExerciseId = firstParam(exerciseId);
-  const currentActiveDay = firstParam(activeDay);
-  const currentApproachKey = currentExerciseId && currentActiveDay && repeatDays.includes(currentActiveDay as RepeatDay) ? `${currentActiveDay}:${currentExerciseId}` : currentExerciseId;
-  const selectedExerciseIds = useMemo(() => parseIds(exerciseIds), [exerciseIds]);
-  const selectedSupersetConnectionIds = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
-  const currentApproachData = useMemo(() => parseApproachData(approachData), [approachData]);
-  const initialExerciseSets = currentApproachKey && currentApproachData[currentApproachKey] ? currentApproachData[currentApproachKey] : currentExerciseId && currentApproachData[currentExerciseId] ? currentApproachData[currentExerciseId] : initialSets;
-  const exercise = mockExercises.find((item) => item.id === currentExerciseId);
-  const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
+  const draftIdValue = firstParam(draftId);
+  const exerciseItemIdValue = firstParam(exerciseItemId);
+  const { exercise } = useExercise(currentExerciseId);
+  const { draft } = useWorkoutDraft(draftIdValue);
+  const workoutActions = useWorkoutActions();
+  const { quickValue: weightQuickValue } = useQuickValue(currentExerciseId, "weight");
+  const { quickValue: repsQuickValue } = useQuickValue(currentExerciseId, "reps");
+  const quickValueActions = useQuickValueActions();
+  const draftExercise = useMemo(() => draft?.exercises.find((item) => item.id === exerciseItemIdValue), [draft?.exercises, exerciseItemIdValue]);
+  const initialExerciseSets = useMemo(
+    () =>
+      ensureUniqueApproachSets(
+        draftExercise?.sets.map((set, index) => ({
+          id: set.id,
+          index: index + 1,
+          weight: set.targetWeightKg,
+          reps: set.targetReps
+        })) ?? initialSets,
+        exerciseItemIdValue ?? currentExerciseId ?? "set"
+      ),
+    [currentExerciseId, draftExercise?.sets, exerciseItemIdValue]
+  );
+  const [note, setNote] = useState(draftExercise?.comment ?? "");
   const [sets, setSets] = useState(initialExerciseSets);
   const [activeSetId, setActiveSetId] = useState<string | undefined>();
   const [activeMetric, setActiveMetric] = useState<ActiveMetric | undefined>();
@@ -239,7 +161,6 @@ export default function ExerciseApproachScreen() {
   const setsRef = useRef(initialExerciseSets);
   const latestEditedSetRef = useRef<ApproachCountItem | undefined>(undefined);
   const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
-  const metricHistoryKey = useMemo(() => `approachMetricHistory:${currentExerciseId ?? "global"}`, [currentExerciseId]);
   const activePopularValues = useMemo(() => getPopularMetricValues(currentExerciseId, activeMetric?.metric), [activeMetric?.metric, currentExerciseId]);
   const activeFrequentValues = activeMetric ? frequentValues[activeMetric.metric] : [];
   const keyboardAwareOffset = activeMetric ? QUICK_VALUES_KEYBOARD_OFFSET : theme.spacing[0];
@@ -256,61 +177,42 @@ export default function ExerciseApproachScreen() {
   );
 
   useEffect(() => {
-    let mounted = true;
-
-    void AsyncStorage.getItem(metricHistoryKey)
-      .then((value) => {
-        if (!mounted || !value) return;
-        setFrequentValues(normalizeMetricHistory(JSON.parse(value)));
+    setFrequentValues(
+      normalizeMetricHistory({
+        weight: weightQuickValue?.values,
+        reps: repsQuickValue?.values
       })
-      .catch(() => {
-        if (mounted) {
-          setFrequentValues(defaultFrequentValues);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [metricHistoryKey]);
+    );
+  }, [repsQuickValue?.values, weightQuickValue?.values]);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
-    const normalizedSets = nextSets.map((set, index) => ({ ...set, index: index + 1 }));
+    const normalizedSets = ensureUniqueApproachSets(nextSets, exerciseItemIdValue ?? currentExerciseId ?? "set");
     setsRef.current = normalizedSets;
     setSets(normalizedSets);
-  }, []);
+  }, [currentExerciseId, exerciseItemIdValue]);
 
-  const goBackToWorkout = useCallback(
-    (nextExerciseIds = selectedExerciseIds, nextSupersetConnectionIds = selectedSupersetConnectionIds, nextApproachData = currentApproachData) => {
-      router.dismissTo({
-        pathname: "/workouts/new",
-        params: buildWorkoutParams(
-          firstParam(clientId),
-          firstParam(clientName),
-          firstParam(date),
-          firstParam(selectedDays),
-          firstParam(scheduleTimes),
-          currentActiveDay,
-          firstParam(dayExerciseIds),
-          nextExerciseIds,
-          nextSupersetConnectionIds,
-          nextApproachData
-        )
-      });
-    },
-    [clientId, clientName, currentActiveDay, currentApproachData, date, dayExerciseIds, scheduleTimes, selectedDays, selectedExerciseIds, selectedSupersetConnectionIds]
-  );
+  useEffect(() => {
+    setNote(draftExercise?.comment ?? "");
+    syncSets(initialExerciseSets);
+  }, [draftExercise?.comment, initialExerciseSets, syncSets]);
 
-  const saveSets = () => {
-    if (!currentApproachKey) {
-      goBackToWorkout();
+  const saveSets = async () => {
+    if (!draftIdValue || !exerciseItemIdValue) {
+      router.back();
       return;
     }
 
-    goBackToWorkout(selectedExerciseIds, selectedSupersetConnectionIds, {
-      ...currentApproachData,
-      [currentApproachKey]: setsRef.current
+    await workoutActions.updateDraftExercise(draftIdValue, exerciseItemIdValue, {
+      comment: note,
+      sets: setsRef.current.map((set, index) => ({
+        id: set.id,
+        order: index + 1,
+        targetWeightKg: set.weight,
+        targetReps: set.reps,
+        completed: false
+      }))
     });
+    router.back();
   };
 
   const addSet = () => {
@@ -365,11 +267,13 @@ export default function ExerciseApproachScreen() {
         if (nextValues === current[metric]) return current;
 
         const nextHistory = { ...current, [metric]: nextValues };
-        void AsyncStorage.setItem(metricHistoryKey, JSON.stringify(nextHistory)).catch(() => undefined);
+        if (currentExerciseId) {
+          void quickValueActions.upsert({ exerciseId: currentExerciseId, metric, values: nextValues }).catch(() => undefined);
+        }
         return nextHistory;
       });
     },
-    [metricHistoryKey]
+    [currentExerciseId, quickValueActions]
   );
 
   const selectQuickValue = useCallback(
@@ -396,16 +300,12 @@ export default function ExerciseApproachScreen() {
   }, []);
 
   const deleteExercise = () => {
-    if (!currentExerciseId) {
-      goBackToWorkout();
+    if (!draftIdValue || !exerciseItemIdValue) {
+      router.back();
       return;
     }
 
-    const nextExerciseIds = selectedExerciseIds.filter((id) => id !== currentExerciseId);
-    const validConnectionIds = getAdjacentConnectionIds(nextExerciseIds);
-    const nextConnectionIds = selectedSupersetConnectionIds.filter((id) => validConnectionIds.includes(id));
-    const { [currentApproachKey ?? currentExerciseId]: _removed, [currentExerciseId]: _legacyRemoved, ...nextApproachData } = currentApproachData;
-    goBackToWorkout(nextExerciseIds, nextConnectionIds, nextApproachData);
+    void workoutActions.removeDraftExercise(draftIdValue, exerciseItemIdValue).then(() => router.back());
   };
 
   const commitSetOrder = useCallback(

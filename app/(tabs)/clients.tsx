@@ -2,20 +2,16 @@ import { router } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Badge, Button, Header, ListItemCell, getListItemCellGroupPosition } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
+import { useClients } from "@/data";
 import { theme } from "@/theme";
 
 export default function ClientsScreen() {
-  const activeClientsCount = mockClients.filter((client) => client.status === "active").length;
-  const averageAttendanceRate = Math.round(mockClients.reduce((total, client) => total + client.metrics.attendanceRate, 0) / mockClients.length);
+  const { clients } = useClients();
+  const activeClientsCount = clients.filter((client) => client.status === "active").length;
+  const averageAttendanceRate = clients.length > 0 ? Math.round(clients.reduce((total, client) => total + client.metrics.attendanceRate, 0) / clients.length) : 0;
 
   const openNewClient = () => {
-    router.push({
-      pathname: "/clients/new",
-      params: {
-        returnTo: "/workouts/new"
-      }
-    });
+    router.push("/clients/new");
   };
 
   return (
@@ -40,10 +36,10 @@ export default function ClientsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Список клиентов</Text>
-            <Badge label={`${mockClients.length}`} tone="primary" size="s" icon={false} />
+            <Badge label={`${clients.length}`} tone="primary" size="s" icon={false} />
           </View>
           <View style={styles.listGroup}>
-            {mockClients.map((client, index) => (
+            {clients.map((client, index) => (
               <ListItemCell
                 key={client.id}
                 title={client.name}
@@ -53,7 +49,7 @@ export default function ClientsScreen() {
                 avatarInitials={client.avatarInitials}
                 trailing="text"
                 trailingText={`${client.metrics.attendanceRate}%`}
-                groupPosition={getListItemCellGroupPosition(index, mockClients.length)}
+                groupPosition={getListItemCellGroupPosition(index, clients.length)}
               />
             ))}
           </View>

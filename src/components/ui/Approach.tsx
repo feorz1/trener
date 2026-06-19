@@ -108,6 +108,17 @@ const metricInputReset =
 const ROW_SLOT_HEIGHT = theme.sizes.approachCountRowMinHeight + theme.spacing.xs;
 const TIMING_CONFIG = { duration: 180, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) };
 
+function getUniqueSetIds(sets: ApproachSet[]) {
+  const seen = new Set<string>();
+
+  return sets.map((set, index) => {
+    const baseId = set.id || `set-${index + 1}`;
+    const id = seen.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+    seen.add(id);
+    return { ...set, id, index: index + 1 };
+  });
+}
+
 type DragState = {
   id: string;
   startIndex: number;
@@ -182,9 +193,10 @@ export function Approach({
   onSetsReorder,
   style
 }: ApproachProps) {
-  const initialStateById = useMemo(() => getStateById(sets), [sets]);
-  const initialValueById = useMemo(() => getValueById(sets), [sets]);
-  const [orderedSets, setOrderedSets] = useState(sets);
+  const uniqueSets = useMemo(() => getUniqueSetIds(sets), [sets]);
+  const initialStateById = useMemo(() => getStateById(uniqueSets), [uniqueSets]);
+  const initialValueById = useMemo(() => getValueById(uniqueSets), [uniqueSets]);
+  const [orderedSets, setOrderedSets] = useState(uniqueSets);
   const [stateById, setStateById] = useState(initialStateById);
   const [valueById, setValueById] = useState(initialValueById);
   const [savedNote, setSavedNote] = useState(note ?? "");
@@ -193,7 +205,7 @@ export function Approach({
   const [dragState, setDragState] = useState<DragState | null>(null);
   const dragY = useSharedValue<number>(theme.spacing[0]);
   const dragTargetIndex = useSharedValue<number>(theme.spacing[0]);
-  const orderedSetsRef = useRef(sets);
+  const orderedSetsRef = useRef(uniqueSets);
   const dragSession = useRef<DragSession | null>(null);
   const [openDeleteRowId, setOpenDeleteRowId] = useState<string | null>(null);
   const resolvedNote = note ?? savedNote;
@@ -202,9 +214,9 @@ export function Approach({
   const dragOverlayTop = dragState ? dragState.startIndex * ROW_SLOT_HEIGHT : theme.spacing[0];
 
   useEffect(() => {
-    orderedSetsRef.current = sets;
-    setOrderedSets(sets);
-  }, [sets]);
+    orderedSetsRef.current = uniqueSets;
+    setOrderedSets(uniqueSets);
+  }, [uniqueSets]);
 
   useEffect(() => {
     orderedSetsRef.current = orderedSets;

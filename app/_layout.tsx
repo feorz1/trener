@@ -4,6 +4,7 @@ import { Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import Sortable from "react-native-sortables";
+import { DataProvider } from "@/data";
 import { theme } from "@/theme";
 
 export default function RootLayout() {
@@ -89,7 +90,9 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background.canvasSoft }}>
-      <KeyboardProvider>{Platform.OS === "web" ? appStack : <Sortable.PortalProvider>{appStack}</Sortable.PortalProvider>}</KeyboardProvider>
+      <DataProvider>
+        <KeyboardProvider>{Platform.OS === "web" ? appStack : <Sortable.PortalProvider>{appStack}</Sortable.PortalProvider>}</KeyboardProvider>
+      </DataProvider>
     </GestureHandlerRootView>
   );
 }

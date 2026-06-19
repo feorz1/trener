@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Modal, Variant } from "@/components/ui";
+import { useWorkoutActions, useWorkoutDraft } from "@/data";
 import { freeSlots, isCalendarSlot, repeatDayLabels, repeatOptions, type CalendarSlot, type RepeatDay } from "@/features/workouts/scheduleOptions";
 import { theme } from "@/theme";
 
@@ -21,21 +22,12 @@ function isRepeatDay(value?: string): value is RepeatDay {
   return repeatOptions.some((option) => option.key === value);
 }
 
-function parseScheduleTimes(value?: string) {
+function normalizeScheduleTimes(value?: Partial<Record<RepeatDay, string>>) {
   if (!value) return {};
 
-  try {
-    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, string>;
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [RepeatDay, CalendarSlot] => isRepeatDay(entry[0]) && isCalendarSlot(entry[1]))
-    ) as ScheduleTimes;
-  } catch {
-    return {};
-  }
-}
-
-function serializeScheduleTimes(value: ScheduleTimes) {
-  return encodeURIComponent(JSON.stringify(value));
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [RepeatDay, CalendarSlot] => isRepeatDay(entry[0]) && isCalendarSlot(entry[1]))
+  ) as ScheduleTimes;
 }
 
 function capitalize(value: string) {
@@ -45,72 +37,59 @@ function capitalize(value: string) {
 
 export default function WorkoutSlotSelectSheet() {
   const {
-    clientId,
-    clientName,
-    date,
-    selectedDays,
-    scheduleTimes,
+    draftId,
     slotDay,
-    returnTo,
-    activeDay,
-    dayExerciseIds,
-    exerciseIds,
-    supersetConnectionIds,
-    approachData
+    returnTo
   } = useLocalSearchParams<{
-    clientId?: string;
-    clientName?: string;
-    date?: string;
-    selectedDays?: string;
-    scheduleTimes?: string;
+    draftId?: string;
     slotDay?: string;
     returnTo?: string;
-    activeDay?: string;
-    dayExerciseIds?: string;
-    exerciseIds?: string;
-    supersetConnectionIds?: string;
-    approachData?: string;
   }>();
+  const draftIdValue = firstParam(draftId);
+  const { draft } = useWorkoutDraft(draftIdValue);
+  const workouts = useWorkoutActions();
   const slotDayValue = firstParam(slotDay);
   const activeSlotDay: RepeatDay | undefined = isRepeatDay(slotDayValue) ? slotDayValue : undefined;
   const shouldReturnToWorkoutNew = firstParam(returnTo) === "workout-new";
-  const parsedScheduleTimes = useMemo(() => parseScheduleTimes(firstParam(scheduleTimes)), [scheduleTimes]);
+  const selectedDayValues = useMemo(() => draft?.repeatDays ?? [], [draft?.repeatDays]);
+  const parsedScheduleTimes = useMemo(() => normalizeScheduleTimes(draft?.scheduleTimes), [draft?.scheduleTimes]);
   const [selectedSlot, setSelectedSlot] = useState<CalendarSlot | undefined>(() => (activeSlotDay ? parsedScheduleTimes[activeSlotDay] : undefined));
 
-  const getWorkoutNewParams = (nextScheduleTimes: ScheduleTimes) => ({
-    ...(firstParam(clientId) ? { clientId: firstParam(clientId) } : {}),
-    ...(firstParam(clientName) ? { clientName: firstParam(clientName) } : {}),
-    ...(firstParam(date) ? { date: firstParam(date) } : {}),
-    ...(firstParam(selectedDays) ? { selectedDays: firstParam(selectedDays) } : {}),
-    scheduleTimes: serializeScheduleTimes(nextScheduleTimes),
-    ...(firstParam(activeDay) ? { activeDay: firstParam(activeDay) } : {}),
-    ...(firstParam(dayExerciseIds) ? { dayExerciseIds: firstParam(dayExerciseIds) } : {}),
-    ...(firstParam(exerciseIds) ? { exerciseIds: firstParam(exerciseIds) } : {}),
-    ...(firstParam(supersetConnectionIds) ? { supersetConnectionIds: firstParam(supersetConnectionIds) } : {}),
-    ...(firstParam(approachData) ? { approachData: firstParam(approachData) } : {})
-  });
-
   const closeSheet = () => {
-    if (shouldReturnToWorkoutNew) {
-      router.dismissTo({
-        pathname: "/workouts/new",
-        params: getWorkoutNewParams(parsedScheduleTimes)
-      });
-      return;
-    }
-
     router.back();
   };
 
-  const saveSlot = () => {
+  const saveSlot = async () => {
     if (!activeSlotDay || !selectedSlot) return;
 
     const nextScheduleTimes = { ...parsedScheduleTimes, [activeSlotDay]: selectedSlot };
+    if (draftIdValue) {
+      await workouts.updateDraft(draftIdValue, {
+        repeatDays: selectedDayValues,
+        scheduleTimes: nextScheduleTimes
+      });
+    }
 
     if (shouldReturnToWorkoutNew) {
+      const nextMissingDay = selectedDayValues.find((day) => !nextScheduleTimes[day]);
+      if (nextMissingDay) {
+        router.replace({
+          pathname: "/workouts/slot-select",
+          params: {
+            draftId: draftIdValue,
+            returnTo: "workout-new",
+            slotDay: nextMissingDay
+          }
+        });
+        return;
+      }
+
       router.dismissTo({
         pathname: "/workouts/new",
-        params: getWorkoutNewParams(nextScheduleTimes)
+        params: {
+          draftId: draftIdValue,
+          activeDay: activeSlotDay
+        }
       });
       return;
     }
@@ -118,11 +97,7 @@ export default function WorkoutSlotSelectSheet() {
     router.dismissTo({
       pathname: "/workouts/schedule",
       params: {
-        ...(firstParam(clientId) ? { clientId: firstParam(clientId) } : {}),
-        ...(firstParam(clientName) ? { clientName: firstParam(clientName) } : {}),
-        ...(firstParam(date) ? { date: firstParam(date) } : {}),
-        ...(firstParam(selectedDays) ? { selectedDays: firstParam(selectedDays) } : {}),
-        scheduleTimes: serializeScheduleTimes(nextScheduleTimes)
+        ...(draftIdValue ? { draftId: draftIdValue } : {})
       }
     });
   };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 import { Button } from "./Button";
 import { Icon, type IconName } from "./Icon";
@@ -116,11 +116,15 @@ export function Card({
   const shouldShowMenu = showMenu && Boolean(onMove || onCancel);
   const exerciseLabel = `${exerciseCount} упражнений`;
   const progressLabel = `${completedExercises} из ${totalExercises} упражнений`;
+  const workoutAction = isCompleted ? undefined : isInProgress ? onContinue : onStart;
+  const workoutActionLabel = isInProgress ? continueLabel : startLabel;
 
   return (
     <Pressable
       {...pressableProps}
-      accessibilityRole={pressableProps.onPress ? "button" : undefined}
+      accessibilityLabel={pressableProps.accessibilityLabel ?? (workoutAction ? `${workoutActionLabel}: ${muscleGroup}, ${clientName}` : undefined)}
+      accessibilityRole={workoutAction || pressableProps.onPress ? "button" : undefined}
+      onPress={pressableProps.onPress ?? workoutAction}
       style={({ pressed }) => [styles.workoutRoot, menuOpen && styles.workoutRootWithMenu, pressed && styles.pressed, style]}
     >
       <View style={styles.workoutContent}>
@@ -177,13 +181,29 @@ export function Card({
 
       {!isCompleted && shouldShowAction ? (
         <View style={styles.workoutAction}>
-          <Button
-            label={isInProgress ? continueLabel : startLabel}
-            type={isInProgress ? "secondary" : "tertiary"}
-            size="medium"
-            width="fill"
-            onPress={isInProgress ? onContinue : onStart}
-          />
+          {Platform.OS === "web" ? (
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              pointerEvents="none"
+              style={[
+                styles.workoutActionButton,
+                isInProgress ? styles.workoutActionButtonSecondary : styles.workoutActionButtonTertiary
+              ]}
+            >
+              <Text style={[styles.workoutActionButtonLabel, isInProgress ? styles.workoutActionLabelSecondary : styles.workoutActionLabelTertiary]}>
+                {workoutActionLabel}
+              </Text>
+            </View>
+          ) : (
+            <Button
+              label={workoutActionLabel}
+              type={isInProgress ? "secondary" : "tertiary"}
+              size="medium"
+              width="fill"
+              onPress={workoutAction}
+            />
+          )}
         </View>
       ) : null}
     </Pressable>
@@ -339,6 +359,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.xxs,
     paddingBottom: theme.spacing.lg
+  },
+  workoutActionButton: {
+    alignSelf: "stretch",
+    width: "100%",
+    minHeight: theme.sizes.buttonMediumHeight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.lg
+  },
+  workoutActionButtonSecondary: {
+    backgroundColor: theme.colors.content.primary
+  },
+  workoutActionButtonTertiary: {
+    backgroundColor: theme.colors.background.canvas
+  },
+  workoutActionButtonLabel: {
+    ...theme.typography.button.md
+  },
+  workoutActionLabelSecondary: {
+    color: theme.colors.content.inkDeep
+  },
+  workoutActionLabelTertiary: {
+    color: theme.colors.content.inkDeep
   },
   clientName: {
     ...theme.typography.display.xs,

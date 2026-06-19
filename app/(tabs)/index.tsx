@@ -5,8 +5,7 @@ import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } 
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Button, Card, Header, Icon } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
-import { mockWorkouts } from "@/data/mockWorkouts";
+import { useClients, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
 import {
   parseWorkoutResult,
   parseWorkoutSessionSnapshots,
@@ -16,7 +15,7 @@ import {
 } from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
-import type { Workout, WorkoutStatus } from "@/types";
+import type { Client, Workout, WorkoutResult, WorkoutSession, WorkoutStatus } from "@/types";
 import { formatRuDayMonth } from "@/utils/date";
 
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
@@ -62,32 +61,6 @@ function parseRepeatDays(value?: string) {
   return value
     .split(",")
     .filter((day): day is RepeatDay => repeatDayKeys.has(day as RepeatDay));
-}
-
-function parseScheduleTimes(value?: string) {
-  if (!value) return {};
-
-  try {
-    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [RepeatDay, string] => repeatDayKeys.has(entry[0] as RepeatDay) && typeof entry[1] === "string")
-    ) as Partial<Record<RepeatDay, string>>;
-  } catch {
-    return {};
-  }
-}
-
-function parseExerciseCounts(value?: string) {
-  if (!value) return {};
-
-  try {
-    const parsed = JSON.parse(decodeURIComponent(value)) as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [RepeatDay, number] => repeatDayKeys.has(entry[0] as RepeatDay) && typeof entry[1] === "number" && Number.isFinite(entry[1]))
-    ) as Partial<Record<RepeatDay, number>>;
-  } catch {
-    return {};
-  }
 }
 
 function startOfDay(date: Date) {
@@ -202,10 +175,32 @@ function getCompletedExerciseCount(workout: Workout) {
   return workout.exercises.filter((exercise) => exercise.sets.length > 0 && exercise.sets.every((set) => set.completed)).length;
 }
 
-function buildTodayWorkout(workout: Workout): TodayWorkout | undefined {
-  if (workout.status !== "planned" && workout.status !== "inProgress" && workout.status !== "completed") return undefined;
+function getSessionProgress(session: WorkoutSession, results: WorkoutResult[]) {
+  const sessionResults = results.filter((result) => result.sessionId === session.id);
+  const completedExercises = session.exercises.filter((exercise) => {
+    const exerciseResults = sessionResults.filter((result) => result.exerciseId === exercise.exerciseId);
+    return exerciseResults.length > 0 && exerciseResults.every((result) => result.completed);
+  }).length;
 
-  const client = mockClients.find((item) => item.id === workout.clientId);
+  return {
+    completedExercises,
+    totalExercises: session.exercises.length
+  };
+}
+
+function getLatestSession(workoutId: string, sessions: WorkoutSession[]) {
+  return sessions
+    .filter((session) => session.workoutId === workoutId)
+    .sort((left, right) => new Date(right.startedAt).getTime() - new Date(left.startedAt).getTime())[0];
+}
+
+function buildTodayWorkout(workout: Workout, clients: Client[], sessions: WorkoutSession[], results: WorkoutResult[]): TodayWorkout | undefined {
+  if (workout.status !== "planned" && workout.status !== "active" && workout.status !== "inProgress" && workout.status !== "completed") return undefined;
+
+  const client = clients.find((item) => item.id === workout.clientId);
+  const session = getLatestSession(workout.id, sessions);
+  const sessionProgress = session ? getSessionProgress(session, results) : null;
+  const status = session?.status === "active" || workout.status === "active" ? "inProgress" : session?.status === "completed" ? "completed" : workout.status;
 
   return {
     id: workout.id,
@@ -213,18 +208,18 @@ function buildTodayWorkout(workout: Workout): TodayWorkout | undefined {
     clientName: client?.name ?? "Клиент",
     time: getTimeLabel(workout.startsAt),
     title: workout.title,
-    exercisesCount: workout.exercises.length,
-    completedExercises: getCompletedExerciseCount(workout),
-    status: workout.status
+    exercisesCount: sessionProgress?.totalExercises ?? workout.exercises.length,
+    completedExercises: sessionProgress?.completedExercises ?? getCompletedExerciseCount(workout),
+    status
   };
 }
 
-function getDemoWorkouts(): Record<string, TodayWorkout[]> {
-  return mockWorkouts.reduce<Record<string, TodayWorkout[]>>((workoutsByDay, workout) => {
+function getStoreWorkouts(workouts: Workout[], clients: Client[], sessions: WorkoutSession[], results: WorkoutResult[]): Record<string, TodayWorkout[]> {
+  return workouts.reduce<Record<string, TodayWorkout[]>>((workoutsByDay, workout) => {
     const startsAt = new Date(workout.startsAt);
     if (Number.isNaN(startsAt.getTime())) return workoutsByDay;
 
-    const todayWorkout = buildTodayWorkout(workout);
+    const todayWorkout = buildTodayWorkout(workout, clients, sessions, results);
     if (!todayWorkout) return workoutsByDay;
 
     addWorkoutToDay(workoutsByDay, getDateKey(startsAt), todayWorkout);
@@ -244,15 +239,14 @@ function addWorkoutToDay(workoutsByDay: Record<string, TodayWorkout[]>, dayKey: 
 }
 
 export default function IndexScreen() {
+  const { workouts } = useWorkouts();
+  const { clients } = useClients();
+  const { sessions: workoutSessions } = useSessions();
+  const { results } = useResults();
+  const sessions = useSessionActions();
+  const workoutActions = useWorkoutActions();
   const {
-    plannedWorkout,
     plannedDate,
-    plannedTime,
-    plannedClientName,
-    plannedExerciseCount,
-    plannedExerciseCounts,
-    plannedRepeatDays,
-    plannedScheduleTimes,
     completedWorkoutId,
     completedExercises,
     totalExercises,
@@ -261,14 +255,7 @@ export default function IndexScreen() {
     activeTotalExercises,
     activeWorkoutSnapshots
   } = useLocalSearchParams<{
-    plannedWorkout?: string;
     plannedDate?: string;
-    plannedTime?: string;
-    plannedClientName?: string;
-    plannedExerciseCount?: string;
-    plannedExerciseCounts?: string;
-    plannedRepeatDays?: string;
-    plannedScheduleTimes?: string;
     completedWorkoutId?: string;
     completedExercises?: string;
     totalExercises?: string;
@@ -280,13 +267,6 @@ export default function IndexScreen() {
   const insets = useSafeAreaInsets();
   const today = useMemo(() => startOfDay(new Date()), []);
   const plannedDateKey = firstParam(plannedDate);
-  const plannedWorkoutValue = firstParam(plannedWorkout);
-  const plannedTimeValue = firstParam(plannedTime);
-  const plannedClientNameValue = firstParam(plannedClientName);
-  const plannedExerciseCountValueParam = firstParam(plannedExerciseCount);
-  const plannedExerciseCountsValue = firstParam(plannedExerciseCounts);
-  const plannedRepeatDaysValue = firstParam(plannedRepeatDays);
-  const plannedScheduleTimesValue = firstParam(plannedScheduleTimes);
   const completedWorkoutIdValue = firstParam(completedWorkoutId);
   const completedExercisesValue = Number(firstParam(completedExercises));
   const totalExercisesValue = Number(firstParam(totalExercises));
@@ -322,10 +302,10 @@ export default function IndexScreen() {
   const weekItems = useMemo(() => weekPages.flat(), [weekPages]);
   const todayKey = useMemo(() => getDateKey(today), [today]);
   const workoutsByDay = useMemo(() => {
-    const demoWorkouts = getDemoWorkouts();
+    const storeWorkouts = getStoreWorkouts(workouts, clients, workoutSessions, results);
 
     if (completedWorkoutIdValue) {
-      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+      Object.values(storeWorkouts).forEach((dayWorkouts) => {
         const workout = dayWorkouts.find((item) => item.workoutId === completedWorkoutIdValue);
         if (!workout) return;
 
@@ -340,7 +320,7 @@ export default function IndexScreen() {
     }
 
     if (activeWorkoutIdValue) {
-      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+      Object.values(storeWorkouts).forEach((dayWorkouts) => {
         const workout = dayWorkouts.find((item) => item.workoutId === activeWorkoutIdValue);
         if (!workout) return;
 
@@ -359,7 +339,7 @@ export default function IndexScreen() {
       if (!snapshot) return;
 
       const summary = summarizeWorkoutResult(snapshot);
-      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+      Object.values(storeWorkouts).forEach((dayWorkouts) => {
         const workout = dayWorkouts.find((item) => item.workoutId === workoutId);
         if (!workout) return;
 
@@ -370,7 +350,7 @@ export default function IndexScreen() {
     });
 
     Object.entries(effectiveCompletedWorkoutMap).forEach(([workoutId, completedState]) => {
-      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+      Object.values(storeWorkouts).forEach((dayWorkouts) => {
         const workout = dayWorkouts.find((item) => item.workoutId === workoutId);
         if (!workout) return;
 
@@ -382,51 +362,14 @@ export default function IndexScreen() {
       });
     });
 
-    if (plannedWorkoutValue === "1" && plannedDateKey) {
-      const plannedExerciseCountValue = Number(plannedExerciseCountValueParam ?? 6);
-      const plannedStartDate = parseDateKey(plannedDateKey);
-      const repeatDays = parseRepeatDays(plannedRepeatDaysValue);
-      const scheduleTimes = parseScheduleTimes(plannedScheduleTimesValue);
-      const exerciseCounts = parseExerciseCounts(plannedExerciseCountsValue);
-      const visibleDates = weekItems.flatMap((item) => parseDateKey(item.key) ?? []);
-      const occurrenceKeys = new Set<string>([plannedDateKey]);
 
-      if (plannedStartDate && repeatDays.length > 0) {
-        visibleDates.forEach((date) => {
-          const repeatDay = repeatDayByNativeWeekday[date.getDay()];
-          if (date >= plannedStartDate && repeatDays.includes(repeatDay)) {
-            occurrenceKeys.add(getDateKey(date));
-          }
-        });
-      }
-
-      occurrenceKeys.forEach((dayKey) => {
-        const occurrenceDate = parseDateKey(dayKey);
-        const occurrenceDay = occurrenceDate ? repeatDayByNativeWeekday[occurrenceDate.getDay()] : undefined;
-
-        addWorkoutToDay(demoWorkouts, dayKey, {
-          id: `workout-new-planned-${dayKey}`,
-          workoutId: undefined,
-          clientName: plannedClientNameValue ?? "Константин",
-          time: (occurrenceDay ? scheduleTimes[occurrenceDay] : undefined) ?? plannedTimeValue ?? "17:00",
-          title: "Руки",
-          exercisesCount: occurrenceDay ? (exerciseCounts[occurrenceDay] ?? (Number.isFinite(plannedExerciseCountValue) ? plannedExerciseCountValue : 6)) : Number.isFinite(plannedExerciseCountValue) ? plannedExerciseCountValue : 6,
-          completedExercises: 0,
-          status: "planned"
-        });
-      });
-    }
-
-    return demoWorkouts;
+    return storeWorkouts;
   }, [
-    plannedClientNameValue,
+    clients,
+    results,
+    workoutSessions,
+    workouts,
     plannedDateKey,
-    plannedExerciseCountValueParam,
-    plannedExerciseCountsValue,
-    plannedRepeatDaysValue,
-    plannedScheduleTimesValue,
-    plannedTimeValue,
-    plannedWorkoutValue,
     completedExercisesValue,
     completedWorkoutIdValue,
     totalExercisesValue,
@@ -567,15 +510,14 @@ export default function IndexScreen() {
     []
   );
 
-  const openWorkoutSession = (workoutId: string) => {
-    const sessionSnapshot = effectiveActiveWorkoutSnapshotMap[workoutId];
+  const openWorkoutSession = async (workoutId: string) => {
+    const session = await sessions.start(workoutId);
 
     router.push({
       pathname: "/workouts/[workoutId]/session",
       params: {
-        workoutId,
-        ...(sessionSnapshot ? { sessionSnapshot } : {}),
-        ...(serializedEffectiveActiveWorkoutSnapshots ? { activeWorkoutSnapshots: serializedEffectiveActiveWorkoutSnapshots } : {})
+        workoutId: session.id,
+        sessionId: session.id
       }
     });
   };
@@ -585,10 +527,14 @@ export default function IndexScreen() {
     openWorkoutSession(workoutId);
   };
 
-  const openPlanningChoice = () => {
+  const openPlanningChoice = async () => {
+    const draft = await workoutActions.createDraft({
+      startsAt: parseDateKey(selectedDayKey)?.toISOString()
+    });
+
     router.push({
       pathname: "/workouts/client-select",
-      params: { date: selectedDayKey }
+      params: { draftId: draft.id }
     });
   };
 

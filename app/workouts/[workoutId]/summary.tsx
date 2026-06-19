@@ -4,51 +4,49 @@ import { useEffect, useMemo, useRef } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Badge, Button, Divider, Header, ListItemGym, Navigation, ProgressBar, type WorkoutSetValue } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
-import { mockWorkouts } from "@/data/mockWorkouts";
+import { useClient, useSession, useSessionResults, useWorkout } from "@/data";
 import {
   formatResultDuration,
   getCompletedSets,
   getLoggedSets,
-  parseWorkoutResult,
-  parseWorkoutSessionSnapshots,
-  serializeWorkoutSessionSnapshots,
   summarizeWorkoutResult,
   type WorkoutResultSnapshot
 } from "@/features/workouts/sessionResult";
 import { WorkoutSummaryLightRays } from "@/features/workouts/WorkoutSummaryLightRays";
 import { workoutSummaryLightRaysDefaultConfig } from "@/features/workouts/WorkoutSummaryLightRaysConfig";
 import { theme } from "@/theme";
-import type { Workout } from "@/types";
+import type { WorkoutSession } from "@/types";
 
 type RouteParams = {
   workoutId?: string | string[];
-  snapshot?: string | string[];
-  activeWorkoutSnapshots?: string | string[];
+  sessionId?: string | string[];
 };
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function buildFallbackSnapshot(workout: Workout): WorkoutResultSnapshot {
+function buildSnapshot(session: WorkoutSession, clientName: string, results: ReturnType<typeof useSessionResults>["results"]): WorkoutResultSnapshot {
   return {
-    workoutId: workout.id,
-    clientName: mockClients.find((item) => item.id === workout.clientId)?.name ?? "Клиент",
-    durationSeconds: workout.durationMinutes * 60,
-    exercises: workout.exercises.map((exercise) => ({
+    workoutId: session.workoutId,
+    clientName,
+    durationSeconds: session.durationSeconds ?? Math.max(0, Math.floor((Date.now() - new Date(session.startedAt).getTime()) / 1000)),
+    exercises: session.exercises.map((exercise) => ({
       id: exercise.id,
       exerciseId: exercise.exerciseId,
       exerciseName: exercise.exerciseName,
-      sets: exercise.sets.map((set) => ({
-        id: set.id,
-        index: set.order,
-        reps: set.actualReps ?? set.targetReps,
-        weight: set.actualWeightKg ?? set.targetWeightKg,
-        unit: "кг",
-        state: set.completed ? "selected" : "default",
-        logged: Boolean(set.actualReps || set.actualWeightKg)
-      }))
+      sets: results
+        .filter((result) => result.exerciseId === exercise.exerciseId)
+        .sort((left, right) => left.setIndex - right.setIndex)
+        .map((set) => ({
+          id: set.setId ?? set.id,
+          index: set.setIndex,
+          reps: set.repetitions,
+          weight: set.weight,
+          unit: set.unit ?? "кг",
+          state: set.completed ? "selected" as const : "default" as const,
+          logged: Boolean(set.repetitions || set.weight)
+        }))
     }))
   };
 }
@@ -58,41 +56,55 @@ function formatSetLabel(set: { reps?: number; weight?: number; unit?: string }) 
 }
 
 export default function WorkoutSummaryScreen() {
-  const { workoutId: rawWorkoutId, snapshot: rawSnapshot, activeWorkoutSnapshots: rawActiveWorkoutSnapshots } = useLocalSearchParams<RouteParams>();
-  const workoutId = firstParam(rawWorkoutId);
-  const fallbackWorkout = useMemo(() => mockWorkouts.find((item) => item.id === workoutId) ?? mockWorkouts[0], [workoutId]);
-  const parsedSnapshot = useMemo(() => parseWorkoutResult(rawSnapshot), [rawSnapshot]);
-  const snapshot = parsedSnapshot ?? buildFallbackSnapshot(fallbackWorkout);
-  const summary = useMemo(() => summarizeWorkoutResult(snapshot), [snapshot]);
-  const activeWorkoutSnapshotMap = useMemo(() => parseWorkoutSessionSnapshots(rawActiveWorkoutSnapshots), [rawActiveWorkoutSnapshots]);
+  const { workoutId: rawWorkoutId, sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
+  const sessionId = firstParam(rawSessionId) ?? firstParam(rawWorkoutId);
+  const { session } = useSession(sessionId);
+  const { workout } = useWorkout(session?.workoutId);
+  const { client } = useClient(session?.clientId ?? workout?.clientId);
+  const { results } = useSessionResults(sessionId);
+  const snapshot = useMemo(() => session ? buildSnapshot(session, client?.name ?? "Клиент", results) : null, [client?.name, results, session]);
+  const summary = useMemo(
+    () =>
+      snapshot
+        ? summarizeWorkoutResult(snapshot)
+        : {
+            completedExercises: 0,
+            totalExercises: 0,
+            loggedExercises: 0,
+            loggedSets: 0,
+            totalVolumeKg: 0,
+            calories: null
+          },
+    [snapshot]
+  );
   const resultExercises = useMemo(
     () =>
-      snapshot.exercises
+      snapshot?.exercises
         .map((exercise) => ({
           ...exercise,
           completedSets: getCompletedSets(exercise),
           loggedSets: getLoggedSets(exercise)
         }))
-        .filter((exercise) => exercise.completedSets.length > 0),
-    [snapshot.exercises]
+        .filter((exercise) => exercise.completedSets.length > 0) ?? [],
+    [snapshot?.exercises]
   );
   const hapticPlayedRef = useRef(false);
   const completionIsFull = summary.totalExercises > 0 && summary.completedExercises === summary.totalExercises;
   const closeSummary = () => {
-    const nextSnapshotMap = { ...activeWorkoutSnapshotMap };
-    delete nextSnapshotMap[snapshot.workoutId];
-    const serializedSnapshotMap = serializeWorkoutSessionSnapshots(nextSnapshotMap);
-
-    router.dismissTo({
-      pathname: "/",
-      params: {
-        completedWorkoutId: snapshot.workoutId,
-        completedExercises: String(summary.completedExercises),
-        totalExercises: String(summary.totalExercises),
-        ...(serializedSnapshotMap ? { activeWorkoutSnapshots: serializedSnapshotMap } : {})
-      }
-    });
+    router.dismissTo("/");
   };
+
+  if (!snapshot) {
+    return (
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+        <Navigation title="Итоги тренировки" backIconName="close" backAccessibilityLabel="Закрыть" onBack={() => router.dismissTo("/")} />
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Сессия не найдена</Text>
+          <Text style={styles.emptyCopy}>Вернитесь на главный экран и запустите тренировку заново.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   useEffect(() => {
     if (hapticPlayedRef.current) return;

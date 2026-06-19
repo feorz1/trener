@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { ListItemCell, Modal, Radio } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
+import { useClients, useWorkoutActions, useWorkoutDraft } from "@/data";
 import { theme } from "@/theme";
 
 function firstParam(value?: string | string[]) {
@@ -10,23 +10,27 @@ function firstParam(value?: string | string[]) {
 }
 
 export default function WorkoutClientSelectSheet() {
-  const { date } = useLocalSearchParams<{ date?: string }>();
-  const selectedDate = firstParam(date);
+  const { draftId } = useLocalSearchParams<{ draftId?: string }>();
+  const draftIdValue = firstParam(draftId);
+  const { clients } = useClients();
+  const { draft } = useWorkoutDraft(draftIdValue);
+  const workouts = useWorkoutActions();
   const [selectedClientId, setSelectedClientId] = useState<string | undefined>();
 
   const closeSheet = () => {
     router.back();
   };
 
-  const chooseClient = () => {
-    if (!selectedClientId) return;
+  const chooseClient = async () => {
+    if (!selectedClientId || !draftIdValue || !draft) return;
+
+    await workouts.setDraftClient(draftIdValue, selectedClientId);
 
     router.dismissAll();
     router.push({
       pathname: "/workouts/schedule",
       params: {
-        clientId: selectedClientId,
-        ...(selectedDate ? { date: selectedDate } : {})
+        draftId: draftIdValue
       }
     });
   };
@@ -37,7 +41,7 @@ export default function WorkoutClientSelectSheet() {
       pathname: "/clients/new",
       params: {
         returnTo: "/workouts/schedule",
-        ...(selectedDate ? { date: selectedDate } : {})
+        ...(draftIdValue ? { draftId: draftIdValue } : {})
       }
     });
   };
@@ -58,7 +62,7 @@ export default function WorkoutClientSelectSheet() {
         bodyStyle={styles.body}
         style={styles.modal}
       >
-        {mockClients.map((client) => {
+        {clients.map((client) => {
           const selected = client.id === selectedClientId;
 
           return (

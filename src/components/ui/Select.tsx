@@ -15,6 +15,7 @@ export type SelectProps = Omit<PressableProps, "children" | "disabled" | "style"
   showLabel?: boolean;
   showMessage?: boolean;
   width?: "fixed" | "fill";
+  inset?: "default" | "none";
 };
 
 const stateColor: Record<SelectState, string> = {
@@ -53,6 +54,7 @@ export function Select({
   showLabel = true,
   showMessage = true,
   width = "fixed",
+  inset = "default",
   accessibilityLabel,
   onBlur,
   onFocus,
@@ -68,7 +70,7 @@ export function Select({
   const valueColor = disabled || !hasValue ? theme.colors.content.mute : theme.colors.content.ink;
 
   return (
-    <View style={[styles.root, width === "fill" && styles.rootFill]}>
+    <View style={[styles.root, inset === "none" && styles.rootNoInset, width === "fill" && styles.rootFill]}>
       {showLabel ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
 
       <Pressable
@@ -117,6 +119,10 @@ const styles = StyleSheet.create({
   rootFill: {
     width: "auto",
     alignSelf: "stretch"
+  },
+  rootNoInset: {
+    paddingHorizontal: theme.spacing[0],
+    paddingBottom: theme.spacing[0]
   },
   label: {
     ...theme.typography.body.smStrong
