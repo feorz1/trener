@@ -413,7 +413,10 @@ export default function NewWorkoutScreen() {
   const openExerciseSelection = useCallback(() => {
     router.push({
       pathname: "/workouts/exercises",
-      params: getSharedParams()
+      params: {
+        mode: "workout-draft",
+        ...getSharedParams()
+      }
     });
   }, [getSharedParams]);
 

@@ -5,7 +5,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet } from "@/components/ui";
 import { mockClients } from "@/data/mockClients";
 import { mockWorkouts } from "@/data/mockWorkouts";
-import { formatTimerDuration, serializeWorkoutResult, type SessionResultSet } from "@/features/workouts/sessionResult";
+import {
+  formatTimerDuration,
+  parseWorkoutResult,
+  parseWorkoutSessionSnapshots,
+  serializeWorkoutResult,
+  serializeWorkoutSessionSnapshots,
+  type SessionResultSet,
+  type WorkoutResultSnapshot
+} from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -15,6 +23,8 @@ const kgUnit = "кг";
 
 type RouteParams = {
   workoutId?: string | string[];
+  sessionSnapshot?: string | string[];
+  activeWorkoutSnapshots?: string | string[];
 };
 
 type SessionExercise = Omit<Workout["exercises"][number], "sets"> & {
@@ -54,11 +64,19 @@ function buildSessionWorkout(workout?: Workout) {
 }
 
 export default function WorkoutSessionScreen() {
-  const { workoutId: rawWorkoutId } = useLocalSearchParams<RouteParams>();
+  const { workoutId: rawWorkoutId, sessionSnapshot: rawSessionSnapshot, activeWorkoutSnapshots: rawActiveWorkoutSnapshots } = useLocalSearchParams<RouteParams>();
   const workoutId = firstParam(rawWorkoutId);
-  const workout = useMemo(() => mockWorkouts.find((item) => item.id === workoutId) ?? mockWorkouts[0], [workoutId]);
+  const workout = useMemo(() => mockWorkouts.find((item) => item.id === workoutId), [workoutId]);
   const clientName = useMemo(() => mockClients.find((item) => item.id === workout?.clientId)?.name ?? "Клиент", [workout?.clientId]);
-  const initialSessionExercises = useMemo(() => buildSessionWorkout(workout), [workout]);
+  const sessionSnapshot = useMemo(() => {
+    const parsedSnapshot = parseWorkoutResult(rawSessionSnapshot);
+    return parsedSnapshot?.workoutId === workout?.id ? parsedSnapshot : null;
+  }, [rawSessionSnapshot, workout?.id]);
+  const activeWorkoutSnapshotMap = useMemo(() => parseWorkoutSessionSnapshots(rawActiveWorkoutSnapshots), [rawActiveWorkoutSnapshots]);
+  const initialSessionExercises = useMemo<SessionExercise[]>(
+    () => sessionSnapshot?.exercises.map((exercise) => ({ ...exercise, sets: normalizeSetIndexes(exercise.sets) })) ?? buildSessionWorkout(workout),
+    [sessionSnapshot, workout]
+  );
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
   const [sessionExercises, setSessionExercises] = useState(initialSessionExercises);
@@ -147,7 +165,7 @@ export default function WorkoutSessionScreen() {
         if (exercise.id !== exerciseId) return exercise;
         const templateSet = exercise.sets[exercise.sets.length - 1];
         const nextSet: ApproachSet = {
-          id: `${exercise.id}-set-${nextSetId.current++}`,
+          id: `${exercise.id}-set-${Date.now()}-${nextSetId.current++}`,
           index: exercise.sets.length + 1,
           state: "default",
           unit: kgUnit,
@@ -163,31 +181,82 @@ export default function WorkoutSessionScreen() {
     );
   }, []);
 
+  const getCurrentSnapshot = useCallback(
+    (durationSeconds: number): WorkoutResultSnapshot | undefined => {
+      if (!workout) return undefined;
+
+      return {
+        workoutId: workout.id,
+        clientName,
+        durationSeconds,
+        exercises: sessionExercises.map((exercise) => ({
+          id: exercise.id,
+          exerciseId: exercise.exerciseId,
+          exerciseName: exercise.exerciseName,
+          sets: exercise.sets
+        }))
+      };
+    },
+    [clientName, sessionExercises, workout]
+  );
+
   const finishSession = useCallback(() => {
+    if (!workout) return;
+
     const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
+    const snapshot = getCurrentSnapshot(durationSeconds);
+    const nextSnapshotMap = { ...activeWorkoutSnapshotMap };
+    delete nextSnapshotMap[workout.id];
 
     router.replace({
       pathname: "/workouts/[workoutId]/summary",
       params: {
         workoutId: workout.id,
-        snapshot: serializeWorkoutResult({
-          workoutId: workout.id,
-          clientName,
-          durationSeconds,
-          exercises: sessionExercises.map((exercise) => ({
-            id: exercise.id,
-            exerciseId: exercise.exerciseId,
-            exerciseName: exercise.exerciseName,
-            sets: exercise.sets
-          }))
-        })
+        ...(snapshot ? { snapshot: serializeWorkoutResult(snapshot) } : {}),
+        ...(serializeWorkoutSessionSnapshots(nextSnapshotMap) ? { activeWorkoutSnapshots: serializeWorkoutSessionSnapshots(nextSnapshotMap) } : {})
       }
     });
-  }, [clientName, sessionExercises, workout.id]);
+  }, [activeWorkoutSnapshotMap, getCurrentSnapshot, workout]);
 
   const addExercise = useCallback(() => {
-    router.push("/workouts/exercises");
-  }, []);
+    if (!workout) return;
+
+    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
+    const snapshot = getCurrentSnapshot(durationSeconds);
+
+    router.push({
+      pathname: "/workouts/exercises",
+      params: {
+        mode: "session",
+        workoutId: workout.id,
+        ...(snapshot ? { sessionSnapshot: serializeWorkoutResult(snapshot) } : {}),
+        ...(firstParam(rawActiveWorkoutSnapshots) ? { activeWorkoutSnapshots: firstParam(rawActiveWorkoutSnapshots) } : {})
+      }
+    });
+  }, [getCurrentSnapshot, rawActiveWorkoutSnapshots, workout]);
+
+  const closeActiveSession = useCallback(() => {
+    if (!workout) {
+      router.back();
+      return;
+    }
+
+    const durationSeconds = Math.max(0, Math.floor((Date.now() - sessionStartedAtRef.current) / 1000));
+    const snapshot = getCurrentSnapshot(durationSeconds);
+    const serializedSnapshot = snapshot ? serializeWorkoutResult(snapshot) : undefined;
+    const nextSnapshotMap = serializedSnapshot ? { ...activeWorkoutSnapshotMap, [workout.id]: serializedSnapshot } : activeWorkoutSnapshotMap;
+    const serializedSnapshotMap = serializeWorkoutSessionSnapshots(nextSnapshotMap);
+
+    router.dismissTo({
+      pathname: "/",
+      params: {
+        activeWorkoutId: workout.id,
+        activeCompletedExercises: String(completedExercises),
+        activeTotalExercises: String(exerciseCount),
+        ...(serializedSnapshotMap ? { activeWorkoutSnapshots: serializedSnapshotMap } : {})
+      }
+    });
+  }, [activeWorkoutSnapshotMap, completedExercises, exerciseCount, getCurrentSnapshot, workout]);
 
   if (!workout) {
     return (
@@ -195,7 +264,7 @@ export default function WorkoutSessionScreen() {
         <Navigation title="Тренировка" onBack={() => router.back()} />
         <View style={styles.emptyState}>
           <Text style={styles.copy}>Тренировка не найдена.</Text>
-          <Button label="Назад" type="secondary" size="large" width="fill" onPress={() => router.back()} />
+          <Button label="На главный экран" type="secondary" size="large" width="fill" onPress={() => router.replace("/")} />
         </View>
       </SafeAreaView>
     );
@@ -203,7 +272,7 @@ export default function WorkoutSessionScreen() {
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-      <Navigation title="Тренировка" onBack={() => router.back()} />
+      <Navigation title="Тренировка" onBack={closeActiveSession} />
 
       <ScrollView
         contentContainerStyle={styles.content}

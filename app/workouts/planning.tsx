@@ -46,11 +46,12 @@ export default function WorkoutPlanningSheet() {
         />
         <ListItemCell
           title="Выбрать из шаблона"
+          subtitle="Будет доступно позже"
           leading="avatar"
           avatarType="icon"
           leadingIconName="list"
-          trailing="icon"
-          trailingIconName="chevron right"
+          trailing="none"
+          disabled
         />
       </Modal>
     </View>

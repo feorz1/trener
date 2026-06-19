@@ -45,7 +45,7 @@ export function TextArea({
   showMessage = true,
   width = "fixed",
   style,
-  placeholder = "Value",
+  placeholder = "Введите текст",
   onChangeText,
   ...textInputProps
 }: TextAreaProps) {
@@ -67,7 +67,7 @@ export function TextArea({
       : disabled
         ? theme.colors.content.mute
         : theme.colors.content.ink;
-  const resolvedMessage = message ?? (resolvedState === "error" ? "Error message" : "Message");
+  const resolvedMessage = message ?? (resolvedState === "error" ? "Проверьте текст" : "Подсказка");
 
   return (
     <View style={[styles.root, width === "fill" && styles.rootFill, style]}>

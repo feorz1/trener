@@ -5,21 +5,36 @@ import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } 
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Button, Card, Header, Icon } from "@/components/ui";
+import { mockClients } from "@/data/mockClients";
+import { mockWorkouts } from "@/data/mockWorkouts";
+import {
+  parseWorkoutResult,
+  parseWorkoutSessionSnapshots,
+  serializeWorkoutSessionSnapshots,
+  summarizeWorkoutResult,
+  type WorkoutSessionSnapshotMap
+} from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
-import type { WorkoutStatus } from "@/types";
+import type { Workout, WorkoutStatus } from "@/types";
 import { formatRuDayMonth } from "@/utils/date";
 
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
 type TodayWorkout = {
   id: string;
+  workoutId?: string;
   clientName: string;
   time: string;
   title: string;
   exercisesCount: number;
   completedExercises: number;
   status: Extract<WorkoutStatus, "planned" | "inProgress" | "completed">;
+};
+
+type CompletedWorkoutState = {
+  completedExercises: number;
+  totalExercises: number;
 };
 
 const weekdayShort = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
@@ -176,67 +191,45 @@ function getNextWorkoutMeta(workouts: TodayWorkout[], selectedDate: Date, now: D
   return `Следующая через ${hours} ч ${minutes} мин`;
 }
 
-function getDemoWorkouts(today: Date): Record<string, TodayWorkout[]> {
+function getTimeLabel(isoDate: string) {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function getCompletedExerciseCount(workout: Workout) {
+  return workout.exercises.filter((exercise) => exercise.sets.length > 0 && exercise.sets.every((set) => set.completed)).length;
+}
+
+function buildTodayWorkout(workout: Workout): TodayWorkout | undefined {
+  if (workout.status !== "planned" && workout.status !== "inProgress" && workout.status !== "completed") return undefined;
+
+  const client = mockClients.find((item) => item.id === workout.clientId);
+
   return {
-    [getDateKey(addDays(today, -1))]: [
-      {
-        id: "workout-past-planned",
-        clientName: "Константин",
-        time: "19:00",
-        title: "Руки",
-        exercisesCount: 6,
-        completedExercises: 0,
-        status: "planned"
-      },
-      {
-        id: "workout-past-completed",
-        clientName: "Мария Лебедева",
-        time: "18:30",
-        title: "Фулбоди",
-        exercisesCount: 4,
-        completedExercises: 4,
-        status: "completed"
-      }
-    ],
-    [getDateKey(today)]: [
-      {
-        id: "workout-today-completed",
-        clientName: "Мария Лебедева",
-        time: "09:00",
-        title: "Фулбоди",
-        exercisesCount: 5,
-        completedExercises: 5,
-        status: "completed"
-      },
-      {
-        id: "workout-today-in-progress",
-        clientName: "Илья Соколов",
-        time: "12:30",
-        title: "Грудь",
-        exercisesCount: 7,
-        completedExercises: 3,
-        status: "inProgress"
-      },
-      {
-        id: "workout-today-planned-legs",
-        clientName: "Анна Морозова",
-        time: "15:00",
-        title: "Ноги",
-        exercisesCount: 8,
-        completedExercises: 0,
-        status: "planned"
-      },
-      {
-        id: "workout-today-planned-arms",
-        clientName: "Константин",
-        time: "19:00",
-        title: "Руки",
-        exercisesCount: 6,
-        completedExercises: 0,
-        status: "planned"
-      }
-    ]
+    id: workout.id,
+    workoutId: workout.id,
+    clientName: client?.name ?? "Клиент",
+    time: getTimeLabel(workout.startsAt),
+    title: workout.title,
+    exercisesCount: workout.exercises.length,
+    completedExercises: getCompletedExerciseCount(workout),
+    status: workout.status
   };
+}
+
+function getDemoWorkouts(): Record<string, TodayWorkout[]> {
+  return mockWorkouts.reduce<Record<string, TodayWorkout[]>>((workoutsByDay, workout) => {
+    const startsAt = new Date(workout.startsAt);
+    if (Number.isNaN(startsAt.getTime())) return workoutsByDay;
+
+    const todayWorkout = buildTodayWorkout(workout);
+    if (!todayWorkout) return workoutsByDay;
+
+    addWorkoutToDay(workoutsByDay, getDateKey(startsAt), todayWorkout);
+    return workoutsByDay;
+  }, {});
 }
 
 function getPlanCount(workoutsCount: number) {
@@ -251,7 +244,23 @@ function addWorkoutToDay(workoutsByDay: Record<string, TodayWorkout[]>, dayKey: 
 }
 
 export default function IndexScreen() {
-  const { plannedWorkout, plannedDate, plannedTime, plannedClientName, plannedExerciseCount, plannedExerciseCounts, plannedRepeatDays, plannedScheduleTimes } = useLocalSearchParams<{
+  const {
+    plannedWorkout,
+    plannedDate,
+    plannedTime,
+    plannedClientName,
+    plannedExerciseCount,
+    plannedExerciseCounts,
+    plannedRepeatDays,
+    plannedScheduleTimes,
+    completedWorkoutId,
+    completedExercises,
+    totalExercises,
+    activeWorkoutId,
+    activeCompletedExercises,
+    activeTotalExercises,
+    activeWorkoutSnapshots
+  } = useLocalSearchParams<{
     plannedWorkout?: string;
     plannedDate?: string;
     plannedTime?: string;
@@ -260,6 +269,13 @@ export default function IndexScreen() {
     plannedExerciseCounts?: string;
     plannedRepeatDays?: string;
     plannedScheduleTimes?: string;
+    completedWorkoutId?: string;
+    completedExercises?: string;
+    totalExercises?: string;
+    activeWorkoutId?: string;
+    activeCompletedExercises?: string;
+    activeTotalExercises?: string;
+    activeWorkoutSnapshots?: string;
   }>();
   const insets = useSafeAreaInsets();
   const today = useMemo(() => startOfDay(new Date()), []);
@@ -271,13 +287,100 @@ export default function IndexScreen() {
   const plannedExerciseCountsValue = firstParam(plannedExerciseCounts);
   const plannedRepeatDaysValue = firstParam(plannedRepeatDays);
   const plannedScheduleTimesValue = firstParam(plannedScheduleTimes);
+  const completedWorkoutIdValue = firstParam(completedWorkoutId);
+  const completedExercisesValue = Number(firstParam(completedExercises));
+  const totalExercisesValue = Number(firstParam(totalExercises));
+  const activeWorkoutIdValue = firstParam(activeWorkoutId);
+  const activeCompletedExercisesValue = Number(firstParam(activeCompletedExercises));
+  const activeTotalExercisesValue = Number(firstParam(activeTotalExercises));
+  const activeWorkoutSnapshotsValue = firstParam(activeWorkoutSnapshots);
+  const activeWorkoutSnapshotMap = useMemo(() => parseWorkoutSessionSnapshots(activeWorkoutSnapshotsValue), [activeWorkoutSnapshotsValue]);
+  const [localActiveWorkoutSnapshotMap, setLocalActiveWorkoutSnapshotMap] = useState<WorkoutSessionSnapshotMap>({});
+  const [localCompletedWorkoutMap, setLocalCompletedWorkoutMap] = useState<Record<string, CompletedWorkoutState>>({});
+  const effectiveActiveWorkoutSnapshotMap = useMemo(
+    () => ({ ...localActiveWorkoutSnapshotMap, ...activeWorkoutSnapshotMap }),
+    [activeWorkoutSnapshotMap, localActiveWorkoutSnapshotMap]
+  );
+  const effectiveCompletedWorkoutMap = useMemo(() => {
+    if (!completedWorkoutIdValue) return localCompletedWorkoutMap;
+
+    return {
+      ...localCompletedWorkoutMap,
+      [completedWorkoutIdValue]: {
+        completedExercises: Number.isFinite(completedExercisesValue) ? completedExercisesValue : 0,
+        totalExercises: Number.isFinite(totalExercisesValue) && totalExercisesValue > 0 ? totalExercisesValue : 0
+      }
+    };
+  }, [completedExercisesValue, completedWorkoutIdValue, localCompletedWorkoutMap, totalExercisesValue]);
+  const serializedEffectiveActiveWorkoutSnapshots = useMemo(
+    () => serializeWorkoutSessionSnapshots(effectiveActiveWorkoutSnapshotMap),
+    [effectiveActiveWorkoutSnapshotMap]
+  );
   const plannedAnchorDate = useMemo(() => parseDateKey(plannedDateKey), [plannedDateKey]);
   const [weekAnchorDate, setWeekAnchorDate] = useState(() => plannedAnchorDate ?? today);
   const weekPages = useMemo(() => getWeekPages(weekAnchorDate, today), [today, weekAnchorDate]);
   const weekItems = useMemo(() => weekPages.flat(), [weekPages]);
   const todayKey = useMemo(() => getDateKey(today), [today]);
   const workoutsByDay = useMemo(() => {
-    const demoWorkouts = getDemoWorkouts(today);
+    const demoWorkouts = getDemoWorkouts();
+
+    if (completedWorkoutIdValue) {
+      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+        const workout = dayWorkouts.find((item) => item.workoutId === completedWorkoutIdValue);
+        if (!workout) return;
+
+        workout.status = "completed";
+        if (Number.isFinite(completedExercisesValue)) {
+          workout.completedExercises = completedExercisesValue;
+        }
+        if (Number.isFinite(totalExercisesValue) && totalExercisesValue > 0) {
+          workout.exercisesCount = totalExercisesValue;
+        }
+      });
+    }
+
+    if (activeWorkoutIdValue) {
+      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+        const workout = dayWorkouts.find((item) => item.workoutId === activeWorkoutIdValue);
+        if (!workout) return;
+
+        workout.status = "inProgress";
+        if (Number.isFinite(activeCompletedExercisesValue)) {
+          workout.completedExercises = activeCompletedExercisesValue;
+        }
+        if (Number.isFinite(activeTotalExercisesValue) && activeTotalExercisesValue > 0) {
+          workout.exercisesCount = activeTotalExercisesValue;
+        }
+      });
+    }
+
+    Object.entries(effectiveActiveWorkoutSnapshotMap).forEach(([workoutId, snapshotValue]) => {
+      const snapshot = parseWorkoutResult(snapshotValue);
+      if (!snapshot) return;
+
+      const summary = summarizeWorkoutResult(snapshot);
+      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+        const workout = dayWorkouts.find((item) => item.workoutId === workoutId);
+        if (!workout) return;
+
+        workout.status = "inProgress";
+        workout.completedExercises = summary.completedExercises;
+        workout.exercisesCount = summary.totalExercises;
+      });
+    });
+
+    Object.entries(effectiveCompletedWorkoutMap).forEach(([workoutId, completedState]) => {
+      Object.values(demoWorkouts).forEach((dayWorkouts) => {
+        const workout = dayWorkouts.find((item) => item.workoutId === workoutId);
+        if (!workout) return;
+
+        workout.status = "completed";
+        workout.completedExercises = completedState.completedExercises;
+        if (completedState.totalExercises > 0) {
+          workout.exercisesCount = completedState.totalExercises;
+        }
+      });
+    });
 
     if (plannedWorkoutValue === "1" && plannedDateKey) {
       const plannedExerciseCountValue = Number(plannedExerciseCountValueParam ?? 6);
@@ -303,6 +406,7 @@ export default function IndexScreen() {
 
         addWorkoutToDay(demoWorkouts, dayKey, {
           id: `workout-new-planned-${dayKey}`,
+          workoutId: undefined,
           clientName: plannedClientNameValue ?? "Константин",
           time: (occurrenceDay ? scheduleTimes[occurrenceDay] : undefined) ?? plannedTimeValue ?? "17:00",
           title: "Руки",
@@ -323,7 +427,14 @@ export default function IndexScreen() {
     plannedScheduleTimesValue,
     plannedTimeValue,
     plannedWorkoutValue,
-    today,
+    completedExercisesValue,
+    completedWorkoutIdValue,
+    totalExercisesValue,
+    activeCompletedExercisesValue,
+    activeTotalExercisesValue,
+    activeWorkoutIdValue,
+    effectiveActiveWorkoutSnapshotMap,
+    effectiveCompletedWorkoutMap,
     weekItems
   ]);
   const [selectedDayKey, setSelectedDayKey] = useState(plannedDateKey ?? todayKey);
@@ -334,6 +445,28 @@ export default function IndexScreen() {
   const fabRevealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { scrollProps } = useConditionalScroll();
   const floatingAddBottom = Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing.lg;
+
+  useEffect(() => {
+    setLocalActiveWorkoutSnapshotMap((current) => {
+      const nextMap = { ...current, ...activeWorkoutSnapshotMap };
+      if (completedWorkoutIdValue) {
+        delete nextMap[completedWorkoutIdValue];
+      }
+      return nextMap;
+    });
+  }, [activeWorkoutSnapshotMap, completedWorkoutIdValue]);
+
+  useEffect(() => {
+    if (!completedWorkoutIdValue) return;
+
+    setLocalCompletedWorkoutMap((current) => ({
+      ...current,
+      [completedWorkoutIdValue]: {
+        completedExercises: Number.isFinite(completedExercisesValue) ? completedExercisesValue : 0,
+        totalExercises: Number.isFinite(totalExercisesValue) && totalExercisesValue > 0 ? totalExercisesValue : 0
+      }
+    }));
+  }, [completedExercisesValue, completedWorkoutIdValue, totalExercisesValue]);
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -435,10 +568,21 @@ export default function IndexScreen() {
   );
 
   const openWorkoutSession = (workoutId: string) => {
+    const sessionSnapshot = effectiveActiveWorkoutSnapshotMap[workoutId];
+
     router.push({
       pathname: "/workouts/[workoutId]/session",
-      params: { workoutId }
+      params: {
+        workoutId,
+        ...(sessionSnapshot ? { sessionSnapshot } : {}),
+        ...(serializedEffectiveActiveWorkoutSnapshots ? { activeWorkoutSnapshots: serializedEffectiveActiveWorkoutSnapshots } : {})
+      }
     });
+  };
+
+  const openExistingWorkoutSession = (workoutId?: string) => {
+    if (!workoutId) return;
+    openWorkoutSession(workoutId);
   };
 
   const openPlanningChoice = () => {
@@ -506,10 +650,10 @@ export default function IndexScreen() {
                     exerciseCount={workout.exercisesCount}
                     completedExercises={workout.completedExercises}
                     totalExercises={workout.exercisesCount}
-                    showAction={!isPast && workout.status !== "completed"}
-                    showMenu={!isPast}
-                    onStart={() => openWorkoutSession(workout.id)}
-                    onContinue={() => openWorkoutSession(workout.id)}
+                    showAction={!isPast && workout.status !== "completed" && Boolean(workout.workoutId)}
+                    showMenu={false}
+                    onStart={() => openExistingWorkoutSession(workout.workoutId)}
+                    onContinue={() => openExistingWorkoutSession(workout.workoutId)}
                   />
                 ))
               : null}

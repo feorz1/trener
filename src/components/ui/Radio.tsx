@@ -16,7 +16,7 @@ export type RadioProps = Omit<PressableProps, "onPress" | "style"> & {
 export function Radio({
   selected = false,
   disabled,
-  label = "Text",
+  label = "Пункт",
   showLabel = true,
   size = "md",
   state = "default",

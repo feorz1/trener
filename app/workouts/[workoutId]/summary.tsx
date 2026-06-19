@@ -11,6 +11,8 @@ import {
   getCompletedSets,
   getLoggedSets,
   parseWorkoutResult,
+  parseWorkoutSessionSnapshots,
+  serializeWorkoutSessionSnapshots,
   summarizeWorkoutResult,
   type WorkoutResultSnapshot
 } from "@/features/workouts/sessionResult";
@@ -22,6 +24,7 @@ import type { Workout } from "@/types";
 type RouteParams = {
   workoutId?: string | string[];
   snapshot?: string | string[];
+  activeWorkoutSnapshots?: string | string[];
 };
 
 function firstParam(value?: string | string[]) {
@@ -55,12 +58,13 @@ function formatSetLabel(set: { reps?: number; weight?: number; unit?: string }) 
 }
 
 export default function WorkoutSummaryScreen() {
-  const { workoutId: rawWorkoutId, snapshot: rawSnapshot } = useLocalSearchParams<RouteParams>();
+  const { workoutId: rawWorkoutId, snapshot: rawSnapshot, activeWorkoutSnapshots: rawActiveWorkoutSnapshots } = useLocalSearchParams<RouteParams>();
   const workoutId = firstParam(rawWorkoutId);
   const fallbackWorkout = useMemo(() => mockWorkouts.find((item) => item.id === workoutId) ?? mockWorkouts[0], [workoutId]);
   const parsedSnapshot = useMemo(() => parseWorkoutResult(rawSnapshot), [rawSnapshot]);
   const snapshot = parsedSnapshot ?? buildFallbackSnapshot(fallbackWorkout);
   const summary = useMemo(() => summarizeWorkoutResult(snapshot), [snapshot]);
+  const activeWorkoutSnapshotMap = useMemo(() => parseWorkoutSessionSnapshots(rawActiveWorkoutSnapshots), [rawActiveWorkoutSnapshots]);
   const resultExercises = useMemo(
     () =>
       snapshot.exercises
@@ -74,6 +78,21 @@ export default function WorkoutSummaryScreen() {
   );
   const hapticPlayedRef = useRef(false);
   const completionIsFull = summary.totalExercises > 0 && summary.completedExercises === summary.totalExercises;
+  const closeSummary = () => {
+    const nextSnapshotMap = { ...activeWorkoutSnapshotMap };
+    delete nextSnapshotMap[snapshot.workoutId];
+    const serializedSnapshotMap = serializeWorkoutSessionSnapshots(nextSnapshotMap);
+
+    router.dismissTo({
+      pathname: "/",
+      params: {
+        completedWorkoutId: snapshot.workoutId,
+        completedExercises: String(summary.completedExercises),
+        totalExercises: String(summary.totalExercises),
+        ...(serializedSnapshotMap ? { activeWorkoutSnapshots: serializedSnapshotMap } : {})
+      }
+    });
+  };
 
   useEffect(() => {
     if (hapticPlayedRef.current) return;
@@ -90,7 +109,7 @@ export default function WorkoutSummaryScreen() {
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <WorkoutSummaryLightRays style={styles.screenLightRays} />
-      <Navigation title="Итоги тренировки" backIconName="close" backAccessibilityLabel="Закрыть" onBack={() => router.back()} />
+      <Navigation title="Итоги тренировки" backIconName="close" backAccessibilityLabel="Закрыть" onBack={closeSummary} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.topSection}>
@@ -155,7 +174,7 @@ export default function WorkoutSummaryScreen() {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Закрыть" type="primary" size="large" width="fill" onPress={() => router.back()} />
+        <Button label="Закрыть" type="primary" size="large" width="fill" onPress={closeSummary} />
       </View>
     </SafeAreaView>
   );

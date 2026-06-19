@@ -44,9 +44,9 @@ const typeStyles: Record<ButtonType, { backgroundColor: string; color: string }>
 };
 
 const defaultLabels: Record<Exclude<ButtonSize, "mediumIcon" | "smallIcon">, string> = {
-  large: "Large",
-  medium: "Medium",
-  small: "Small"
+  large: "Действие",
+  medium: "Действие",
+  small: "Действие"
 };
 
 export function Button({

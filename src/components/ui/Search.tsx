@@ -27,7 +27,7 @@ export function Search({
   state = value ? "default" : "empty",
   width = "fixed",
   showClearButton = true,
-  placeholder = "Search...",
+  placeholder = "Поиск",
   onClear,
   onChangeText,
   onBlur,
@@ -64,7 +64,7 @@ export function Search({
         value={value}
       />
       {showClearButton && hasValue ? (
-        <Pressable accessibilityLabel="Clear search" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={handleClear} style={styles.clearButton}>
+        <Pressable accessibilityLabel="Очистить поиск" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={handleClear} style={styles.clearButton}>
           <Icon name="close" size={theme.spacing.lg} color={theme.colors.content.ink} />
         </Pressable>
       ) : null}

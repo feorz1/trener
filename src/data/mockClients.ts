@@ -10,32 +10,32 @@ const atToday = (hour: number, minute: number) => {
 export const mockClients: Client[] = [
   {
     id: "client-1",
-    name: "Anna Morozova",
-    goal: "Strength base and posture",
+    name: "Анна Морозова",
+    goal: "Силовая база и осанка",
     status: "active",
-    avatarInitials: "AM",
+    avatarInitials: "АМ",
     nextWorkoutAt: atToday(9, 30),
-    notes: "Watch shoulder position during pressing. Prefers short technique cues.",
+    notes: "Следить за положением плеч в жимах. Лучше реагирует на короткие технические подсказки.",
     metrics: { weightKg: 64, heightCm: 170, attendanceRate: 92 }
   },
   {
     id: "client-2",
-    name: "Ilya Sokolov",
-    goal: "Muscle gain",
+    name: "Илья Соколов",
+    goal: "Набор мышечной массы",
     status: "active",
-    avatarInitials: "IS",
+    avatarInitials: "ИС",
     nextWorkoutAt: atToday(12, 0),
-    notes: "Keep rest periods at least 2 minutes.",
+    notes: "Держать отдых между тяжелыми подходами не меньше 2 минут.",
     metrics: { weightKg: 78, heightCm: 181, attendanceRate: 86 }
   },
   {
     id: "client-3",
-    name: "Maria Lebedeva",
-    goal: "Return after a break",
+    name: "Мария Лебедева",
+    goal: "Возвращение после перерыва",
     status: "new",
-    avatarInitials: "ML",
+    avatarInitials: "МЛ",
     nextWorkoutAt: atToday(18, 30),
-    notes: "First month without failure sets.",
+    notes: "Первый месяц без отказных подходов.",
     metrics: { weightKg: 58, heightCm: 166, attendanceRate: 100 }
   }
 ];

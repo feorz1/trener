@@ -20,12 +20,12 @@ export default function SettingsScreen() {
           <View style={styles.listGroup}>
             <ListItemCell
               title="Тренер"
-              subtitle="Базовый профиль приложения"
+              subtitle="Профиль будет доступен позже"
               leading="avatar"
               avatarType="icon"
               leadingIconName="user"
-              trailing="icon"
-              trailingIconName="chevron right"
+              trailing="none"
+              disabled
               groupPosition="single"
             />
           </View>

@@ -27,6 +27,8 @@ export type WorkoutResultSummary = {
   calories: number | null;
 };
 
+export type WorkoutSessionSnapshotMap = Record<string, string>;
+
 const secondsPerMinute = 60;
 const minimumCalorieDurationSeconds = secondsPerMinute;
 const kcalPerActiveMinute = 2.1;
@@ -110,15 +112,58 @@ export function parseWorkoutResult(value?: string | string[]) {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return null;
 
-  try {
-    return normalizeWorkoutResult(JSON.parse(decodeURIComponent(raw)));
-  } catch {
+  for (const candidate of getDecodeCandidates(raw)) {
     try {
-      return normalizeWorkoutResult(JSON.parse(raw));
+      return normalizeWorkoutResult(JSON.parse(candidate));
     } catch {
-      return null;
+      // Try the next decoding level.
     }
   }
+
+  return null;
+}
+
+export function serializeWorkoutSessionSnapshots(data: WorkoutSessionSnapshotMap) {
+  const entries = Object.entries(data).filter((entry): entry is [string, string] => Boolean(entry[0]) && Boolean(entry[1]));
+  if (entries.length === 0) return undefined;
+
+  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
+}
+
+export function parseWorkoutSessionSnapshots(value?: string | string[]) {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return {};
+
+  for (const candidate of getDecodeCandidates(raw)) {
+    try {
+      const parsed = JSON.parse(candidate) as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string")
+      );
+    } catch {
+      // Try the next decoding level.
+    }
+  }
+
+  return {};
+}
+
+function getDecodeCandidates(raw: string) {
+  const candidates = [raw];
+  let current = raw;
+
+  for (let index = 0; index < 3; index += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+      if (decoded === current) break;
+      candidates.push(decoded);
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return candidates;
 }
 
 function normalizeWorkoutResult(value: unknown): WorkoutResultSnapshot | null {

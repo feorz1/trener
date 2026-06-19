@@ -38,15 +38,15 @@ const stateBorderColor: Record<SelectState, string> = {
 };
 
 const statusMessages: Record<"error" | "positive" | "warning", string> = {
-  error: "Error message",
-  positive: "Positive message",
-  warning: "Warning message"
+  error: "Проверьте значение",
+  positive: "Значение принято",
+  warning: "Проверьте детали"
 };
 
 export function Select({
   label,
   value,
-  placeholder = "Value",
+  placeholder = "Выберите значение",
   message,
   state = value ? "default" : "empty",
   disabled = state === "disabled",
@@ -61,7 +61,7 @@ export function Select({
   const [isFocused, setIsFocused] = useState(false);
   const resolvedState: SelectState = disabled ? "disabled" : isFocused ? "focus" : state;
   const statusState = state === "error" || state === "positive" || state === "warning" ? state : null;
-  const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Message");
+  const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Подсказка");
   const showStatus = !!statusState && !isFocused;
   const hasValue = Boolean(value);
   const labelColor = disabled ? theme.colors.content.mute : theme.colors.content.ink;

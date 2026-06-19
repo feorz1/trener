@@ -113,6 +113,7 @@ export function Card({
   const isCompleted = workoutStatus === "completed";
   const isInProgress = workoutStatus === "inProgress";
   const shouldShowAction = showAction ?? isInProgress;
+  const shouldShowMenu = showMenu && Boolean(onMove || onCancel);
   const exerciseLabel = `${exerciseCount} упражнений`;
   const progressLabel = `${completedExercises} из ${totalExercises} упражнений`;
 
@@ -128,7 +129,7 @@ export function Card({
             <Icon name={muscleIconName} size={theme.spacing.xl} color={theme.colors.status.negative} />
             <Text style={styles.muscleText}>{muscleGroup}</Text>
           </View>
-          {showMenu ? (
+          {shouldShowMenu ? (
             <View style={styles.moreArea}>
               <Button
                 type="tertiary"
@@ -139,16 +140,20 @@ export function Card({
               />
               {menuOpen ? (
                 <View style={styles.menu}>
-                  <Pressable accessibilityRole="button" onPress={onMove} style={styles.menuItem}>
-                    <Text style={styles.menuText} numberOfLines={1}>
-                      Перенести
-                    </Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" onPress={onCancel} style={styles.menuItem}>
-                    <Text style={[styles.menuText, styles.cancelText]} numberOfLines={1}>
-                      Отменить
-                    </Text>
-                  </Pressable>
+                  {onMove ? (
+                    <Pressable accessibilityRole="button" onPress={onMove} style={styles.menuItem}>
+                      <Text style={styles.menuText} numberOfLines={1}>
+                        Перенести
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onCancel ? (
+                    <Pressable accessibilityRole="button" onPress={onCancel} style={styles.menuItem}>
+                      <Text style={[styles.menuText, styles.cancelText]} numberOfLines={1}>
+                        Отменить
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : null}
             </View>

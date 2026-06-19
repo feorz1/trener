@@ -63,7 +63,7 @@ export function Variant<T extends string>({
   selectionMode = "single",
   onChange,
   columns,
-  message = "Message",
+  message = "Подсказка",
   showLabel = true,
   showMessage = false,
   disabled = false,

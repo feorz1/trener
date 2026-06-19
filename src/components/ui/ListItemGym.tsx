@@ -144,7 +144,7 @@ export function ListItemGym({
   if (isDeleteEnabled) {
     return (
       <StagedSwipeDelete
-        accessibilityLabel="Delete exercise"
+        accessibilityLabel="Удалить упражнение"
         defaultOpen={defaultDeleteOpen}
         deleteWidth={theme.sizes.listItemGymDeleteWidth}
         open={deleteOpen}
@@ -177,7 +177,7 @@ function ExerciseThumb({ source }: { source?: ImageSourcePropType }) {
 
 function MoveHandle({ onMovePress }: { onMovePress?: () => void }) {
   return (
-    <Pressable accessibilityLabel="Move exercise" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={onMovePress}>
+    <Pressable accessibilityLabel="Переместить упражнение" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={onMovePress}>
       <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.mute} />
     </Pressable>
   );
