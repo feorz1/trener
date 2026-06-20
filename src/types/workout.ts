@@ -1,3 +1,5 @@
+import type { OwnerId } from "./owner";
+
 export type WorkoutSet = {
   id: string;
   order: number;
@@ -27,6 +29,7 @@ export type WorkoutStatus = "draft" | "planned" | "active" | "inProgress" | "com
 
 export type Workout = {
   id: string;
+  ownerId: OwnerId;
   clientId?: string;
   title: string;
   startsAt: string;
@@ -61,6 +64,7 @@ export type WorkoutSessionExercise = {
 
 export type WorkoutSession = {
   id: string;
+  ownerId: OwnerId;
   workoutId: string;
   clientId?: string;
   status: WorkoutSessionStatus;
@@ -75,6 +79,7 @@ export type WorkoutSession = {
 
 export type WorkoutResult = {
   id: string;
+  ownerId: OwnerId;
   sessionId: string;
   sessionExerciseItemId?: string;
   exerciseId: string;
@@ -90,6 +95,7 @@ export type QuickValueMetric = "weight" | "reps";
 
 export type QuickValue = {
   id: string;
+  ownerId: OwnerId;
   exerciseId: string;
   clientId?: string;
   metric: QuickValueMetric;
@@ -99,6 +105,7 @@ export type QuickValue = {
 
 export type ResultHistoryItem = {
   id: string;
+  ownerId: OwnerId;
   clientId: string;
   exerciseId: string;
   exerciseName: string;

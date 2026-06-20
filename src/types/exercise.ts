@@ -1,8 +1,11 @@
+import type { OwnerId } from "./owner";
+
 export type ExerciseCategory = "strength" | "mobility" | "cardio";
 export type ExerciseSource = "built_in" | "custom";
 
 export type Exercise = {
   id: string;
+  ownerId: OwnerId;
   name: string;
   category: ExerciseCategory;
   source?: ExerciseSource;

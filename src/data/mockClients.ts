@@ -1,4 +1,4 @@
-import { Client } from "@/types";
+import { Client, LOCAL_OWNER_ID } from "@/types";
 
 const today = new Date();
 const atToday = (hour: number, minute: number) => {
@@ -10,6 +10,7 @@ const atToday = (hour: number, minute: number) => {
 export const mockClients: Client[] = [
   {
     id: "client-1",
+    ownerId: LOCAL_OWNER_ID,
     name: "Анна Морозова",
     goal: "Силовая база и осанка",
     status: "active",
@@ -20,6 +21,7 @@ export const mockClients: Client[] = [
   },
   {
     id: "client-2",
+    ownerId: LOCAL_OWNER_ID,
     name: "Константин",
     phone: "+7 999-312-21-42",
     telegram: "@konstantin",
@@ -34,6 +36,7 @@ export const mockClients: Client[] = [
   },
   {
     id: "client-3",
+    ownerId: LOCAL_OWNER_ID,
     name: "Мария Лебедева",
     goal: "Возвращение после перерыва",
     status: "new",

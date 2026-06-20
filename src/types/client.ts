@@ -1,8 +1,11 @@
+import type { OwnerId } from "./owner";
+
 export type ClientStatus = "active" | "paused" | "new";
 export type ClientGender = "male" | "female";
 
 export type Client = {
   id: string;
+  ownerId: OwnerId;
   name: string;
   phone?: string;
   email?: string;

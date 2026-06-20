@@ -1,8 +1,9 @@
-import { Exercise } from "@/types";
+import { Exercise, LOCAL_OWNER_ID } from "@/types";
 
 export const mockExercises: Exercise[] = [
   {
     id: "ex-1",
+    ownerId: LOCAL_OWNER_ID,
     name: "Жим ногами горизонтальный в блочном тренажере",
     category: "strength",
     primaryMuscles: ["legs", "quads"],
@@ -11,6 +12,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-2",
+    ownerId: LOCAL_OWNER_ID,
     name: "Жим от плеч сидя в рычажном тренажере",
     category: "strength",
     primaryMuscles: ["shoulders", "triceps"],
@@ -18,6 +20,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-3",
+    ownerId: LOCAL_OWNER_ID,
     name: "Подтягивания",
     category: "strength",
     primaryMuscles: ["back", "biceps"],
@@ -25,6 +28,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-4",
+    ownerId: LOCAL_OWNER_ID,
     name: "Жим лежа",
     category: "strength",
     primaryMuscles: ["chest", "triceps"],
@@ -32,6 +36,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-5",
+    ownerId: LOCAL_OWNER_ID,
     name: "Отжимания от брусьев",
     category: "strength",
     primaryMuscles: ["chest", "triceps"],
@@ -39,6 +44,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-6",
+    ownerId: LOCAL_OWNER_ID,
     name: "Становая тяга",
     category: "strength",
     primaryMuscles: ["back", "legs"],
@@ -46,6 +52,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-7",
+    ownerId: LOCAL_OWNER_ID,
     name: "Приседания со штангой",
     category: "strength",
     primaryMuscles: ["legs", "glutes"],
@@ -53,6 +60,7 @@ export const mockExercises: Exercise[] = [
   },
   {
     id: "ex-8",
+    ownerId: LOCAL_OWNER_ID,
     name: "Тяга штанги в наклоне",
     category: "strength",
     primaryMuscles: ["back", "biceps"],
