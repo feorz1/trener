@@ -124,11 +124,14 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
 
 export function Badge({ label, tone = "neutral", size = "md", icon = tone !== "neutral", style }: Props) {
   const stylesForTone = toneStyles[tone];
+  const normalizedLabel = label.replace(/\s+/g, " ").trim();
 
   return (
     <View style={[styles.badge, sizeStyles[size], { backgroundColor: stylesForTone.backgroundColor }, style]}>
       {icon ? <View style={[styles.icon, iconSizeStyles[size], { backgroundColor: stylesForTone.iconColor }]} /> : null}
-      <Text style={[size === "s" ? styles.labelTiny : styles.label, { color: stylesForTone.color }]}>{label}</Text>
+      <Text numberOfLines={1} ellipsizeMode="tail" style={[size === "s" ? styles.labelTiny : styles.label, { color: stylesForTone.color }]}>
+        {normalizedLabel}
+      </Text>
     </View>
   );
 }
@@ -136,6 +139,7 @@ export function Badge({ label, tone = "neutral", size = "md", icon = tone !== "n
 const styles = StyleSheet.create({
   badge: {
     minHeight: theme.spacing["2xl"],
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.xs,
@@ -149,10 +153,12 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill
   },
   label: {
-    ...theme.typography.body.smStrong
+    ...theme.typography.body.smStrong,
+    flexShrink: 1
   },
   labelTiny: {
-    ...theme.typography.body.smCaption
+    ...theme.typography.body.smCaption,
+    flexShrink: 1
   }
 });
 

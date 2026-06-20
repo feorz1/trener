@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Pressable,
@@ -90,6 +90,8 @@ export function Input({
   onChangeText,
   ...textInputProps
 }: InputProps) {
+  const prefixInputRef = useRef<NativeTextInput>(null);
+  const valueInputRef = useRef<NativeTextInput>(null);
   const [focusedField, setFocusedField] = useState<"prefix" | "value" | null>(null);
   const resolvedState: InputState = disabled ? "disabled" : focusedField ? "focus" : state;
   const designPrefixFocused = state === "prefixFocus";
@@ -122,6 +124,15 @@ export function Input({
     onClear?.();
     onChangeText?.("");
   };
+  const moveCaretToEnd = (inputRef: React.RefObject<NativeTextInput | null>, text?: string) => {
+    const end = text?.length ?? theme.spacing[0];
+    const selection = { start: end, end };
+
+    inputRef.current?.setNativeProps({ selection });
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection });
+    });
+  };
 
   return (
     <View style={[styles.root, width === "fill" && styles.rootFill]}>
@@ -131,10 +142,14 @@ export function Input({
         <View style={styles.doubleRow}>
           <FieldFrame state={prefixState} style={styles.prefixField}>
             <NativeTextInput
+              ref={prefixInputRef}
               editable={!disabled}
               onBlur={() => setFocusedField(null)}
               onChangeText={onChangePrefixText}
-              onFocus={() => setFocusedField("prefix")}
+              onFocus={() => {
+                setFocusedField("prefix");
+                moveCaretToEnd(prefixInputRef, prefixValue);
+              }}
               placeholder="+7"
               placeholderTextColor={theme.colors.content.mute}
               style={[styles.input, styles.prefixInput, webInputReset, { color: disabled ? theme.colors.content.mute : theme.colors.content.ink }]}
@@ -143,6 +158,7 @@ export function Input({
           </FieldFrame>
           <FieldFrame state={valueState} style={styles.doubleInput}>
             <NativeTextInput
+              ref={valueInputRef}
               {...textInputProps}
               editable={!disabled}
               onBlur={(event) => {
@@ -152,6 +168,7 @@ export function Input({
               onChangeText={onChangeText}
               onFocus={(event) => {
                 setFocusedField("value");
+                moveCaretToEnd(valueInputRef, value);
                 textInputProps.onFocus?.(event);
               }}
               placeholder={placeholder}
@@ -165,6 +182,7 @@ export function Input({
       ) : (
         <FieldFrame state={resolvedState}>
           <NativeTextInput
+            ref={valueInputRef}
             {...textInputProps}
             editable={!disabled}
             onBlur={(event) => {
@@ -174,6 +192,7 @@ export function Input({
             onChangeText={onChangeText}
             onFocus={(event) => {
               setFocusedField("value");
+              moveCaretToEnd(valueInputRef, value);
               textInputProps.onFocus?.(event);
             }}
             placeholder={placeholder}

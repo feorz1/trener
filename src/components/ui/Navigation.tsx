@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import type { ReactNode } from "react";
 import { theme } from "@/theme";
 import { Icon, type IconName } from "./Icon";
 
@@ -9,6 +10,7 @@ export type NavigationProps = {
   onBack?: PressableProps["onPress"];
   backAccessibilityLabel?: string;
   backIconName?: IconName;
+  trailingSlot?: ReactNode;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -19,6 +21,7 @@ export function Navigation({
   onBack,
   backAccessibilityLabel = "Go back",
   backIconName = "arrow left",
+  trailingSlot,
   style
 }: NavigationProps) {
   const hasSubtitle = showSubtitle && Boolean(subtitle);
@@ -46,7 +49,9 @@ export function Navigation({
         ) : null}
       </View>
 
-      <View style={styles.sideSlot} />
+      <View style={[styles.sideSlot, styles.rightSlot]}>
+        {trailingSlot}
+      </View>
     </View>
   );
 }
@@ -64,6 +69,9 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.navigationHeight,
     alignItems: "flex-start",
     justifyContent: "center"
+  },
+  rightSlot: {
+    alignItems: "flex-end"
   },
   centerSlot: {
     flex: 1,

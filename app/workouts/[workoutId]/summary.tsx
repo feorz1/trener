@@ -1,17 +1,16 @@
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Button, Divider, Header, ListItemGym, Navigation, ProgressBar, type WorkoutSetValue } from "@/components/ui";
+import { Badge, Button, Divider, ListItemGym, Navigation, ProgressBar, type WorkoutSetValue } from "@/components/ui";
 import { useClient, useSession, useSessionResults, useWorkout } from "@/data";
 import {
-  formatResultDuration,
   getCompletedSets,
-  getLoggedSets,
   summarizeWorkoutResult,
   type WorkoutResultSnapshot
 } from "@/features/workouts/sessionResult";
+import { getSessionTotalVolume } from "@/features/workouts/sessionHistory";
 import { WorkoutSummaryLightRays } from "@/features/workouts/WorkoutSummaryLightRays";
 import { workoutSummaryLightRaysDefaultConfig } from "@/features/workouts/WorkoutSummaryLightRaysConfig";
 import { theme } from "@/theme";
@@ -20,7 +19,12 @@ import type { WorkoutSession } from "@/types";
 type RouteParams = {
   workoutId?: string | string[];
   sessionId?: string | string[];
+  from?: string | string[];
 };
+
+const lightRaysMinOpacity = 0;
+const lightRaysFadeDistance = workoutSummaryLightRaysDefaultConfig.height - theme.sizes.navigationHeight;
+const lightRaysShiftY = -workoutSummaryLightRaysDefaultConfig.height * 0.2;
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -34,9 +38,9 @@ function buildSnapshot(session: WorkoutSession, clientName: string, results: Ret
     exercises: session.exercises.map((exercise) => ({
       id: exercise.id,
       exerciseId: exercise.exerciseId,
-      exerciseName: exercise.exerciseName,
+      exerciseName: exercise.exerciseNameSnapshot ?? exercise.exerciseName,
       sets: results
-        .filter((result) => result.exerciseId === exercise.exerciseId)
+        .filter((result) => (result.sessionExerciseItemId ? result.sessionExerciseItemId === exercise.id : result.exerciseId === exercise.exerciseId))
         .sort((left, right) => left.setIndex - right.setIndex)
         .map((set) => ({
           id: set.setId ?? set.id,
@@ -52,12 +56,51 @@ function buildSnapshot(session: WorkoutSession, clientName: string, results: Ret
 }
 
 function formatSetLabel(set: { reps?: number; weight?: number; unit?: string }) {
-  return `${set.reps}×${set.weight}${set.unit ?? "кг"}`;
+  const hasReps = Number.isFinite(set.reps);
+  const hasWeight = Number.isFinite(set.weight);
+
+  if (hasReps && hasWeight) return `${set.reps}x${set.weight}${set.unit ?? "кг"}`;
+  if (hasReps) return `${set.reps} повт.`;
+  return "без данных";
+}
+
+function formatSummaryDuration(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  if (hours > 0) return [hours, minutes].map((part) => String(part).padStart(2, "0")).join(":");
+  return [minutes, seconds].map((part) => String(part).padStart(2, "0")).join(":");
+}
+
+function formatSummaryTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function formatSummaryDay(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long"
+  }).format(date);
 }
 
 export default function WorkoutSummaryScreen() {
-  const { workoutId: rawWorkoutId, sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
+  const { workoutId: rawWorkoutId, sessionId: rawSessionId, from: rawFrom } = useLocalSearchParams<RouteParams>();
   const sessionId = firstParam(rawSessionId) ?? firstParam(rawWorkoutId);
+  const openedFrom = firstParam(rawFrom);
+  const usesBackNavigation = openedFrom === "client" || openedFrom === "home";
   const { session } = useSession(sessionId);
   const { workout } = useWorkout(session?.workoutId);
   const { client } = useClient(session?.clientId ?? workout?.clientId);
@@ -82,32 +125,41 @@ export default function WorkoutSummaryScreen() {
       snapshot?.exercises
         .map((exercise) => ({
           ...exercise,
-          completedSets: getCompletedSets(exercise),
-          loggedSets: getLoggedSets(exercise)
-        }))
-        .filter((exercise) => exercise.completedSets.length > 0) ?? [],
+          completedSets: getCompletedSets(exercise)
+        })) ?? [],
     [snapshot?.exercises]
   );
+  const scrollY = useRef(new Animated.Value(0)).current;
   const hapticPlayedRef = useRef(false);
   const completionIsFull = summary.totalExercises > 0 && summary.completedExercises === summary.totalExercises;
+  const totalVolume = getSessionTotalVolume(results);
+  const totalWeight = totalVolume ?? summary.totalVolumeKg;
+  const backIconName = usesBackNavigation ? "arrow left" : "close";
+  const backAccessibilityLabel = usesBackNavigation ? "Назад" : "Закрыть";
+  const lightRaysOpacity = scrollY.interpolate({
+    inputRange: [theme.spacing[0], lightRaysFadeDistance],
+    outputRange: [1, lightRaysMinOpacity],
+    extrapolate: "clamp"
+  });
+  const lightRaysTranslateY = scrollY.interpolate({
+    inputRange: [theme.spacing[0], lightRaysFadeDistance],
+    outputRange: [theme.spacing[0], lightRaysShiftY],
+    extrapolate: "clamp"
+  });
   const closeSummary = () => {
     router.dismissTo("/");
   };
+  const handleBack = () => {
+    if (usesBackNavigation) {
+      router.back();
+      return;
+    }
 
-  if (!snapshot) {
-    return (
-      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <Navigation title="Итоги тренировки" backIconName="close" backAccessibilityLabel="Закрыть" onBack={() => router.dismissTo("/")} />
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Сессия не найдена</Text>
-          <Text style={styles.emptyCopy}>Вернитесь на главный экран и запустите тренировку заново.</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
+    closeSummary();
+  };
 
   useEffect(() => {
-    if (hapticPlayedRef.current) return;
+    if (!snapshot || hapticPlayedRef.current) return;
     hapticPlayedRef.current = true;
 
     if (completionIsFull) {
@@ -116,30 +168,64 @@ export default function WorkoutSummaryScreen() {
     }
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  }, [completionIsFull, summary.loggedSets]);
+  }, [completionIsFull, snapshot, summary.loggedSets]);
+
+  if (!snapshot) {
+    return (
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+        <Navigation title="Итоги тренировки" backIconName={backIconName} backAccessibilityLabel={backAccessibilityLabel} onBack={handleBack} />
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>Сессия не найдена</Text>
+          <Text style={styles.emptyCopy}>Вернитесь на главный экран и запустите тренировку заново.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+  const completedSession = session;
+  if (!completedSession) return null;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-      <WorkoutSummaryLightRays style={styles.screenLightRays} />
-      <Navigation title="Итоги тренировки" backIconName="close" backAccessibilityLabel="Закрыть" onBack={closeSummary} />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.screenLightRays,
+          {
+            opacity: lightRaysOpacity,
+            transform: [{ translateY: lightRaysTranslateY }]
+          }
+        ]}
+      >
+        <WorkoutSummaryLightRays style={styles.screenLightRaysFill} />
+      </Animated.View>
+      <Navigation title="Итоги тренировки" backIconName={backIconName} backAccessibilityLabel={backAccessibilityLabel} onBack={handleBack} />
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <Animated.ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+      >
         <View style={styles.topSection}>
           <View style={styles.topSectionContent}>
-            <Header title={snapshot.clientName} showSubtitle={false} size="lg" style={styles.header} />
+            <Text style={styles.summaryClientName}>{snapshot.clientName}</Text>
             <ProgressBar
               completed={summary.completedExercises}
               total={summary.totalExercises}
               label={`${summary.completedExercises} из ${summary.totalExercises} упражнений`}
+              tone="primary"
             />
 
-            <View style={styles.metricsRow}>
-              <SummaryMetric value={formatResultDuration(snapshot.durationSeconds)} label="Время тренировки" />
-              <SummaryMetric value={summary.calories === null ? "—" : String(summary.calories)} label="Калории" />
+            <View style={styles.metricsGrid}>
+              <View style={styles.metricsRow}>
+                <SummaryMetric value={formatSummaryTime(completedSession.startedAt)} label={formatSummaryDay(completedSession.startedAt)} />
+                <SummaryMetric value={formatSummaryDuration(snapshot.durationSeconds)} label="Время тренировки" />
+              </View>
+              <View style={styles.metricsRow}>
+                <SummaryMetric value={summary.calories === null ? "0" : String(summary.calories)} label="Калории" />
+                <SummaryMetric value={`${Math.round(totalWeight)} кг`} label="Общий вес" />
+              </View>
             </View>
-            {summary.calories === null ? (
-              <Text style={styles.calorieNote}>Калории появятся, когда в выполненных подходах будут рабочие вес и повторы.</Text>
-            ) : null}
           </View>
         </View>
 
@@ -155,12 +241,12 @@ export default function WorkoutSummaryScreen() {
             <View style={styles.exerciseList}>
               {resultExercises.map((exercise) => {
                 const setValues: WorkoutSetValue[] =
-                  exercise.loggedSets.length > 0
-                    ? exercise.loggedSets.map((set) => ({
+                  exercise.completedSets.length > 0
+                    ? exercise.completedSets.map((set) => ({
                         id: set.id,
                         label: formatSetLabel(set)
                       }))
-                    : [{ id: `${exercise.id}-missing-data`, label: "нет данных" }];
+                    : [{ id: `${exercise.id}-missing-data`, label: "выполненных подходов нет" }];
 
                 return (
                   <ListItemGym
@@ -183,7 +269,7 @@ export default function WorkoutSummaryScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
 
       <View style={styles.footer}>
         <Button label="Закрыть" type="primary" size="large" width="fill" onPress={closeSummary} />
@@ -195,10 +281,10 @@ export default function WorkoutSummaryScreen() {
 function SummaryMetric({ value, label }: { value: string; label: string }) {
   return (
     <View style={styles.metricCard}>
-      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.metricValue}>
+      <Text numberOfLines={1} style={styles.metricValue}>
         {value}
       </Text>
-      <Text numberOfLines={1} adjustsFontSizeToFit style={styles.metricLabel}>
+      <Text numberOfLines={2} style={styles.metricLabel}>
         {label}
       </Text>
     </View>
@@ -210,6 +296,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background.canvas
   },
+  content: {
+    flexGrow: 1,
+    paddingBottom: theme.sizes.buttonLgHeight + theme.spacing["3xl"]
+  },
   screenLightRays: {
     position: "absolute",
     top: theme.spacing[0],
@@ -217,9 +307,8 @@ const styles = StyleSheet.create({
     left: theme.spacing[0],
     height: workoutSummaryLightRaysDefaultConfig.height
   },
-  content: {
-    flexGrow: 1,
-    paddingBottom: theme.sizes.buttonLgHeight + theme.spacing["3xl"]
+  screenLightRaysFill: {
+    ...StyleSheet.absoluteFillObject
   },
   topSection: {
     position: "relative"
@@ -229,14 +318,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.lg
   },
-  header: {
-    paddingHorizontal: theme.spacing[0],
+  summaryClientName: {
+    ...theme.typography.body.lg,
+    color: theme.colors.content.ink,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.md
+  },
+  metricsGrid: {
+    gap: theme.spacing.sm,
     paddingTop: theme.spacing.lg
   },
   metricsRow: {
     flexDirection: "row",
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.lg
+    gap: theme.spacing.sm
   },
   metricCard: {
     flex: 1,
@@ -256,11 +350,6 @@ const styles = StyleSheet.create({
   metricLabel: {
     ...theme.typography.body.smStrong,
     color: theme.colors.content.mute,
-    textAlign: "center"
-  },
-  calorieNote: {
-    ...theme.typography.body.sm,
-    color: theme.colors.content.body,
     textAlign: "center"
   },
   exerciseSection: {

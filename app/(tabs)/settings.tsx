@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header, ListItemCell } from "@/components/ui";
 import { theme } from "@/theme";
 
 export default function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [autoTimerEnabled, setAutoTimerEnabled] = useState(false);
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
 
   return (
-    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: topInset }]}>
       <View style={styles.body}>
         <View style={styles.headerRow}>
           <Header title="Настройки" showSubtitle={false} size="xl" style={styles.header} />
@@ -59,7 +61,7 @@ export default function SettingsScreen() {
           </View>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

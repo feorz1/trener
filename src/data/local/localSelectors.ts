@@ -1,4 +1,4 @@
-import type { ClientId, ExerciseId, QuickValueMetric, SessionId, WorkoutId } from "../types";
+import type { ClientId, ExerciseId, PreviousExercisePerformance, QuickValueMetric, SessionId, WorkoutId } from "../types";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout, type LocalDataState } from "./localState";
 
 export function selectClients(state: LocalDataState) {
@@ -39,6 +39,56 @@ export function selectResultsBySession(state: LocalDataState, sessionId?: Sessio
     .map((id) => state.resultsById[id])
     .filter((result) => result.sessionId === sessionId)
     .map(cloneResult);
+}
+
+export function selectCompletedSessionsByClient(state: LocalDataState, clientId?: ClientId) {
+  if (!clientId) return [];
+
+  return state.sessionIds
+    .map((id) => state.sessionsById[id])
+    .filter((session) => session.clientId === clientId && session.status === "completed" && Boolean(session.completedAt))
+    .sort((left, right) => new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime())
+    .map(cloneSession);
+}
+
+export function selectPreviousExercisePerformance(
+  state: LocalDataState,
+  input: { clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }
+): PreviousExercisePerformance | null {
+  if (!input.clientId || !input.exerciseId) return null;
+
+  const beforeTime = input.before ? new Date(input.before).getTime() : Date.now();
+  const sessions = state.sessionIds
+    .map((id) => state.sessionsById[id])
+    .filter((session) => {
+      if (session.id === input.excludeSessionId) return false;
+      if (session.clientId !== input.clientId || session.status !== "completed" || !session.completedAt) return false;
+      return new Date(session.completedAt).getTime() < beforeTime;
+    })
+    .sort((left, right) => new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime());
+
+  for (const session of sessions) {
+    const sets = state.resultIds
+      .map((id) => state.resultsById[id])
+      .filter((result) => result.sessionId === session.id && result.exerciseId === input.exerciseId && result.completed)
+      .sort((left, right) => left.setIndex - right.setIndex)
+      .map((result) => ({
+        setIndex: result.setIndex,
+        weight: result.weight,
+        repetitions: result.repetitions,
+        unit: result.unit
+      }));
+
+    if (sets.length > 0 && session.completedAt) {
+      return {
+        sessionId: session.id,
+        completedAt: session.completedAt,
+        sets
+      };
+    }
+  }
+
+  return null;
 }
 
 export function selectQuickValue(state: LocalDataState, input: { exerciseId?: ExerciseId; metric?: QuickValueMetric; clientId?: ClientId }) {

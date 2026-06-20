@@ -12,7 +12,13 @@ export type { Client, Exercise, QuickValue, QuickValueMetric, RepeatDay, Workout
 
 export type CreateClientInput = {
   name: string;
+  phone?: string;
+  email?: string;
+  birthDate?: string;
+  telegram?: string;
+  gender?: Client["gender"];
   goal?: string;
+  restrictions?: string[];
   status?: Client["status"];
   avatarInitials?: string;
   nextWorkoutAt?: string;
@@ -21,6 +27,16 @@ export type CreateClientInput = {
 };
 
 export type UpdateClientInput = Partial<Omit<Client, "id">>;
+
+export type CreateExerciseInput = {
+  name: string;
+  category?: Exercise["category"];
+  primaryMuscles: string[];
+  secondaryMuscles?: string[];
+  equipment?: string;
+  coachNotes?: string;
+  notes?: string;
+};
 
 export type CreateWorkoutDraftInput = {
   clientId?: ClientId;
@@ -35,6 +51,11 @@ export type CreateWorkoutDraftInput = {
 
 export type UpdateWorkoutDraftInput = Partial<Omit<Workout, "id" | "status">>;
 
+export type RescheduleWorkoutInput = {
+  startsAt: string;
+  timezone?: string;
+};
+
 export type SetDraftExercisesOptions = {
   day?: RepeatDay;
 };
@@ -45,6 +66,7 @@ export type UpdateSessionInput = Partial<Omit<WorkoutSession, "id" | "workoutId"
 
 export type UpsertWorkoutResultInput = {
   sessionId: SessionId;
+  sessionExerciseItemId?: string;
   exerciseId: ExerciseId;
   setIndex: number;
   setId?: string;
@@ -62,4 +84,15 @@ export type GetQuickValueInput = {
 
 export type UpsertQuickValueInput = GetQuickValueInput & {
   values: number[];
+};
+
+export type PreviousExercisePerformance = {
+  sessionId: SessionId;
+  completedAt: string;
+  sets: Array<{
+    setIndex: number;
+    weight?: number;
+    repetitions?: number;
+    unit?: string;
+  }>;
 };

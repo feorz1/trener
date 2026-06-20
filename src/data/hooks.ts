@@ -1,6 +1,19 @@
 import { useMemo } from "react";
 import { useDataContext } from "./DataProvider";
-import { selectClientById, selectClients, selectExerciseById, selectExercises, selectQuickValue, selectResultsBySession, selectSessionById, selectSessions, selectWorkoutById, selectWorkouts } from "./local/localSelectors";
+import {
+  selectClientById,
+  selectClients,
+  selectCompletedSessionsByClient,
+  selectExerciseById,
+  selectExercises,
+  selectPreviousExercisePerformance,
+  selectQuickValue,
+  selectResultsBySession,
+  selectSessionById,
+  selectSessions,
+  selectWorkoutById,
+  selectWorkouts
+} from "./local/localSelectors";
 import type { ClientId, ExerciseId, QuickValueMetric, SessionId, WorkoutId } from "./types";
 
 export function useDataLayer() {
@@ -33,6 +46,10 @@ export function useExercise(exerciseId?: ExerciseId) {
   const { state } = useDataContext();
   const exercise = useMemo(() => selectExerciseById(state, exerciseId), [exerciseId, state]);
   return { exercise, isLoading: false, error: null as Error | null, notFound: Boolean(exerciseId && !exercise) };
+}
+
+export function useExerciseActions() {
+  return useDataContext().data.exercises;
 }
 
 export function useWorkouts() {
@@ -79,6 +96,12 @@ export function useSessionResults(sessionId?: SessionId) {
   return { results, isLoading: false, error: null as Error | null };
 }
 
+export function useClientWorkoutHistory(clientId?: ClientId) {
+  const { state } = useDataContext();
+  const sessions = useMemo(() => selectCompletedSessionsByClient(state, clientId), [clientId, state]);
+  return { sessions, isLoading: false, error: null as Error | null };
+}
+
 export function useResults() {
   const { state } = useDataContext();
   const results = useMemo(() => state.resultIds.map((id) => ({ ...state.resultsById[id] })), [state]);
@@ -93,6 +116,12 @@ export function useQuickValue(exerciseId?: ExerciseId, metric?: QuickValueMetric
   const { state } = useDataContext();
   const quickValue = useMemo(() => selectQuickValue(state, { exerciseId, metric, clientId }), [clientId, exerciseId, metric, state]);
   return { quickValue, isLoading: false, error: null as Error | null };
+}
+
+export function usePreviousExercisePerformance(input: { clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }) {
+  const { state } = useDataContext();
+  const previousPerformance = useMemo(() => selectPreviousExercisePerformance(state, input), [input.before, input.clientId, input.excludeSessionId, input.exerciseId, state]);
+  return { previousPerformance, isLoading: false, error: null as Error | null };
 }
 
 export function useQuickValueActions() {

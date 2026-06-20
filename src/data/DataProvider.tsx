@@ -3,10 +3,26 @@ import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import type { DataLayer } from "./contracts";
 import { DataNotFoundError } from "./contracts";
 import { createId } from "./createId";
-import type { CreateClientInput, CreateWorkoutDraftInput, ExerciseId, QuickValue, QuickValueMetric, RepeatDay, SessionId, UpdateClientInput, UpdateSessionInput, UpdateWorkoutDraftInput, UpsertWorkoutResultInput, Workout } from "./types";
+import type {
+  CreateClientInput,
+  CreateExerciseInput,
+  CreateWorkoutDraftInput,
+  ExerciseId,
+  QuickValue,
+  QuickValueMetric,
+  RepeatDay,
+  RescheduleWorkoutInput,
+  SessionId,
+  UpdateClientInput,
+  UpdateSessionInput,
+  UpdateWorkoutDraftInput,
+  UpsertWorkoutResultInput,
+  Workout
+} from "./types";
 import { localReducer, type LocalDataAction } from "./local/localReducer";
 import type { LocalDataState } from "./local/localState";
-import { cloneClient, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "./local/localState";
+import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "./local/localState";
+import { selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
 import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetConnectionsAfterReorder, sortWorkoutExercisesByOrder, syncSupersetConnectionsForScope } from "./local/supersetConnections";
 import { createInitialState } from "./seeds/mockSeed";
 import { localPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
@@ -33,11 +49,44 @@ function getInitials(name: string) {
     .join("");
 }
 
+function optionalTrim(value?: string) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function optionalTrimList(values?: string[]) {
+  const trimmed = values?.map((value) => value.trim()).filter(Boolean);
+  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function requiredTrim(value: string, fallback: string) {
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
 function ensureWorkoutDraft(workout: Workout | undefined, id: string) {
   if (!workout || workout.status !== "draft") {
     throw new DataNotFoundError("Workout draft", id);
   }
   return workout;
+}
+
+function getSessionsForWorkout(state: LocalDataState, workoutId: string) {
+  return state.sessionIds.map((id) => state.sessionsById[id]).filter((session) => session.workoutId === workoutId);
+}
+
+function hasActiveSession(state: LocalDataState, workoutId: string) {
+  return getSessionsForWorkout(state, workoutId).some((session) => session.status === "active");
+}
+
+function hasCompletedSession(state: LocalDataState, workoutId: string) {
+  return getSessionsForWorkout(state, workoutId).some((session) => session.status === "completed");
+}
+
+function ensureWorkoutCanChangePlan(state: LocalDataState, workout: Workout) {
+  if (workout.status === "cancelled") throw new Error("Workout is cancelled");
+  if (hasActiveSession(state, workout.id)) throw new Error("Workout has active session");
+  if (hasCompletedSession(state, workout.id)) throw new Error("Workout has completed session");
 }
 
 function getExerciseName(state: LocalDataState, exerciseId: ExerciseId) {
@@ -208,14 +257,24 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return currentState.clientsById[id] ? cloneClient(currentState.clientsById[id]) : null;
         },
         async create(input: CreateClientInput) {
+          const now = new Date().toISOString();
+          const name = requiredTrim(input.name, "Новый клиент");
           const client = {
             id: createId("client"),
-            name: input.name.trim(),
-            goal: input.goal ?? "Новая цель",
+            name,
+            phone: optionalTrim(input.phone),
+            email: optionalTrim(input.email),
+            birthDate: optionalTrim(input.birthDate),
+            telegram: optionalTrim(input.telegram),
+            gender: input.gender,
+            goal: optionalTrim(input.goal) ?? "Новая цель",
             status: input.status ?? "new",
-            avatarInitials: input.avatarInitials ?? getInitials(input.name),
+            avatarInitials: input.avatarInitials ?? getInitials(name),
             nextWorkoutAt: input.nextWorkoutAt ?? new Date().toISOString(),
-            notes: input.notes ?? "",
+            notes: optionalTrim(input.notes) ?? "",
+            restrictions: optionalTrimList(input.restrictions),
+            createdAt: now,
+            updatedAt: now,
             metrics: {
               weightKg: input.metrics?.weightKg ?? 0,
               heightCm: input.metrics?.heightCm ?? 0,
@@ -233,6 +292,18 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const client = {
             ...current,
             ...patch,
+            id: current.id,
+            name: patch.name !== undefined ? requiredTrim(patch.name, current.name) : current.name,
+            phone: patch.phone !== undefined ? optionalTrim(patch.phone) : current.phone,
+            email: patch.email !== undefined ? optionalTrim(patch.email) : current.email,
+            birthDate: patch.birthDate !== undefined ? optionalTrim(patch.birthDate) : current.birthDate,
+            telegram: patch.telegram !== undefined ? optionalTrim(patch.telegram) : current.telegram,
+            gender: patch.gender !== undefined ? patch.gender : current.gender,
+            goal: patch.goal !== undefined ? optionalTrim(patch.goal) ?? "" : current.goal,
+            notes: patch.notes !== undefined ? optionalTrim(patch.notes) ?? "" : current.notes,
+            restrictions: patch.restrictions !== undefined ? optionalTrimList(patch.restrictions) : current.restrictions,
+            createdAt: current.createdAt,
+            updatedAt: new Date().toISOString(),
             metrics: patch.metrics ? { ...current.metrics, ...patch.metrics } : current.metrics
           };
           await commitActions([{ type: "client/upsert", client }], "immediate");
@@ -242,11 +313,42 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
       exercises: {
         async list() {
           const currentState = stateRef.current;
-          return currentState.exerciseIds.map((id) => ({ ...currentState.exercisesById[id], primaryMuscles: [...currentState.exercisesById[id].primaryMuscles] }));
+          return currentState.exerciseIds
+            .map((id) => cloneExercise(currentState.exercisesById[id]))
+            .filter((exercise) => !exercise.archivedAt);
         },
         async getById(id) {
           const exercise = stateRef.current.exercisesById[id];
-          return exercise ? { ...exercise, primaryMuscles: [...exercise.primaryMuscles] } : null;
+          return exercise ? cloneExercise(exercise) : null;
+        },
+        async create(input: CreateExerciseInput) {
+          const now = new Date().toISOString();
+          const exercise = {
+            id: createId("exercise"),
+            name: requiredTrim(input.name, "Новое упражнение"),
+            category: input.category ?? "strength",
+            source: "custom" as const,
+            primaryMuscles: input.primaryMuscles.length > 0 ? input.primaryMuscles : ["all"],
+            secondaryMuscles: input.secondaryMuscles,
+            equipment: optionalTrim(input.equipment) ?? "Не указано",
+            coachNotes: optionalTrim(input.coachNotes),
+            notes: optionalTrim(input.notes),
+            createdAt: now,
+            updatedAt: now
+          };
+          await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
+          return cloneExercise(exercise);
+        },
+        async archive(id) {
+          const current = stateRef.current.exercisesById[id];
+          if (!current) throw new DataNotFoundError("Exercise", id);
+          const exercise = cloneExercise({
+            ...current,
+            archivedAt: current.archivedAt ?? new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          });
+          await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
+          return cloneExercise(exercise);
         }
       },
       workouts: {
@@ -264,15 +366,19 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
             throw new DataNotFoundError("Client", input.clientId);
           }
 
+          const now = new Date().toISOString();
           const workout: Workout = {
             id: createId("workout"),
             clientId: input.clientId,
             title: input.title ?? "Новая тренировка",
             startsAt: input.startsAt ?? new Date().toISOString(),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             durationMinutes: input.durationMinutes ?? 60,
             focus: input.focus ?? "",
             location: input.location ?? "Зал",
             status: "draft",
+            createdAt: now,
+            updatedAt: now,
             exercises: [],
             repeatDays: input.repeatDays,
             scheduleTimes: input.scheduleTimes
@@ -290,6 +396,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const workout = cloneWorkout({
             ...current,
             ...patch,
+            updatedAt: new Date().toISOString(),
             exercises: patch.exercises ?? current.exercises,
             repeatDays: patch.repeatDays ?? current.repeatDays,
             scheduleTimes: patch.scheduleTimes ?? current.scheduleTimes
@@ -302,7 +409,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const current = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
           if (!currentState.clientsById[clientId]) throw new DataNotFoundError("Client", clientId);
 
-          const workout = cloneWorkout({ ...current, clientId });
+          const workout = cloneWorkout({ ...current, clientId, updatedAt: new Date().toISOString() });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
           return cloneWorkout(workout);
         },
@@ -325,6 +432,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const nextConnectionIds = scopedConnectionIds.filter((connectionId) => validConnectionIds.has(connectionId));
           const workout = cloneWorkout({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: syncSupersetConnectionsForScope([
               ...current.exercises.filter((exercise) => exercise.day !== options.day),
               ...nextScopedExercises
@@ -339,6 +447,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
           const workout = cloneWorkout({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: current.exercises.map((exercise) => (exercise.id === itemId ? { ...exercise, ...patch, sets: patch.sets ?? exercise.sets } : exercise))
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
@@ -360,6 +469,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
           const workout = cloneWorkout({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: syncSupersetConnectionsForScope(normalizeWorkoutExerciseOrder(current.exercises.filter((exercise) => exercise.id !== itemId)), removedScope, nextConnectionIds)
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
@@ -378,6 +488,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const nextConnectionIds = preserveSupersetConnectionsAfterReorder(currentScopedIds, orderedItemIds, currentConnectionIds);
           const workout = cloneWorkout({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: syncSupersetConnectionsForScope(
               current.exercises.map((exercise) =>
                 getExerciseScope(exercise) === orderedScope && orderIndexById[exercise.id] !== undefined
@@ -399,6 +510,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
           const workout = cloneWorkout({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: [...current.exercises, createWorkoutExercise(currentState, exerciseId, current.exercises.length + 1)]
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
@@ -408,17 +520,82 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
           const workout = cloneWorkout({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: current.exercises.filter((exercise) => exercise.exerciseId !== exerciseId)
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
           return cloneWorkout(workout);
         },
+        async createEditDraft(workoutId) {
+          const currentState = stateRef.current;
+          const source = currentState.workoutsById[workoutId];
+          if (!source) throw new DataNotFoundError("Workout", workoutId);
+          ensureWorkoutCanChangePlan(currentState, source);
+
+          const existingDraft = currentState.workoutIds
+            .map((id) => currentState.workoutsById[id])
+            .find((workout) => workout.status === "draft" && workout.sourceWorkoutId === workoutId);
+          if (existingDraft) return cloneWorkout(existingDraft);
+
+          const now = new Date().toISOString();
+          const draft = cloneWorkout({
+            ...source,
+            id: createId("workout"),
+            status: "draft",
+            sourceWorkoutId: source.id,
+            createdAt: now,
+            updatedAt: now,
+            exercises: source.exercises.map((exercise) => ({
+              ...exercise,
+              id: createId("workout-exercise"),
+              sets: exercise.sets.map((set) => ({ ...set, id: createId("set") }))
+            }))
+          });
+          await commitActions([{ type: "workout/upsert", workout: draft }], "immediate");
+          return cloneWorkout(draft);
+        },
+        async applyEditDraft(draftId) {
+          const currentState = stateRef.current;
+          const draft = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
+          const sourceWorkoutId = draft.sourceWorkoutId;
+          if (!sourceWorkoutId) return this.publishDraft(draftId);
+
+          const source = currentState.workoutsById[sourceWorkoutId];
+          if (!source) throw new DataNotFoundError("Workout", sourceWorkoutId);
+          ensureWorkoutCanChangePlan(currentState, source);
+
+          const workout = cloneWorkout({
+            ...source,
+            clientId: draft.clientId,
+            title: draft.title || source.title,
+            startsAt: draft.startsAt,
+            timezone: draft.timezone,
+            durationMinutes: draft.durationMinutes,
+            focus: draft.focus,
+            location: draft.location,
+            repeatDays: draft.repeatDays,
+            scheduleTimes: draft.scheduleTimes,
+            exercises: draft.exercises.map((exercise) => ({ ...exercise, sets: exercise.sets.map((set) => ({ ...set })) })),
+            status: "planned",
+            updatedAt: new Date().toISOString()
+          });
+          await commitActions(
+            [
+              { type: "workout/upsert", workout },
+              { type: "workout/remove", workoutId: draft.id }
+            ],
+            "immediate"
+          );
+          return cloneWorkout(workout);
+        },
         async publishDraft(draftId) {
           const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          if (current.sourceWorkoutId) return this.applyEditDraft(draftId);
           const workout = cloneWorkout({
             ...current,
             title: current.title || "Тренировка",
-            status: "planned"
+            status: "planned",
+            updatedAt: new Date().toISOString()
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
           return cloneWorkout(workout);
@@ -426,12 +603,49 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         async discardDraft(draftId) {
           ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
           await commitActions([{ type: "workout/remove", workoutId: draftId }], "immediate");
+        },
+        async reschedule(workoutId, input: RescheduleWorkoutInput) {
+          const currentState = stateRef.current;
+          const current = currentState.workoutsById[workoutId];
+          if (!current) throw new DataNotFoundError("Workout", workoutId);
+          ensureWorkoutCanChangePlan(currentState, current);
+          const startsAt = new Date(input.startsAt);
+          if (Number.isNaN(startsAt.getTime())) throw new Error("Invalid workout date");
+
+          const workout = cloneWorkout({
+            ...current,
+            startsAt: startsAt.toISOString(),
+            timezone: input.timezone ?? current.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            updatedAt: new Date().toISOString()
+          });
+          await commitActions([{ type: "workout/upsert", workout }], "immediate");
+          return cloneWorkout(workout);
+        },
+        async cancel(workoutId, input = {}) {
+          const currentState = stateRef.current;
+          const current = currentState.workoutsById[workoutId];
+          if (!current) throw new DataNotFoundError("Workout", workoutId);
+          if (current.status !== "planned") throw new Error("Only planned workout can be cancelled");
+          if (hasActiveSession(currentState, workoutId)) throw new Error("Workout has active session");
+
+          const workout = cloneWorkout({
+            ...current,
+            status: "cancelled",
+            cancelledAt: new Date().toISOString(),
+            cancellationReason: optionalTrim(input.reason),
+            updatedAt: new Date().toISOString()
+          });
+          await commitActions([{ type: "workout/upsert", workout }], "immediate");
+          return cloneWorkout(workout);
         }
       },
       sessions: {
         async list() {
           const currentState = stateRef.current;
           return currentState.sessionIds.map((id) => cloneSession(currentState.sessionsById[id]));
+        },
+        async listCompletedByClient(clientId) {
+          return selectCompletedSessionsByClient(stateRef.current, clientId);
         },
         async getById(sessionId) {
           const session = stateRef.current.sessionsById[sessionId];
@@ -441,30 +655,41 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const currentState = stateRef.current;
           const workout = currentState.workoutsById[workoutId];
           if (!workout) throw new DataNotFoundError("Workout", workoutId);
+          if (workout.status === "cancelled") throw new Error("Cancelled workout cannot be started");
 
           const existingSession = currentState.sessionIds.map((id) => currentState.sessionsById[id]).find((session) => session.workoutId === workoutId && session.status === "active");
           if (existingSession) return cloneSession(existingSession);
 
+          const now = new Date().toISOString();
+          const sessionExercises = workout.exercises.map((exercise, index) => ({
+            id: createId("session-exercise"),
+            exerciseId: exercise.exerciseId,
+            exerciseName: exercise.exerciseName,
+            exerciseNameSnapshot: exercise.exerciseName,
+            order: index + 1,
+            comment: exercise.comment,
+            plannedSets: exercise.sets.length,
+            plannedRepetitions: exercise.sets[0]?.targetReps,
+            plannedWeight: exercise.sets[0]?.targetWeightKg
+          }));
           const session = {
             id: createId("session"),
             workoutId,
             clientId: workout.clientId,
             status: "active" as const,
-            startedAt: new Date().toISOString(),
-            exercises: workout.exercises.map((exercise, index) => ({
-              id: createId("session-exercise"),
-              exerciseId: exercise.exerciseId,
-              exerciseName: exercise.exerciseName,
-              order: index + 1,
-              comment: exercise.comment
-            }))
+            startedAt: now,
+            workoutTitleSnapshot: workout.title,
+            createdAt: now,
+            updatedAt: now,
+            exercises: sessionExercises
           };
-          const resultActions: LocalDataAction[] = workout.exercises.flatMap((exercise) =>
+          const resultActions: LocalDataAction[] = workout.exercises.flatMap((exercise, exerciseIndex) =>
             exercise.sets.map((set) => ({
               type: "result/upsert" as const,
               result: {
                 id: createId("result"),
                 sessionId: session.id,
+                sessionExerciseItemId: sessionExercises[exerciseIndex]?.id,
                 exerciseId: exercise.exerciseId,
                 setIndex: set.order,
                 setId: set.id,
@@ -478,8 +703,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           await commitActions(
             [
               { type: "session/upsert", session },
-              ...resultActions,
-              { type: "workout/upsert", workout: cloneWorkout({ ...workout, status: "active" }) }
+              ...resultActions
             ],
             "immediate"
           );
@@ -494,12 +718,14 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
           const session = cloneSession({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: [
               ...current.exercises,
               {
                 id: createId("session-exercise"),
                 exerciseId,
                 exerciseName: getExerciseName(currentState, exerciseId),
+                exerciseNameSnapshot: getExerciseName(currentState, exerciseId),
                 order: current.exercises.length + 1
               }
             ]
@@ -512,6 +738,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           if (!current) throw new DataNotFoundError("Session", sessionId);
           const session = cloneSession({
             ...current,
+            updatedAt: new Date().toISOString(),
             exercises: current.exercises.filter((exercise) => exercise.exerciseId !== exerciseId)
           });
           await commitActions([{ type: "session/upsert", session }], "immediate");
@@ -520,7 +747,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         async update(sessionId, patch: UpdateSessionInput) {
           const current = stateRef.current.sessionsById[sessionId];
           if (!current) throw new DataNotFoundError("Session", sessionId);
-          const session = cloneSession({ ...current, ...patch });
+          const session = cloneSession({ ...current, ...patch, updatedAt: new Date().toISOString() });
           await commitActions([{ type: "session/upsert", session }]);
           return cloneSession(session);
         },
@@ -528,15 +755,16 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const currentState = stateRef.current;
           const current = currentState.sessionsById[sessionId];
           if (!current) throw new DataNotFoundError("Session", sessionId);
+          if (current.status === "completed") return cloneSession(current);
+          if (current.status !== "active") throw new Error("Only active session can be completed");
           const durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(current.startedAt).getTime()) / 1000));
-          const session = cloneSession({ ...current, status: "completed", completedAt: new Date().toISOString(), durationSeconds });
-          const actions: LocalDataAction[] = [{ type: "session/upsert", session }];
-          const workout = currentState.workoutsById[current.workoutId];
-          if (workout) {
-            actions.push({ type: "workout/upsert", workout: cloneWorkout({ ...workout, status: "completed" }) });
-          }
-          await commitActions(actions, "immediate");
+          const completedAt = new Date().toISOString();
+          const session = cloneSession({ ...current, status: "completed", completedAt, durationSeconds, updatedAt: completedAt });
+          await commitActions([{ type: "session/upsert", session }], "immediate");
           return cloneSession(session);
+        },
+        async getPreviousExercisePerformance(input) {
+          return selectPreviousExercisePerformance(stateRef.current, input);
         }
       },
       results: {
@@ -551,10 +779,15 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
           const existing = currentState.resultIds
             .map((id) => currentState.resultsById[id])
-            .find((result) => result.sessionId === input.sessionId && result.exerciseId === input.exerciseId && result.setIndex === input.setIndex);
+            .find((result) => {
+              if (result.sessionId !== input.sessionId || result.setIndex !== input.setIndex) return false;
+              if (input.sessionExerciseItemId || result.sessionExerciseItemId) return result.sessionExerciseItemId === input.sessionExerciseItemId;
+              return result.exerciseId === input.exerciseId;
+            });
           const result = {
             id: existing?.id ?? createId("result"),
             sessionId: input.sessionId,
+            sessionExerciseItemId: input.sessionExerciseItemId ?? existing?.sessionExerciseItemId,
             exerciseId: input.exerciseId,
             setIndex: input.setIndex,
             setId: input.setId ?? existing?.setId,

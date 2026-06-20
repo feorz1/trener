@@ -10,6 +10,17 @@ import { theme } from "@/theme";
 type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
 const repeatDays: RepeatDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const muscleLabels: Record<string, string> = {
+  all: "Все",
+  legs: "Ноги",
+  quads: "Квадрицепс",
+  shoulders: "Плечи",
+  triceps: "Трицепс",
+  back: "Спина",
+  biceps: "Бицепс",
+  chest: "Грудь",
+  glutes: "Ягодицы"
+};
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -44,16 +55,25 @@ export default function ExerciseSelectionScreen() {
   const selectedFromStore = useMemo(() => (hasSessionContext ? [] : Array.from(existingExerciseIds)), [existingExerciseIds, hasSessionContext]);
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedFromStore);
   const [search, setSearch] = useState("");
+  const [selectedMuscle, setSelectedMuscle] = useState("all");
   const { scrollProps } = useConditionalScroll();
   const normalizedSearch = search.trim().toLowerCase();
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const contextCount = [hasDraftContext, hasSessionContext].filter(Boolean).length;
   const hasInvalidContext = contextCount !== 1 || (hasDraftContext && !draft) || (hasSessionContext && !session);
 
+  const muscleFilters = useMemo(() => {
+    const muscles = Array.from(new Set(exercises.flatMap((exercise) => exercise.primaryMuscles))).sort();
+    return ["all", ...muscles];
+  }, [exercises]);
+
   const filteredExercises = useMemo(() => {
-    if (!normalizedSearch) return exercises;
-    return exercises.filter((exercise) => exercise.name.toLowerCase().includes(normalizedSearch));
-  }, [exercises, normalizedSearch]);
+    return exercises.filter((exercise) => {
+      const matchesSearch = !normalizedSearch || exercise.name.toLowerCase().includes(normalizedSearch);
+      const matchesMuscle = selectedMuscle === "all" || exercise.primaryMuscles.includes(selectedMuscle);
+      return matchesSearch && matchesMuscle;
+    });
+  }, [exercises, normalizedSearch, selectedMuscle]);
 
   const toggleExercise = (exerciseId: string) => {
     if (hasSessionContext && existingExerciseIds.has(exerciseId)) return;
@@ -93,8 +113,32 @@ export default function ExerciseSelectionScreen() {
       <View style={styles.filter}>
         <Search value={search} width="fill" placeholder="Поиск упражнений" onChangeText={setSearch} onClear={() => setSearch("")} />
         <View style={styles.chips}>
-          <Chip label="Мышцы" dropdown />
+          {muscleFilters.map((muscle) => (
+            <Chip
+              key={muscle}
+              label={muscleLabels[muscle] ?? muscle}
+              selected={selectedMuscle === muscle}
+              onPress={() => setSelectedMuscle(muscle)}
+              onRemove={() => setSelectedMuscle("all")}
+            />
+          ))}
         </View>
+        <Button
+          label="Создать упражнение"
+          type="secondaryNeutral"
+          size="medium"
+          width="fill"
+          onPress={() =>
+            router.push({
+              pathname: "/workouts/exercise-new",
+              params: {
+                ...(draftId ? { draftId } : {}),
+                ...(sessionId ? { sessionId } : {}),
+                ...(draftDay ? { day: draftDay } : {})
+              }
+            })
+          }
+        />
       </View>
 
       <Divider width="fill" tone="canvasSoft" />
@@ -158,6 +202,7 @@ const styles = StyleSheet.create({
   },
   chips: {
     flexDirection: "row",
+    flexWrap: "wrap",
     gap: theme.spacing.sm
   },
   body: {

@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert as NativeAlert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet } from "@/components/ui";
-import { useClient, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
+import { useClient, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
+import { formatSessionDate } from "@/features/workouts/sessionHistory";
 import { formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
@@ -69,7 +70,7 @@ export default function WorkoutSessionScreen() {
 
       return session.exercises.map((exercise) => {
         const exerciseResults = results
-          .filter((result) => result.exerciseId === exercise.exerciseId)
+          .filter((result) => (result.sessionExerciseItemId ? result.sessionExerciseItemId === exercise.id : result.exerciseId === exercise.exerciseId))
           .sort((left, right) => left.setIndex - right.setIndex);
         const workoutExercise = workout?.exercises.find((item) => item.exerciseId === exercise.exerciseId);
         const sets: SessionResultSet[] = exerciseResults.length > 0
@@ -98,14 +99,14 @@ export default function WorkoutSessionScreen() {
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
   const [sessionExercises, setSessionExercises] = useState(initialSessionExercises);
-  const sessionStartedAtRef = useRef(Date.now());
+  const sessionStartedAtRef = useRef(session?.startedAt ? new Date(session.startedAt).getTime() : Date.now());
   const nextSetId = useRef(1);
 
   useEffect(() => {
     setSessionExercises(initialSessionExercises);
-    sessionStartedAtRef.current = Date.now();
+    sessionStartedAtRef.current = session?.startedAt ? new Date(session.startedAt).getTime() : Date.now();
     nextSetId.current = 1;
-  }, [initialSessionExercises]);
+  }, [initialSessionExercises, session?.startedAt]);
 
   const completedExercises = useMemo(
     () => sessionExercises.filter((exercise) => exercise.sets.length > 0 && exercise.sets.every((set) => set.state === "selected")).length,
@@ -128,6 +129,7 @@ export default function WorkoutSessionScreen() {
 
       void resultActions.upsertSetResult({
         sessionId,
+        sessionExerciseItemId: exercise.id,
         exerciseId: exercise.exerciseId,
         setIndex: set.index,
         setId: set.id,
@@ -190,12 +192,17 @@ export default function WorkoutSessionScreen() {
   }, []);
 
   const handleDeleteSet = useCallback((exerciseId: string, setId: string) => {
+    const result = results.find((item) => item.setId === setId || item.id === setId);
+    if (result) {
+      void resultActions.remove(result.id).catch(() => undefined);
+    }
+
     setSessionExercises((current) =>
       current.map((exercise) =>
         exercise.id !== exerciseId ? exercise : { ...exercise, sets: normalizeSetIndexes(exercise.sets.filter((set) => set.id !== setId)) }
       )
     );
-  }, []);
+  }, [resultActions, results]);
 
   const handleAddSet = useCallback((exerciseId: string) => {
     setSessionExercises((current) =>
@@ -221,7 +228,7 @@ export default function WorkoutSessionScreen() {
     );
   }, [persistSet]);
 
-  const finishSession = useCallback(async () => {
+  const completeSession = useCallback(async () => {
     if (!sessionId) return;
 
     await sessionActions.complete(sessionId);
@@ -234,6 +241,22 @@ export default function WorkoutSessionScreen() {
       }
     });
   }, [sessionActions, sessionId]);
+
+  const finishSession = useCallback(() => {
+    const hasLoggedIncompleteSets = sessionExercises.some((exercise) =>
+      exercise.sets.some((set) => set.state !== "selected" && (Number.isFinite(set.weight) || Number.isFinite(set.reps)))
+    );
+
+    if (!hasLoggedIncompleteSets) {
+      void completeSession();
+      return;
+    }
+
+    NativeAlert.alert("Есть незавершённые подходы", "Завершить тренировку без них?", [
+      { text: "Вернуться", style: "cancel" },
+      { text: "Завершить", style: "destructive", onPress: () => void completeSession() }
+    ]);
+  }, [completeSession, sessionExercises]);
 
   const addExercise = useCallback(() => {
     if (!sessionId) return;
@@ -289,24 +312,19 @@ export default function WorkoutSessionScreen() {
           <View style={styles.exerciseList}>
             {sessionExercises.map((exercise) => {
               return (
-                <View key={exercise.id} style={styles.exerciseWrapper}>
-                  <Approach
-                    title={exercise.exerciseName}
-                    note={exercise.comment}
-                    noteTitle="Заметка"
-                    noteSaveLabel="Сохранить"
-                    addLabel="Добавить подход"
-                    sets={exercise.sets}
-                    showDeleteAction
-                    style={styles.exerciseCard}
-                    onAddSet={() => handleAddSet(exercise.id)}
-                    onDeleteSet={(setId) => handleDeleteSet(exercise.id, setId)}
-                    onNoteChange={(nextNote) => handleNoteChange(exercise.id, nextNote)}
-                    onSetStateChange={(id, state) => handleSetStateChange(exercise.id, id, state)}
-                    onSetValueChange={(id, patch) => handleSetValueChange(exercise.id, id, patch)}
-                    onSetsReorder={(nextSets) => handleSetReorder(exercise.id, nextSets)}
-                  />
-                </View>
+                <SessionExerciseCard
+                  key={exercise.id}
+                  clientId={session.clientId}
+                  currentSessionId={session.id}
+                  before={session.startedAt}
+                  exercise={exercise}
+                  onAddSet={() => handleAddSet(exercise.id)}
+                  onDeleteSet={(setId) => handleDeleteSet(exercise.id, setId)}
+                  onNoteChange={(nextNote) => handleNoteChange(exercise.id, nextNote)}
+                  onSetStateChange={(id, state) => handleSetStateChange(exercise.id, id, state)}
+                  onSetValueChange={(id, patch) => handleSetValueChange(exercise.id, id, patch)}
+                  onSetsReorder={(nextSets) => handleSetReorder(exercise.id, nextSets)}
+                />
               );
             })}
           </View>
@@ -319,6 +337,80 @@ export default function WorkoutSessionScreen() {
       </View>
     </SafeAreaView>
   );
+}
+
+function SessionExerciseCard({
+  clientId,
+  currentSessionId,
+  before,
+  exercise,
+  onAddSet,
+  onDeleteSet,
+  onNoteChange,
+  onSetStateChange,
+  onSetValueChange,
+  onSetsReorder
+}: {
+  clientId?: string;
+  currentSessionId: string;
+  before: string;
+  exercise: SessionExercise;
+  onAddSet: () => void;
+  onDeleteSet: (setId: string) => void;
+  onNoteChange: (nextNote: string) => void;
+  onSetStateChange: (id: string, state: ApproachSet["state"]) => void;
+  onSetValueChange: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
+  onSetsReorder: (nextSets: ApproachSet[]) => void;
+}) {
+  const { previousPerformance } = usePreviousExercisePerformance({
+    clientId,
+    exerciseId: exercise.exerciseId,
+    before,
+    excludeSessionId: currentSessionId
+  });
+
+  return (
+    <View style={styles.exerciseWrapper}>
+      <View style={styles.previousResult}>
+        <Text style={styles.previousTitle}>Предыдущий результат</Text>
+        {previousPerformance ? (
+          <View style={styles.previousBody}>
+            <Text style={styles.previousDate}>{formatSessionDate(previousPerformance.completedAt)}</Text>
+            {previousPerformance.sets.map((set, index) => (
+              <Text key={`${previousPerformance.sessionId}-${set.setIndex}-${index}`} style={styles.previousSet}>
+                {set.setIndex}. {formatPreviousSet(set)}
+              </Text>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.previousEmpty}>Ранее не выполнялось</Text>
+        )}
+      </View>
+      <Approach
+        title={exercise.exerciseName}
+        note={exercise.comment}
+        noteTitle="Заметка"
+        noteSaveLabel="Сохранить"
+        addLabel="Добавить подход"
+        sets={exercise.sets}
+        showDeleteAction
+        style={styles.exerciseCard}
+        onAddSet={onAddSet}
+        onDeleteSet={onDeleteSet}
+        onNoteChange={onNoteChange}
+        onSetStateChange={onSetStateChange}
+        onSetValueChange={onSetValueChange}
+        onSetsReorder={onSetsReorder}
+      />
+    </View>
+  );
+}
+
+function formatPreviousSet(set: { weight?: number; repetitions?: number; unit?: string }) {
+  if (Number.isFinite(set.weight) && Number.isFinite(set.repetitions)) return `${set.weight} ${set.unit ?? "кг"} × ${set.repetitions}`;
+  if (Number.isFinite(set.repetitions)) return `${set.repetitions} повт.`;
+  if (Number.isFinite(set.weight)) return `${set.weight} ${set.unit ?? "кг"}`;
+  return "без данных";
 }
 
 function WorkoutTimerBadge({ startedAtRef }: { startedAtRef: MutableRefObject<number> }) {
@@ -379,6 +471,32 @@ const styles = StyleSheet.create({
   },
   exerciseWrapper: {
     gap: theme.spacing.sm
+  },
+  previousResult: {
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  previousTitle: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.ink
+  },
+  previousBody: {
+    gap: theme.spacing.xxs
+  },
+  previousDate: {
+    ...theme.typography.body.sm,
+    color: theme.colors.content.body
+  },
+  previousSet: {
+    ...theme.typography.body.sm,
+    color: theme.colors.content.ink
+  },
+  previousEmpty: {
+    ...theme.typography.body.sm,
+    color: theme.colors.content.body
   },
   exerciseCard: {
     width: "100%"

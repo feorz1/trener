@@ -66,3 +66,12 @@ export const CanonicalVariants: Story = {
     </View>
   )
 };
+
+export const WrappingGuards: Story = {
+  render: () => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm, maxWidth: theme.sizes.dividerWidth }}>
+      <Badge tone="negativeSoft" label={"Что то нельзя\n"} size="sm" icon={false} />
+      <Badge tone="negativeSoft" label="Очень длинное ограничение, которое не должно раздувать бейдж" size="sm" icon={false} />
+    </View>
+  )
+};

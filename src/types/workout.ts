@@ -30,10 +30,16 @@ export type Workout = {
   clientId?: string;
   title: string;
   startsAt: string;
+  timezone?: string;
   durationMinutes: number;
   focus: string;
   location: string;
   status: WorkoutStatus;
+  sourceWorkoutId?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  createdAt?: string;
+  updatedAt?: string;
   exercises: WorkoutExercise[];
   repeatDays?: RepeatDay[];
   scheduleTimes?: Partial<Record<RepeatDay, string>>;
@@ -45,8 +51,12 @@ export type WorkoutSessionExercise = {
   id: string;
   exerciseId: string;
   exerciseName: string;
+  exerciseNameSnapshot?: string;
   order: number;
   comment?: string;
+  plannedSets?: number;
+  plannedRepetitions?: number;
+  plannedWeight?: number;
 };
 
 export type WorkoutSession = {
@@ -57,12 +67,16 @@ export type WorkoutSession = {
   startedAt: string;
   completedAt?: string;
   durationSeconds?: number;
+  workoutTitleSnapshot?: string;
+  createdAt?: string;
+  updatedAt?: string;
   exercises: WorkoutSessionExercise[];
 };
 
 export type WorkoutResult = {
   id: string;
   sessionId: string;
+  sessionExerciseItemId?: string;
   exerciseId: string;
   setIndex: number;
   setId?: string;

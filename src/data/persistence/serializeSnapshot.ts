@@ -1,6 +1,6 @@
 import { createInitialState } from "../seeds/mockSeed";
 import type { LocalDataState } from "../local/localState";
-import { cloneClient, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "../local/localState";
+import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "../local/localState";
 import type { PersistedSnapshot } from "./PersistedSnapshot";
 
 function getLatestId<T extends { id: string }>(items: T[]) {
@@ -16,6 +16,7 @@ export function serializeDataState(state: LocalDataState, savedAt = new Date().t
     savedAt,
     data: {
       clients: state.clientIds.map((id) => cloneClient(state.clientsById[id])),
+      exercises: state.exerciseIds.map((id) => cloneExercise(state.exercisesById[id])),
       workouts,
       sessions,
       results: state.resultIds.map((id) => cloneResult(state.resultsById[id])),
@@ -31,6 +32,12 @@ export function serializeDataState(state: LocalDataState, savedAt = new Date().t
 export function hydrateDataState(snapshot: PersistedSnapshot): LocalDataState {
   const seed = createInitialState();
   const clients = snapshot.data.clients.map(cloneClient);
+  const persistedExercises = (snapshot.data.exercises ?? []).map(cloneExercise);
+  const exerciseById = {
+    ...seed.exercisesById,
+    ...Object.fromEntries(persistedExercises.map((exercise) => [exercise.id, exercise]))
+  };
+  const exerciseIds = Array.from(new Set([...seed.exerciseIds, ...persistedExercises.map((exercise) => exercise.id)]));
   const workouts = snapshot.data.workouts.map(cloneWorkout);
   const sessions = snapshot.data.sessions.map(cloneSession);
   const results = snapshot.data.results.map(cloneResult);
@@ -39,8 +46,8 @@ export function hydrateDataState(snapshot: PersistedSnapshot): LocalDataState {
   return {
     clientsById: Object.fromEntries(clients.map((client) => [client.id, client])),
     clientIds: clients.map((client) => client.id),
-    exercisesById: seed.exercisesById,
-    exerciseIds: seed.exerciseIds,
+    exercisesById: exerciseById,
+    exerciseIds,
     workoutsById: Object.fromEntries(workouts.map((workout) => [workout.id, workout])),
     workoutIds: workouts.map((workout) => workout.id),
     sessionsById: Object.fromEntries(sessions.map((session) => [session.id, session])),

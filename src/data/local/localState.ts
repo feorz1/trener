@@ -18,6 +18,7 @@ export type LocalDataState = {
 export function cloneClient(client: Client): Client {
   return {
     ...client,
+    restrictions: client.restrictions ? [...client.restrictions] : undefined,
     metrics: { ...client.metrics }
   };
 }
@@ -25,7 +26,8 @@ export function cloneClient(client: Client): Client {
 export function cloneExercise(exercise: Exercise): Exercise {
   return {
     ...exercise,
-    primaryMuscles: [...exercise.primaryMuscles]
+    primaryMuscles: [...exercise.primaryMuscles],
+    secondaryMuscles: exercise.secondaryMuscles ? [...exercise.secondaryMuscles] : undefined
   };
 }
 

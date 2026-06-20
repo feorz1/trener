@@ -1,61 +1,45 @@
 import { router } from "expo-router";
-import { StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Button, Header, ListItemCell, getListItemCellGroupPosition } from "@/components/ui";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
+import { Button, Header, ListItemCell, getListItemCellGroupPosition } from "@/components/ui";
 import { useClients } from "@/data";
 import { theme } from "@/theme";
 
 export default function ClientsScreen() {
   const { clients } = useClients();
-  const activeClientsCount = clients.filter((client) => client.status === "active").length;
-  const averageAttendanceRate = clients.length > 0 ? Math.round(clients.reduce((total, client) => total + client.metrics.attendanceRate, 0) / clients.length) : 0;
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
 
   const openNewClient = () => {
     router.push("/clients/new");
   };
 
   return (
-    <SafeAreaView edges={["top"]} style={styles.safeArea}>
-      <View style={styles.body}>
+    <View style={[styles.safeArea, { paddingTop: topInset }]}>
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <Header title="Клиенты" showSubtitle={false} size="xl" style={styles.header} />
           <Button label="Новый" type="secondaryNeutral" size="medium" style={styles.headerButton} onPress={openNewClient} accessibilityLabel="Создать клиента" />
         </View>
 
-        <View style={styles.metricsRow}>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Активные</Text>
-            <Text style={styles.metricValue}>{activeClientsCount}</Text>
-          </View>
-          <View style={styles.metricCard}>
-            <Text style={styles.metricLabel}>Посещаемость</Text>
-            <Text style={styles.metricValue}>{averageAttendanceRate}%</Text>
-          </View>
+        <View style={styles.listFrame}>
+          {clients.map((client, index) => (
+            <ListItemCell
+              key={client.id}
+              title={client.name}
+              subtitle={client.goal}
+              leading="none"
+              trailing="icon"
+              trailingIconName="chevron right"
+              density="compact"
+              surface="canvasSoft"
+              groupPosition={getListItemCellGroupPosition(index, clients.length)}
+              onPress={() => router.push({ pathname: "/clients/[clientId]", params: { clientId: client.id } })}
+            />
+          ))}
         </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Список клиентов</Text>
-            <Badge label={`${clients.length}`} tone="primary" size="s" icon={false} />
-          </View>
-          <View style={styles.listGroup}>
-            {clients.map((client, index) => (
-              <ListItemCell
-                key={client.id}
-                title={client.name}
-                subtitle={client.goal}
-                leading="avatar"
-                avatarType="initials"
-                avatarInitials={client.avatarInitials}
-                trailing="text"
-                trailingText={`${client.metrics.attendanceRate}%`}
-                groupPosition={getListItemCellGroupPosition(index, clients.length)}
-              />
-            ))}
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -67,7 +51,8 @@ const styles = StyleSheet.create({
   body: {
     gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing["3xl"] + theme.spacing["3xl"]
   },
   headerRow: {
     minHeight: theme.sizes.buttonSmHeight,
@@ -85,40 +70,11 @@ const styles = StyleSheet.create({
     height: theme.sizes.buttonSmHeight,
     minHeight: theme.sizes.buttonSmHeight
   },
-  metricsRow: {
-    flexDirection: "row",
-    gap: theme.spacing.md
-  },
-  metricCard: {
-    flex: 1,
-    gap: theme.spacing.xs,
-    padding: theme.spacing.lg,
+  listFrame: {
+    width: "100%",
+    paddingVertical: theme.spacing.xs,
     borderRadius: theme.radius.xl,
+    overflow: "hidden",
     backgroundColor: theme.colors.background.canvasSoft
-  },
-  metricLabel: {
-    ...theme.typography.body.smStrong,
-    color: theme.colors.content.body
-  },
-  metricValue: {
-    ...theme.typography.display.xs,
-    color: theme.colors.content.inkDeep
-  },
-  section: {
-    gap: theme.spacing.sm
-  },
-  sectionHeader: {
-    minHeight: theme.sizes.buttonSmHeight,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: theme.spacing.md
-  },
-  sectionTitle: {
-    ...theme.typography.body.lg,
-    color: theme.colors.content.ink
-  },
-  listGroup: {
-    gap: theme.spacing.xxs
   }
 });

@@ -2,17 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { router, useLocalSearchParams } from "expo-router";
 import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Button, Card, Header, Icon } from "@/components/ui";
 import { useClients, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
-import {
-  parseWorkoutResult,
-  parseWorkoutSessionSnapshots,
-  serializeWorkoutSessionSnapshots,
-  summarizeWorkoutResult,
-  type WorkoutSessionSnapshotMap
-} from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { Client, Workout, WorkoutResult, WorkoutSession, WorkoutStatus } from "@/types";
@@ -23,17 +16,13 @@ type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "s
 type TodayWorkout = {
   id: string;
   workoutId?: string;
+  sessionId?: string;
   clientName: string;
   time: string;
   title: string;
   exercisesCount: number;
   completedExercises: number;
   status: Extract<WorkoutStatus, "planned" | "inProgress" | "completed">;
-};
-
-type CompletedWorkoutState = {
-  completedExercises: number;
-  totalExercises: number;
 };
 
 const weekdayShort = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
@@ -205,6 +194,7 @@ function buildTodayWorkout(workout: Workout, clients: Client[], sessions: Workou
   return {
     id: workout.id,
     workoutId: workout.id,
+    sessionId: session?.id,
     clientName: client?.name ?? "Клиент",
     time: getTimeLabel(workout.startsAt),
     title: workout.title,
@@ -246,139 +236,25 @@ export default function IndexScreen() {
   const sessions = useSessionActions();
   const workoutActions = useWorkoutActions();
   const {
-    plannedDate,
-    completedWorkoutId,
-    completedExercises,
-    totalExercises,
-    activeWorkoutId,
-    activeCompletedExercises,
-    activeTotalExercises,
-    activeWorkoutSnapshots
+    plannedDate
   } = useLocalSearchParams<{
     plannedDate?: string;
-    completedWorkoutId?: string;
-    completedExercises?: string;
-    totalExercises?: string;
-    activeWorkoutId?: string;
-    activeCompletedExercises?: string;
-    activeTotalExercises?: string;
-    activeWorkoutSnapshots?: string;
   }>();
   const insets = useSafeAreaInsets();
   const today = useMemo(() => startOfDay(new Date()), []);
   const plannedDateKey = firstParam(plannedDate);
-  const completedWorkoutIdValue = firstParam(completedWorkoutId);
-  const completedExercisesValue = Number(firstParam(completedExercises));
-  const totalExercisesValue = Number(firstParam(totalExercises));
-  const activeWorkoutIdValue = firstParam(activeWorkoutId);
-  const activeCompletedExercisesValue = Number(firstParam(activeCompletedExercises));
-  const activeTotalExercisesValue = Number(firstParam(activeTotalExercises));
-  const activeWorkoutSnapshotsValue = firstParam(activeWorkoutSnapshots);
-  const activeWorkoutSnapshotMap = useMemo(() => parseWorkoutSessionSnapshots(activeWorkoutSnapshotsValue), [activeWorkoutSnapshotsValue]);
-  const [localActiveWorkoutSnapshotMap, setLocalActiveWorkoutSnapshotMap] = useState<WorkoutSessionSnapshotMap>({});
-  const [localCompletedWorkoutMap, setLocalCompletedWorkoutMap] = useState<Record<string, CompletedWorkoutState>>({});
-  const effectiveActiveWorkoutSnapshotMap = useMemo(
-    () => ({ ...localActiveWorkoutSnapshotMap, ...activeWorkoutSnapshotMap }),
-    [activeWorkoutSnapshotMap, localActiveWorkoutSnapshotMap]
-  );
-  const effectiveCompletedWorkoutMap = useMemo(() => {
-    if (!completedWorkoutIdValue) return localCompletedWorkoutMap;
-
-    return {
-      ...localCompletedWorkoutMap,
-      [completedWorkoutIdValue]: {
-        completedExercises: Number.isFinite(completedExercisesValue) ? completedExercisesValue : 0,
-        totalExercises: Number.isFinite(totalExercisesValue) && totalExercisesValue > 0 ? totalExercisesValue : 0
-      }
-    };
-  }, [completedExercisesValue, completedWorkoutIdValue, localCompletedWorkoutMap, totalExercisesValue]);
-  const serializedEffectiveActiveWorkoutSnapshots = useMemo(
-    () => serializeWorkoutSessionSnapshots(effectiveActiveWorkoutSnapshotMap),
-    [effectiveActiveWorkoutSnapshotMap]
-  );
   const plannedAnchorDate = useMemo(() => parseDateKey(plannedDateKey), [plannedDateKey]);
   const [weekAnchorDate, setWeekAnchorDate] = useState(() => plannedAnchorDate ?? today);
   const weekPages = useMemo(() => getWeekPages(weekAnchorDate, today), [today, weekAnchorDate]);
   const weekItems = useMemo(() => weekPages.flat(), [weekPages]);
   const todayKey = useMemo(() => getDateKey(today), [today]);
   const workoutsByDay = useMemo(() => {
-    const storeWorkouts = getStoreWorkouts(workouts, clients, workoutSessions, results);
-
-    if (completedWorkoutIdValue) {
-      Object.values(storeWorkouts).forEach((dayWorkouts) => {
-        const workout = dayWorkouts.find((item) => item.workoutId === completedWorkoutIdValue);
-        if (!workout) return;
-
-        workout.status = "completed";
-        if (Number.isFinite(completedExercisesValue)) {
-          workout.completedExercises = completedExercisesValue;
-        }
-        if (Number.isFinite(totalExercisesValue) && totalExercisesValue > 0) {
-          workout.exercisesCount = totalExercisesValue;
-        }
-      });
-    }
-
-    if (activeWorkoutIdValue) {
-      Object.values(storeWorkouts).forEach((dayWorkouts) => {
-        const workout = dayWorkouts.find((item) => item.workoutId === activeWorkoutIdValue);
-        if (!workout) return;
-
-        workout.status = "inProgress";
-        if (Number.isFinite(activeCompletedExercisesValue)) {
-          workout.completedExercises = activeCompletedExercisesValue;
-        }
-        if (Number.isFinite(activeTotalExercisesValue) && activeTotalExercisesValue > 0) {
-          workout.exercisesCount = activeTotalExercisesValue;
-        }
-      });
-    }
-
-    Object.entries(effectiveActiveWorkoutSnapshotMap).forEach(([workoutId, snapshotValue]) => {
-      const snapshot = parseWorkoutResult(snapshotValue);
-      if (!snapshot) return;
-
-      const summary = summarizeWorkoutResult(snapshot);
-      Object.values(storeWorkouts).forEach((dayWorkouts) => {
-        const workout = dayWorkouts.find((item) => item.workoutId === workoutId);
-        if (!workout) return;
-
-        workout.status = "inProgress";
-        workout.completedExercises = summary.completedExercises;
-        workout.exercisesCount = summary.totalExercises;
-      });
-    });
-
-    Object.entries(effectiveCompletedWorkoutMap).forEach(([workoutId, completedState]) => {
-      Object.values(storeWorkouts).forEach((dayWorkouts) => {
-        const workout = dayWorkouts.find((item) => item.workoutId === workoutId);
-        if (!workout) return;
-
-        workout.status = "completed";
-        workout.completedExercises = completedState.completedExercises;
-        if (completedState.totalExercises > 0) {
-          workout.exercisesCount = completedState.totalExercises;
-        }
-      });
-    });
-
-
-    return storeWorkouts;
+    return getStoreWorkouts(workouts, clients, workoutSessions, results);
   }, [
     clients,
     results,
     workoutSessions,
-    workouts,
-    plannedDateKey,
-    completedExercisesValue,
-    completedWorkoutIdValue,
-    totalExercisesValue,
-    activeCompletedExercisesValue,
-    activeTotalExercisesValue,
-    activeWorkoutIdValue,
-    effectiveActiveWorkoutSnapshotMap,
-    effectiveCompletedWorkoutMap,
-    weekItems
+    workouts
   ]);
   const [selectedDayKey, setSelectedDayKey] = useState(plannedDateKey ?? todayKey);
   const [now, setNow] = useState(() => new Date());
@@ -387,29 +263,8 @@ export default function IndexScreen() {
   const fabProgress = useRef(new Animated.Value(1)).current;
   const fabRevealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { scrollProps } = useConditionalScroll();
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
   const floatingAddBottom = Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing.lg;
-
-  useEffect(() => {
-    setLocalActiveWorkoutSnapshotMap((current) => {
-      const nextMap = { ...current, ...activeWorkoutSnapshotMap };
-      if (completedWorkoutIdValue) {
-        delete nextMap[completedWorkoutIdValue];
-      }
-      return nextMap;
-    });
-  }, [activeWorkoutSnapshotMap, completedWorkoutIdValue]);
-
-  useEffect(() => {
-    if (!completedWorkoutIdValue) return;
-
-    setLocalCompletedWorkoutMap((current) => ({
-      ...current,
-      [completedWorkoutIdValue]: {
-        completedExercises: Number.isFinite(completedExercisesValue) ? completedExercisesValue : 0,
-        totalExercises: Number.isFinite(totalExercisesValue) && totalExercisesValue > 0 ? totalExercisesValue : 0
-      }
-    }));
-  }, [completedExercisesValue, completedWorkoutIdValue, totalExercisesValue]);
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -527,6 +382,23 @@ export default function IndexScreen() {
     openWorkoutSession(workoutId);
   };
 
+  const openWorkoutCard = (workout: TodayWorkout) => {
+    if (workout.status === "completed" && workout.sessionId) {
+      router.push({
+        pathname: "/workouts/[workoutId]/summary",
+        params: {
+          workoutId: workout.sessionId,
+          sessionId: workout.sessionId,
+          from: "home"
+        }
+      });
+      return;
+    }
+
+    if (!workout.workoutId) return;
+    router.push({ pathname: "/workouts/[workoutId]", params: { workoutId: workout.workoutId } });
+  };
+
   const openPlanningChoice = async () => {
     const draft = await workoutActions.createDraft({
       startsAt: parseDateKey(selectedDayKey)?.toISOString()
@@ -552,7 +424,7 @@ export default function IndexScreen() {
   };
 
   return (
-    <SafeAreaView edges={["top"]} style={styles.safeArea}>
+    <View style={[styles.safeArea, { paddingTop: topInset }]}>
       <ScrollView
         contentContainerStyle={styles.content}
         scrollEventThrottle={16}
@@ -598,6 +470,7 @@ export default function IndexScreen() {
                     totalExercises={workout.exercisesCount}
                     showAction={!isPast && workout.status !== "completed" && Boolean(workout.workoutId)}
                     showMenu={false}
+                    onPress={() => openWorkoutCard(workout)}
                     onStart={() => openExistingWorkoutSession(workout.workoutId)}
                     onContinue={() => openExistingWorkoutSession(workout.workoutId)}
                   />
@@ -640,7 +513,7 @@ export default function IndexScreen() {
         </Animated.View>
       ) : null}
 
-    </SafeAreaView>
+    </View>
   );
 }
 

@@ -1,5 +1,5 @@
 import { createInitialState } from "../seeds/mockSeed";
-import type { Client, QuickValue, Workout, WorkoutResult, WorkoutSession } from "../types";
+import type { Client, Exercise, QuickValue, Workout, WorkoutResult, WorkoutSession } from "../types";
 import type { PersistedSnapshot } from "./PersistedSnapshot";
 
 export class InvalidSnapshotError extends Error {
@@ -19,6 +19,10 @@ function isString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || isString(value);
+}
+
+function isOptionalStringArray(value: unknown): value is string[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every(isString));
 }
 
 function isFiniteOptionalNumber(value: unknown): value is number | undefined {
@@ -42,10 +46,21 @@ function assertUniqueIds(items: Array<{ id: string }>, entityName: string) {
 function validateClient(value: unknown): value is Client {
   if (!isRecord(value) || !isString(value.id) || !isString(value.name) || !isString(value.goal) || !isString(value.avatarInitials) || !isString(value.nextWorkoutAt) || !isString(value.notes)) return false;
   if (!["active", "paused", "new"].includes(String(value.status))) return false;
+  if (value.gender !== undefined && !["male", "female"].includes(String(value.gender))) return false;
+  if (!isOptionalString(value.phone) || !isOptionalString(value.email) || !isOptionalString(value.birthDate) || !isOptionalString(value.telegram) || !isOptionalStringArray(value.restrictions)) return false;
   if (!isRecord(value.metrics)) return false;
   return typeof value.metrics.weightKg === "number" && Number.isFinite(value.metrics.weightKg)
     && typeof value.metrics.heightCm === "number" && Number.isFinite(value.metrics.heightCm)
     && typeof value.metrics.attendanceRate === "number" && Number.isFinite(value.metrics.attendanceRate);
+}
+
+function validateExercise(value: unknown): value is Exercise {
+  if (!isRecord(value) || !isString(value.id) || !isString(value.name) || !Array.isArray(value.primaryMuscles) || !isString(value.equipment)) return false;
+  if (!["strength", "mobility", "cardio"].includes(String(value.category))) return false;
+  if (value.source !== undefined && !["built_in", "custom"].includes(String(value.source))) return false;
+  if (!value.primaryMuscles.every(isString)) return false;
+  if (value.secondaryMuscles !== undefined && (!Array.isArray(value.secondaryMuscles) || !value.secondaryMuscles.every(isString))) return false;
+  return isOptionalString(value.coachNotes) && isOptionalString(value.notes) && isOptionalString(value.archivedAt) && isOptionalString(value.createdAt) && isOptionalString(value.updatedAt);
 }
 
 function validateWorkout(value: unknown): value is Workout {
@@ -91,18 +106,21 @@ export function validatePersistedSnapshot(value: unknown): PersistedSnapshot {
   if (!isRecord(value.data)) throw new InvalidSnapshotError("snapshot.data must be an object");
 
   const clients = getArray(value.data, "clients");
+  const exercises = Array.isArray(value.data.exercises) ? value.data.exercises : [];
   const workouts = getArray(value.data, "workouts");
   const sessions = getArray(value.data, "sessions");
   const results = getArray(value.data, "results");
   const quickValues = getArray(value.data, "quickValues");
 
   if (!clients.every(validateClient)) throw new InvalidSnapshotError("snapshot clients are invalid");
+  if (!exercises.every(validateExercise)) throw new InvalidSnapshotError("snapshot exercises are invalid");
   if (!workouts.every(validateWorkout)) throw new InvalidSnapshotError("snapshot workouts are invalid");
   if (!sessions.every(validateSession)) throw new InvalidSnapshotError("snapshot sessions are invalid");
   if (!results.every(validateResult)) throw new InvalidSnapshotError("snapshot results are invalid");
   if (!quickValues.every(validateQuickValue)) throw new InvalidSnapshotError("snapshot quick values are invalid");
 
   assertUniqueIds(clients, "clients");
+  assertUniqueIds(exercises, "exercises");
   assertUniqueIds(workouts, "workouts");
   assertUniqueIds(sessions, "sessions");
   assertUniqueIds(results, "results");
@@ -111,7 +129,7 @@ export function validatePersistedSnapshot(value: unknown): PersistedSnapshot {
   const clientIds = new Set(clients.map((client) => client.id));
   const workoutIds = new Set(workouts.map((workout) => workout.id));
   const sessionIds = new Set(sessions.map((session) => session.id));
-  const exerciseIds = new Set(createInitialState().exerciseIds);
+  const exerciseIds = new Set([...createInitialState().exerciseIds, ...exercises.map((exercise) => exercise.id)]);
 
   workouts.forEach((workout) => {
     if (workout.clientId && !clientIds.has(workout.clientId)) throw new InvalidSnapshotError("workout references unknown client");

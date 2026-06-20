@@ -20,12 +20,16 @@ export const mockClients: Client[] = [
   },
   {
     id: "client-2",
-    name: "Илья Соколов",
-    goal: "Набор мышечной массы",
+    name: "Константин",
+    phone: "+7 999-312-21-42",
+    telegram: "@konstantin",
+    gender: "male",
+    goal: "Поддержать форму",
     status: "active",
-    avatarInitials: "ИС",
+    avatarInitials: "К",
     nextWorkoutAt: atToday(12, 0),
-    notes: "Держать отдых между тяжелыми подходами не меньше 2 минут.",
+    notes: "Нельзя скручивания, Нельзя осевые нагрузки",
+    restrictions: ["Травмы спины", "Грыжи / протрузии", "Нельзя скручивания", "Нельзя осевые нагрузки"],
     metrics: { weightKg: 78, heightCm: 181, attendanceRate: 86 }
   },
   {

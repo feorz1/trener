@@ -1,9 +1,10 @@
-import type { Client, ClientId, QuickValue, QuickValueId, ResultId, SessionId, Workout, WorkoutId, WorkoutResult, WorkoutSession } from "../types";
+import type { Client, ClientId, Exercise, ExerciseId, QuickValue, QuickValueId, ResultId, SessionId, Workout, WorkoutId, WorkoutResult, WorkoutSession } from "../types";
 import type { LocalDataState } from "./localState";
 
 export type LocalDataAction =
   | { type: "state/replace"; state: LocalDataState }
   | { type: "client/upsert"; client: Client }
+  | { type: "exercise/upsert"; exercise: Exercise }
   | { type: "workout/upsert"; workout: Workout }
   | { type: "workout/remove"; workoutId: WorkoutId }
   | { type: "session/upsert"; session: WorkoutSession }
@@ -26,6 +27,14 @@ export function localReducer(state: LocalDataState, action: LocalDataAction): Lo
       ...state,
       clientsById: { ...state.clientsById, [action.client.id]: action.client },
       clientIds: appendUnique<ClientId>(state.clientIds, action.client.id)
+    };
+  }
+
+  if (action.type === "exercise/upsert") {
+    return {
+      ...state,
+      exercisesById: { ...state.exercisesById, [action.exercise.id]: action.exercise },
+      exerciseIds: appendUnique<ExerciseId>(state.exerciseIds, action.exercise.id)
     };
   }
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   Badge,
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui";
 import { useClientActions, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
 
 type Gender = "male" | "female";
@@ -66,6 +68,8 @@ type ClientForm = {
 };
 
 const STEPS: ClientStep[] = ["basic", "age", "height", "weight", "targetWeight", "health", "restrictions", "lifestyle", "experience", "goal", "summary"];
+const CLIENT_FORM_KEYBOARD_OFFSET = theme.spacing.lg;
+const CLIENT_FORM_TEXT_AREA_KEYBOARD_OFFSET = theme.sizes.textAreaFieldMinHeight + theme.spacing.lg;
 
 const sectionByStep: Record<ClientStep, number> = {
   basic: 1,
@@ -221,6 +225,13 @@ export default function NewClientScreen() {
   const selectedSportLabels = form.sports.map((key) => getLabel(sportOptions, key));
   const restrictionLabels = useMemo(() => getRestrictionLabels(form), [form]);
   const { scrollProps } = useConditionalScroll();
+  const keyboardInset = useKeyboardInset();
+  const keyboardVisible = keyboardInset > theme.spacing[0];
+  const hasVisibleTextArea =
+    (step === "health" && form.healthConstraints.includes("other")) ||
+    (step === "restrictions" && form.exerciseRestrictions.includes("other")) ||
+    (step === "experience" && form.sports.includes("other"));
+  const keyboardOffset = hasVisibleTextArea ? CLIENT_FORM_TEXT_AREA_KEYBOARD_OFFSET : CLIENT_FORM_KEYBOARD_OFFSET;
 
   const updateForm = <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -247,9 +258,13 @@ export default function NewClientScreen() {
   const createClient = async () => {
     const createdClient = await clients.create({
       name: form.name,
+      phone: [form.phonePrefix, form.phone].filter(Boolean).join(" "),
+      telegram: form.telegram,
+      gender: form.gender,
       goal: getGoalSummary(form),
       status: "new",
       notes: getRestrictionLabels(form).join(", "),
+      restrictions: getRestrictionLabels(form),
       metrics: {
         weightKg: form.weight,
         heightCm: form.height,
@@ -283,44 +298,53 @@ export default function NewClientScreen() {
         onBack={goBack}
       />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAwareBody}>
-        <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" {...scrollProps}>
-          <View style={styles.header}>
-            <Text style={styles.title}>{getStepTitle(step)}</Text>
-            <ProgressBar completed={progressBySection[sectionStep]} total={100} label={`${sectionStep} из 7`} showBadge tone="primary" />
-          </View>
+      <KeyboardAwareScrollView
+        bottomOffset={keyboardOffset}
+        contentContainerStyle={styles.content}
+        extraKeyboardSpace={keyboardOffset}
+        keyboardShouldPersistTaps="handled"
+        mode="insets"
+        style={styles.keyboardAwareBody}
+        {...scrollProps}
+        scrollEnabled
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>{getStepTitle(step)}</Text>
+          <ProgressBar completed={progressBySection[sectionStep]} total={100} label={`${sectionStep} из 7`} showBadge tone="primary" />
+        </View>
 
-          <Divider width="fill" tone="canvasSoft" />
+        <Divider width="fill" tone="canvasSoft" />
 
-          {step === "basic" ? <BasicStep form={form} updateForm={updateForm} /> : null}
-          {step === "age" ? <BodySliderStep title="Текущий возраст" value={form.age} min={0} max={100} onChange={(value) => updateForm("age", value)} /> : null}
-          {step === "height" ? <BodySliderStep title="Текущий рост" value={form.height} min={0} max={250} onChange={(value) => updateForm("height", value)} /> : null}
-          {step === "weight" ? <BodySliderStep title="Текущий вес" value={form.weight} min={0} max={250} onChange={updateWeight} /> : null}
-          {step === "targetWeight" ? (
-            <BodySliderStep
-              title="Желаемый вес"
-              value={form.targetWeight}
-              min={0}
-              max={250}
-              referenceValue={form.weight}
-              rangeFrom={form.weight}
-              onChange={(value) => updateForm("targetWeight", value)}
-            />
-          ) : null}
-          {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
-          {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
-          {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
-          {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
-          {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
-          {step === "summary" ? (
-            <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
-          ) : null}
-        </ScrollView>
+        {step === "basic" ? <BasicStep form={form} updateForm={updateForm} /> : null}
+        {step === "age" ? <BodySliderStep title="Текущий возраст" value={form.age} min={0} max={100} onChange={(value) => updateForm("age", value)} /> : null}
+        {step === "height" ? <BodySliderStep title="Текущий рост" value={form.height} min={0} max={250} onChange={(value) => updateForm("height", value)} /> : null}
+        {step === "weight" ? <BodySliderStep title="Текущий вес" value={form.weight} min={0} max={250} onChange={updateWeight} /> : null}
+        {step === "targetWeight" ? (
+          <BodySliderStep
+            title="Желаемый вес"
+            value={form.targetWeight}
+            min={0}
+            max={250}
+            referenceValue={form.weight}
+            rangeFrom={form.weight}
+            onChange={(value) => updateForm("targetWeight", value)}
+          />
+        ) : null}
+        {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
+        {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
+        {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
+        {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
+        {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
+        {step === "summary" ? (
+          <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
+        ) : null}
+      </KeyboardAwareScrollView>
 
+      {keyboardVisible ? null : (
         <View style={styles.footer}>
           <Button label={step === "summary" ? "Создать клиента" : "Продолжить"} type="primary" size="large" width="fill" onPress={step === "summary" ? createClient : goNext} />
         </View>
-      </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }

@@ -27,7 +27,7 @@ import { Radio, type RadioState } from "@/components/ui/Radio";
 import { Search, type SearchState } from "@/components/ui/Search";
 import { Select, type SelectState } from "@/components/ui/Select";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { Set as WorkoutSet, type WorkoutSetVariant } from "@/components/ui/Set";
+import { Set as WorkoutSet, type WorkoutSetValue, type WorkoutSetVariant } from "@/components/ui/Set";
 import { StateSelect } from "@/components/ui/StateSelect";
 import { SuperSet, type SuperSetSegment } from "@/components/ui/SuperSet";
 import { Switch } from "@/components/ui/Switch";
@@ -116,6 +116,14 @@ const cardVariants: CardVariant[] = ["dayPlan", "workout", "addWorkout"];
 const cardDayPlanStates: CardDayPlanState[] = ["plan", "planNext"];
 const cardStatuses: CardWorkoutStatus[] = ["planned", "inProgress", "completed"];
 const dateCellStates: DateCellState[] = ["date", "select", "disabled"];
+const listItemGymSetValues: WorkoutSetValue[] = [
+  { id: "one", label: "12x10кг" },
+  { id: "two", label: "8x15кг" },
+  { id: "three", label: "6x15кг" },
+  { id: "four", label: "4x10кг" },
+  { id: "five", label: "10x20кг" },
+  { id: "six", label: "12x25кг" }
+];
 const defaultApproachSets: ApproachSet[] = [
   { id: "one", index: 1, weight: 150, reps: 12, status: "completed" },
   { id: "two", index: 1, weight: 150, reps: 12, status: "completed" },
@@ -1088,6 +1096,8 @@ function PreviewContent({
         title="Horizontal leg press machine"
         mode={listItemGymMode}
         selected={listItemGymSelected}
+        setVariant="set"
+        setValues={listItemGymSetValues}
         deleteOpen={listItemGymMode === "move" ? listItemGymDeleteOpen : undefined}
         onDeleteOpenChange={onListItemGymDeleteOpenChange}
         onDelete={() => onListItemGymDeleteOpenChange(false)}

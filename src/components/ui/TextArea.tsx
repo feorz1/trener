@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -49,6 +49,7 @@ export function TextArea({
   onChangeText,
   ...textInputProps
 }: TextAreaProps) {
+  const inputRef = useRef<NativeTextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const resolvedState: TextAreaState = disabled ? "disabled" : isFocused && state !== "error" ? "focus" : state;
   const inputTextColor =
@@ -68,6 +69,15 @@ export function TextArea({
         ? theme.colors.content.mute
         : theme.colors.content.ink;
   const resolvedMessage = message ?? (resolvedState === "error" ? "Проверьте текст" : "Подсказка");
+  const moveCaretToEnd = () => {
+    const end = value?.length ?? theme.spacing[0];
+    const selection = { start: end, end };
+
+    inputRef.current?.setNativeProps({ selection });
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection });
+    });
+  };
 
   return (
     <View style={[styles.root, width === "fill" && styles.rootFill, style]}>
@@ -75,6 +85,7 @@ export function TextArea({
 
       <View style={[styles.field, disabled && styles.disabledField]}>
         <NativeTextInput
+          ref={inputRef}
           {...textInputProps}
           editable={!disabled}
           multiline
@@ -85,6 +96,7 @@ export function TextArea({
           onChangeText={onChangeText}
           onFocus={(event) => {
             setIsFocused(true);
+            moveCaretToEnd();
             textInputProps.onFocus?.(event);
           }}
           placeholder={placeholder}

@@ -243,6 +243,7 @@ export function CalendarDayStrip({
           snapToAlignment="start"
           style={[styles.scroll, { width: pageWidth }]}
           contentContainerStyle={styles.scrollContent}
+          contentOffset={{ x: selectedPageIndex * pageWidth, y: 0 }}
           showsHorizontalScrollIndicator={false}
           scrollEnabled={!disabled}
           onMomentumScrollEnd={handleMomentumEnd}

@@ -159,6 +159,7 @@ export default function ExerciseApproachScreen() {
   const { scrollProps } = useConditionalScroll({ disabled: setDragging });
   const activeMetricBlurTokenRef = useRef(0);
   const setsRef = useRef(initialExerciseSets);
+  const frequentValuesRef = useRef<Record<ApproachMetric, number[]>>(defaultFrequentValues);
   const latestEditedSetRef = useRef<ApproachCountItem | undefined>(undefined);
   const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
   const activePopularValues = useMemo(() => getPopularMetricValues(currentExerciseId, activeMetric?.metric), [activeMetric?.metric, currentExerciseId]);
@@ -177,12 +178,13 @@ export default function ExerciseApproachScreen() {
   );
 
   useEffect(() => {
-    setFrequentValues(
-      normalizeMetricHistory({
-        weight: weightQuickValue?.values,
-        reps: repsQuickValue?.values
-      })
-    );
+    const nextFrequentValues = normalizeMetricHistory({
+      weight: weightQuickValue?.values,
+      reps: repsQuickValue?.values
+    });
+
+    frequentValuesRef.current = nextFrequentValues;
+    setFrequentValues(nextFrequentValues);
   }, [repsQuickValue?.values, weightQuickValue?.values]);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
@@ -262,16 +264,17 @@ export default function ExerciseApproachScreen() {
 
   const rememberFrequentValue = useCallback(
     (metric: ApproachMetric, value: number | undefined) => {
-      setFrequentValues((current) => {
-        const nextValues = rememberMetricValue(current[metric], value);
-        if (nextValues === current[metric]) return current;
+      const current = frequentValuesRef.current;
+      const nextValues = rememberMetricValue(current[metric], value);
+      if (nextValues === current[metric]) return;
 
-        const nextHistory = { ...current, [metric]: nextValues };
-        if (currentExerciseId) {
-          void quickValueActions.upsert({ exerciseId: currentExerciseId, metric, values: nextValues }).catch(() => undefined);
-        }
-        return nextHistory;
-      });
+      const nextHistory = { ...current, [metric]: nextValues };
+      frequentValuesRef.current = nextHistory;
+      setFrequentValues(nextHistory);
+
+      if (currentExerciseId) {
+        void quickValueActions.upsert({ exerciseId: currentExerciseId, metric, values: nextValues }).catch(() => undefined);
+      }
     },
     [currentExerciseId, quickValueActions]
   );
