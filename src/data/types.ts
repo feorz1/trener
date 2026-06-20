@@ -1,6 +1,8 @@
-import type { Client, Exercise, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutSession } from "@/types";
+import type { Client, Exercise, OwnerId, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutSession } from "@/types";
+export { LOCAL_OWNER_ID } from "@/types";
 
 export type EntityId = string;
+export type { OwnerId };
 export type ClientId = EntityId;
 export type ExerciseId = EntityId;
 export type WorkoutId = EntityId;
@@ -26,7 +28,7 @@ export type CreateClientInput = {
   metrics?: Partial<Client["metrics"]>;
 };
 
-export type UpdateClientInput = Partial<Omit<Client, "id">>;
+export type UpdateClientInput = Partial<Omit<Client, "id" | "ownerId">>;
 
 export type CreateExerciseInput = {
   name: string;
@@ -49,7 +51,9 @@ export type CreateWorkoutDraftInput = {
   scheduleTimes?: Partial<Record<RepeatDay, string>>;
 };
 
-export type UpdateWorkoutDraftInput = Partial<Omit<Workout, "id" | "status">>;
+export type UpdateWorkoutDraftInput = Partial<
+  Pick<Workout, "clientId" | "title" | "startsAt" | "timezone" | "durationMinutes" | "focus" | "location" | "exercises" | "repeatDays" | "scheduleTimes">
+>;
 
 export type RescheduleWorkoutInput = {
   startsAt: string;
@@ -62,7 +66,7 @@ export type SetDraftExercisesOptions = {
 
 export type UpdateWorkoutDraftExerciseInput = Partial<Omit<Workout["exercises"][number], "id" | "exerciseId">>;
 
-export type UpdateSessionInput = Partial<Omit<WorkoutSession, "id" | "workoutId">>;
+export type UpdateSessionInput = Partial<Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "completedAt" | "durationSeconds" | "workoutTitleSnapshot">>;
 
 export type UpsertWorkoutResultInput = {
   sessionId: SessionId;

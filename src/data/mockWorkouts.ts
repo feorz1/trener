@@ -1,9 +1,10 @@
-import { ResultHistoryItem, Workout } from "@/types";
+import { LOCAL_OWNER_ID, ResultHistoryItem, Workout } from "@/types";
 import { atToday } from "./mockClients";
 
 export const mockWorkouts: Workout[] = [
   {
     id: "workout-1",
+    ownerId: LOCAL_OWNER_ID,
     clientId: "client-1",
     title: "Верх тела",
     startsAt: atToday(9, 30),
@@ -38,6 +39,7 @@ export const mockWorkouts: Workout[] = [
   },
   {
     id: "workout-2",
+    ownerId: LOCAL_OWNER_ID,
     clientId: "client-2",
     title: "Спина и ноги",
     startsAt: atToday(12, 0),
@@ -70,6 +72,7 @@ export const mockWorkouts: Workout[] = [
   },
   {
     id: "workout-3",
+    ownerId: LOCAL_OWNER_ID,
     clientId: "client-3",
     title: "Фулбоди",
     startsAt: atToday(18, 30),
@@ -105,6 +108,7 @@ export const mockWorkouts: Workout[] = [
 export const mockResultHistory: ResultHistoryItem[] = [
   {
     id: "result-1",
+    ownerId: LOCAL_OWNER_ID,
     clientId: "client-1",
     exerciseId: "ex-4",
     exerciseName: "Жим лежа",
@@ -115,6 +119,7 @@ export const mockResultHistory: ResultHistoryItem[] = [
   },
   {
     id: "result-2",
+    ownerId: LOCAL_OWNER_ID,
     clientId: "client-1",
     exerciseId: "ex-2",
     exerciseName: "Жим от плеч сидя в рычажном тренажере",

@@ -17,6 +17,10 @@ function appendUnique<T extends string>(ids: T[], id: T) {
   return ids.includes(id) ? ids : [...ids, id];
 }
 
+function isSameQuickValueScope(left: QuickValue, right: QuickValue) {
+  return left.ownerId === right.ownerId && left.exerciseId === right.exerciseId && left.metric === right.metric && left.clientId === right.clientId;
+}
+
 export function localReducer(state: LocalDataState, action: LocalDataAction): LocalDataState {
   if (action.type === "state/replace") {
     return action.state;
@@ -81,10 +85,19 @@ export function localReducer(state: LocalDataState, action: LocalDataAction): Lo
   }
 
   if (action.type === "quickValue/upsert") {
+    const removedIds = state.quickValueIds.filter((id) => isSameQuickValueScope(state.quickValuesById[id], action.quickValue) && id !== action.quickValue.id);
+    const quickValuesById = { ...state.quickValuesById, [action.quickValue.id]: action.quickValue };
+    for (const id of removedIds) {
+      delete quickValuesById[id];
+    }
+
     return {
       ...state,
-      quickValuesById: { ...state.quickValuesById, [action.quickValue.id]: action.quickValue },
-      quickValueIds: appendUnique<QuickValueId>(state.quickValueIds, action.quickValue.id)
+      quickValuesById,
+      quickValueIds: appendUnique<QuickValueId>(
+        state.quickValueIds.filter((id) => !removedIds.includes(id)),
+        action.quickValue.id
+      )
     };
   }
 

@@ -1,6 +1,7 @@
 import { createInitialState } from "../seeds/mockSeed";
 import type { LocalDataState } from "../local/localState";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "../local/localState";
+import { LOCAL_OWNER_ID, type OwnerId } from "../types";
 import type { PersistedSnapshot } from "./PersistedSnapshot";
 
 function getLatestId<T extends { id: string }>(items: T[]) {
@@ -29,19 +30,26 @@ export function serializeDataState(state: LocalDataState, savedAt = new Date().t
   };
 }
 
+function withOwner<T extends { ownerId?: OwnerId }>(item: T): T & { ownerId: OwnerId } {
+  return {
+    ...item,
+    ownerId: item.ownerId ?? LOCAL_OWNER_ID
+  };
+}
+
 export function hydrateDataState(snapshot: PersistedSnapshot): LocalDataState {
   const seed = createInitialState();
-  const clients = snapshot.data.clients.map(cloneClient);
-  const persistedExercises = (snapshot.data.exercises ?? []).map(cloneExercise);
+  const clients = snapshot.data.clients.map((client) => withOwner(cloneClient(client)));
+  const persistedExercises = (snapshot.data.exercises ?? []).map((exercise) => withOwner(cloneExercise(exercise)));
   const exerciseById = {
     ...seed.exercisesById,
     ...Object.fromEntries(persistedExercises.map((exercise) => [exercise.id, exercise]))
   };
   const exerciseIds = Array.from(new Set([...seed.exerciseIds, ...persistedExercises.map((exercise) => exercise.id)]));
-  const workouts = snapshot.data.workouts.map(cloneWorkout);
-  const sessions = snapshot.data.sessions.map(cloneSession);
-  const results = snapshot.data.results.map(cloneResult);
-  const quickValues = snapshot.data.quickValues.map(cloneQuickValue);
+  const workouts = snapshot.data.workouts.map((workout) => withOwner(cloneWorkout(workout)));
+  const sessions = snapshot.data.sessions.map((session) => withOwner(cloneSession(session)));
+  const results = snapshot.data.results.map((result) => withOwner(cloneResult(result)));
+  const quickValues = snapshot.data.quickValues.map((quickValue) => withOwner(cloneQuickValue(quickValue)));
 
   return {
     clientsById: Object.fromEntries(clients.map((client) => [client.id, client])),

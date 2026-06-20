@@ -20,15 +20,19 @@ export function useDataLayer() {
   return useDataContext().data;
 }
 
+export function useCurrentOwnerId() {
+  return useDataContext().currentOwnerId;
+}
+
 export function useClients() {
-  const { state } = useDataContext();
-  const clients = useMemo(() => selectClients(state), [state]);
+  const { currentOwnerId, state } = useDataContext();
+  const clients = useMemo(() => selectClients(state, currentOwnerId), [currentOwnerId, state]);
   return { clients, isLoading: false, error: null as Error | null };
 }
 
 export function useClient(clientId?: ClientId) {
-  const { state } = useDataContext();
-  const client = useMemo(() => selectClientById(state, clientId), [clientId, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const client = useMemo(() => selectClientById(state, clientId, currentOwnerId), [clientId, currentOwnerId, state]);
   return { client, isLoading: false, error: null as Error | null, notFound: Boolean(clientId && !client) };
 }
 
@@ -37,14 +41,14 @@ export function useClientActions() {
 }
 
 export function useExercises() {
-  const { state } = useDataContext();
-  const exercises = useMemo(() => selectExercises(state), [state]);
+  const { currentOwnerId, state } = useDataContext();
+  const exercises = useMemo(() => selectExercises(state, currentOwnerId), [currentOwnerId, state]);
   return { exercises, isLoading: false, error: null as Error | null };
 }
 
 export function useExercise(exerciseId?: ExerciseId) {
-  const { state } = useDataContext();
-  const exercise = useMemo(() => selectExerciseById(state, exerciseId), [exerciseId, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const exercise = useMemo(() => selectExerciseById(state, exerciseId, currentOwnerId), [currentOwnerId, exerciseId, state]);
   return { exercise, isLoading: false, error: null as Error | null, notFound: Boolean(exerciseId && !exercise) };
 }
 
@@ -53,14 +57,14 @@ export function useExerciseActions() {
 }
 
 export function useWorkouts() {
-  const { state } = useDataContext();
-  const workouts = useMemo(() => selectWorkouts(state), [state]);
+  const { currentOwnerId, state } = useDataContext();
+  const workouts = useMemo(() => selectWorkouts(state, currentOwnerId), [currentOwnerId, state]);
   return { workouts, isLoading: false, error: null as Error | null };
 }
 
 export function useWorkout(workoutId?: WorkoutId) {
-  const { state } = useDataContext();
-  const workout = useMemo(() => selectWorkoutById(state, workoutId), [state, workoutId]);
+  const { currentOwnerId, state } = useDataContext();
+  const workout = useMemo(() => selectWorkoutById(state, workoutId, currentOwnerId), [currentOwnerId, state, workoutId]);
   return { workout, isLoading: false, error: null as Error | null, notFound: Boolean(workoutId && !workout) };
 }
 
@@ -75,14 +79,14 @@ export function useWorkoutActions() {
 }
 
 export function useSessions() {
-  const { state } = useDataContext();
-  const sessions = useMemo(() => selectSessions(state), [state]);
+  const { currentOwnerId, state } = useDataContext();
+  const sessions = useMemo(() => selectSessions(state, currentOwnerId), [currentOwnerId, state]);
   return { sessions, isLoading: false, error: null as Error | null };
 }
 
 export function useSession(sessionId?: SessionId) {
-  const { state } = useDataContext();
-  const session = useMemo(() => selectSessionById(state, sessionId), [sessionId, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const session = useMemo(() => selectSessionById(state, sessionId, currentOwnerId), [currentOwnerId, sessionId, state]);
   return { session, isLoading: false, error: null as Error | null, notFound: Boolean(sessionId && !session) };
 }
 
@@ -91,20 +95,20 @@ export function useSessionActions() {
 }
 
 export function useSessionResults(sessionId?: SessionId) {
-  const { state } = useDataContext();
-  const results = useMemo(() => selectResultsBySession(state, sessionId), [sessionId, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const results = useMemo(() => selectResultsBySession(state, sessionId, currentOwnerId), [currentOwnerId, sessionId, state]);
   return { results, isLoading: false, error: null as Error | null };
 }
 
 export function useClientWorkoutHistory(clientId?: ClientId) {
-  const { state } = useDataContext();
-  const sessions = useMemo(() => selectCompletedSessionsByClient(state, clientId), [clientId, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const sessions = useMemo(() => selectCompletedSessionsByClient(state, clientId, currentOwnerId), [clientId, currentOwnerId, state]);
   return { sessions, isLoading: false, error: null as Error | null };
 }
 
 export function useResults() {
-  const { state } = useDataContext();
-  const results = useMemo(() => state.resultIds.map((id) => ({ ...state.resultsById[id] })), [state]);
+  const { currentOwnerId, state } = useDataContext();
+  const results = useMemo(() => state.resultIds.map((id) => state.resultsById[id]).filter((result) => result.ownerId === currentOwnerId).map((result) => ({ ...result })), [currentOwnerId, state]);
   return { results, isLoading: false, error: null as Error | null };
 }
 
@@ -113,14 +117,14 @@ export function useResultActions() {
 }
 
 export function useQuickValue(exerciseId?: ExerciseId, metric?: QuickValueMetric, clientId?: ClientId) {
-  const { state } = useDataContext();
-  const quickValue = useMemo(() => selectQuickValue(state, { exerciseId, metric, clientId }), [clientId, exerciseId, metric, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const quickValue = useMemo(() => selectQuickValue(state, { ownerId: currentOwnerId, exerciseId, metric, clientId }), [clientId, currentOwnerId, exerciseId, metric, state]);
   return { quickValue, isLoading: false, error: null as Error | null };
 }
 
 export function usePreviousExercisePerformance(input: { clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }) {
-  const { state } = useDataContext();
-  const previousPerformance = useMemo(() => selectPreviousExercisePerformance(state, input), [input.before, input.clientId, input.excludeSessionId, input.exerciseId, state]);
+  const { currentOwnerId, state } = useDataContext();
+  const previousPerformance = useMemo(() => selectPreviousExercisePerformance(state, { ...input, ownerId: currentOwnerId }), [currentOwnerId, input.before, input.clientId, input.excludeSessionId, input.exerciseId, state]);
   return { previousPerformance, isLoading: false, error: null as Error | null };
 }
 

@@ -1,68 +1,83 @@
-import type { ClientId, ExerciseId, PreviousExercisePerformance, QuickValueMetric, SessionId, WorkoutId } from "../types";
+import type { ClientId, ExerciseId, OwnerId, PreviousExercisePerformance, QuickValueMetric, SessionId, WorkoutId } from "../types";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout, type LocalDataState } from "./localState";
 
-export function selectClients(state: LocalDataState) {
-  return state.clientIds.map((id) => cloneClient(state.clientsById[id])).filter(Boolean);
+function isOwned<T extends { ownerId: OwnerId }>(item: T | undefined, ownerId: OwnerId): item is T {
+  return Boolean(item && item.ownerId === ownerId);
 }
 
-export function selectClientById(state: LocalDataState, id?: ClientId) {
-  return id ? state.clientsById[id] ?? null : null;
+export function selectClients(state: LocalDataState, ownerId: OwnerId) {
+  return state.clientIds.map((id) => state.clientsById[id]).filter((client) => isOwned(client, ownerId)).map(cloneClient);
 }
 
-export function selectExercises(state: LocalDataState) {
-  return state.exerciseIds.map((id) => cloneExercise(state.exercisesById[id])).filter(Boolean);
+export function selectClientById(state: LocalDataState, id: ClientId | undefined, ownerId: OwnerId) {
+  const client = id ? state.clientsById[id] : undefined;
+  return isOwned(client, ownerId) ? cloneClient(client) : null;
 }
 
-export function selectExerciseById(state: LocalDataState, id?: ExerciseId) {
-  return id ? state.exercisesById[id] ?? null : null;
+export function selectExercises(state: LocalDataState, ownerId: OwnerId) {
+  return state.exerciseIds.map((id) => state.exercisesById[id]).filter((exercise) => isOwned(exercise, ownerId)).map(cloneExercise);
 }
 
-export function selectWorkouts(state: LocalDataState) {
-  return state.workoutIds.map((id) => cloneWorkout(state.workoutsById[id])).filter(Boolean);
+export function selectExerciseById(state: LocalDataState, id: ExerciseId | undefined, ownerId: OwnerId) {
+  const exercise = id ? state.exercisesById[id] : undefined;
+  return isOwned(exercise, ownerId) ? cloneExercise(exercise) : null;
 }
 
-export function selectWorkoutById(state: LocalDataState, id?: WorkoutId) {
-  return id ? state.workoutsById[id] ?? null : null;
+export function selectWorkouts(state: LocalDataState, ownerId: OwnerId) {
+  return state.workoutIds.map((id) => state.workoutsById[id]).filter((workout) => isOwned(workout, ownerId)).map(cloneWorkout);
 }
 
-export function selectSessions(state: LocalDataState) {
-  return state.sessionIds.map((id) => cloneSession(state.sessionsById[id])).filter(Boolean);
+export function selectWorkoutById(state: LocalDataState, id: WorkoutId | undefined, ownerId: OwnerId) {
+  const workout = id ? state.workoutsById[id] : undefined;
+  return isOwned(workout, ownerId) ? cloneWorkout(workout) : null;
 }
 
-export function selectSessionById(state: LocalDataState, id?: SessionId) {
-  return id ? state.sessionsById[id] ?? null : null;
+export function selectSessions(state: LocalDataState, ownerId: OwnerId) {
+  return state.sessionIds.map((id) => state.sessionsById[id]).filter((session) => isOwned(session, ownerId)).map(cloneSession);
 }
 
-export function selectResultsBySession(state: LocalDataState, sessionId?: SessionId) {
+export function selectSessionById(state: LocalDataState, id: SessionId | undefined, ownerId: OwnerId) {
+  const session = id ? state.sessionsById[id] : undefined;
+  return isOwned(session, ownerId) ? cloneSession(session) : null;
+}
+
+export function selectResultsBySession(state: LocalDataState, sessionId: SessionId | undefined, ownerId: OwnerId) {
   if (!sessionId) return [];
+  const session = state.sessionsById[sessionId];
+  if (!isOwned(session, ownerId)) return [];
   return state.resultIds
     .map((id) => state.resultsById[id])
-    .filter((result) => result.sessionId === sessionId)
+    .filter((result) => result.sessionId === sessionId && result.ownerId === ownerId)
     .map(cloneResult);
 }
 
-export function selectCompletedSessionsByClient(state: LocalDataState, clientId?: ClientId) {
+export function selectCompletedSessionsByClient(state: LocalDataState, clientId: ClientId | undefined, ownerId: OwnerId) {
   if (!clientId) return [];
+  const client = state.clientsById[clientId];
+  if (!isOwned(client, ownerId)) return [];
 
   return state.sessionIds
     .map((id) => state.sessionsById[id])
-    .filter((session) => session.clientId === clientId && session.status === "completed" && Boolean(session.completedAt))
+    .filter((session) => session.ownerId === ownerId && session.clientId === clientId && session.status === "completed" && Boolean(session.completedAt))
     .sort((left, right) => new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime())
     .map(cloneSession);
 }
 
 export function selectPreviousExercisePerformance(
   state: LocalDataState,
-  input: { clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }
+  input: { ownerId: OwnerId; clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }
 ): PreviousExercisePerformance | null {
   if (!input.clientId || !input.exerciseId) return null;
+  const client = state.clientsById[input.clientId];
+  const exercise = state.exercisesById[input.exerciseId];
+  if (!isOwned(client, input.ownerId) || !isOwned(exercise, input.ownerId)) return null;
 
   const beforeTime = input.before ? new Date(input.before).getTime() : Date.now();
   const sessions = state.sessionIds
     .map((id) => state.sessionsById[id])
     .filter((session) => {
       if (session.id === input.excludeSessionId) return false;
-      if (session.clientId !== input.clientId || session.status !== "completed" || !session.completedAt) return false;
+      if (session.ownerId !== input.ownerId || session.clientId !== input.clientId || session.status !== "completed" || !session.completedAt) return false;
       return new Date(session.completedAt).getTime() < beforeTime;
     })
     .sort((left, right) => new Date(right.completedAt ?? 0).getTime() - new Date(left.completedAt ?? 0).getTime());
@@ -70,7 +85,7 @@ export function selectPreviousExercisePerformance(
   for (const session of sessions) {
     const sets = state.resultIds
       .map((id) => state.resultsById[id])
-      .filter((result) => result.sessionId === session.id && result.exerciseId === input.exerciseId && result.completed)
+      .filter((result) => result.ownerId === input.ownerId && result.sessionId === session.id && result.exerciseId === input.exerciseId && result.completed)
       .sort((left, right) => left.setIndex - right.setIndex)
       .map((result) => ({
         setIndex: result.setIndex,
@@ -91,12 +106,15 @@ export function selectPreviousExercisePerformance(
   return null;
 }
 
-export function selectQuickValue(state: LocalDataState, input: { exerciseId?: ExerciseId; metric?: QuickValueMetric; clientId?: ClientId }) {
+export function selectQuickValue(state: LocalDataState, input: { ownerId: OwnerId; exerciseId?: ExerciseId; metric?: QuickValueMetric; clientId?: ClientId }) {
   if (!input.exerciseId || !input.metric) return null;
+  const exercise = state.exercisesById[input.exerciseId];
+  const client = input.clientId ? state.clientsById[input.clientId] : undefined;
+  if (!isOwned(exercise, input.ownerId) || (input.clientId && !isOwned(client, input.ownerId))) return null;
 
   const quickValue = state.quickValueIds
     .map((id) => state.quickValuesById[id])
-    .find((item) => item.exerciseId === input.exerciseId && item.metric === input.metric && item.clientId === input.clientId);
+    .find((item) => item.ownerId === input.ownerId && item.exerciseId === input.exerciseId && item.metric === input.metric && item.clientId === input.clientId);
 
   return quickValue ? cloneQuickValue(quickValue) : null;
 }

@@ -3,11 +3,13 @@ import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import type { DataLayer } from "./contracts";
 import { DataNotFoundError } from "./contracts";
 import { createId } from "./createId";
+import { LOCAL_OWNER_ID } from "./types";
 import type {
   CreateClientInput,
   CreateExerciseInput,
   CreateWorkoutDraftInput,
   ExerciseId,
+  OwnerId,
   QuickValue,
   QuickValueMetric,
   RepeatDay,
@@ -34,6 +36,7 @@ type SaveMode = "debounced" | "immediate";
 type DataContextValue = {
   state: LocalDataState;
   data: DataLayer;
+  currentOwnerId: OwnerId;
   hydrationStatus: HydrationStatus;
   persistenceStatus: PersistenceStatus;
 };
@@ -71,37 +74,49 @@ function ensureWorkoutDraft(workout: Workout | undefined, id: string) {
   return workout;
 }
 
-function getSessionsForWorkout(state: LocalDataState, workoutId: string) {
-  return state.sessionIds.map((id) => state.sessionsById[id]).filter((session) => session.workoutId === workoutId);
+function ensureOwned<T extends { ownerId: OwnerId }>(entity: T | undefined, entityName: string, id: string, ownerId: OwnerId) {
+  if (!entity || entity.ownerId !== ownerId) {
+    throw new DataNotFoundError(entityName, id);
+  }
+  return entity;
 }
 
-function hasActiveSession(state: LocalDataState, workoutId: string) {
-  return getSessionsForWorkout(state, workoutId).some((session) => session.status === "active");
+function isOwned<T extends { ownerId: OwnerId }>(entity: T | undefined, ownerId: OwnerId): entity is T {
+  return Boolean(entity && entity.ownerId === ownerId);
 }
 
-function hasCompletedSession(state: LocalDataState, workoutId: string) {
-  return getSessionsForWorkout(state, workoutId).some((session) => session.status === "completed");
+function getSessionsForWorkout(state: LocalDataState, ownerId: OwnerId, workoutId: string) {
+  return state.sessionIds.map((id) => state.sessionsById[id]).filter((session) => session.ownerId === ownerId && session.workoutId === workoutId);
 }
 
-function ensureWorkoutCanChangePlan(state: LocalDataState, workout: Workout) {
+function hasActiveSession(state: LocalDataState, ownerId: OwnerId, workoutId: string) {
+  return getSessionsForWorkout(state, ownerId, workoutId).some((session) => session.status === "active");
+}
+
+function hasCompletedSession(state: LocalDataState, ownerId: OwnerId, workoutId: string) {
+  return getSessionsForWorkout(state, ownerId, workoutId).some((session) => session.status === "completed");
+}
+
+function ensureWorkoutCanChangePlan(state: LocalDataState, ownerId: OwnerId, workout: Workout) {
   if (workout.status === "cancelled") throw new Error("Workout is cancelled");
-  if (hasActiveSession(state, workout.id)) throw new Error("Workout has active session");
-  if (hasCompletedSession(state, workout.id)) throw new Error("Workout has completed session");
+  if (hasActiveSession(state, ownerId, workout.id)) throw new Error("Workout has active session");
+  if (hasCompletedSession(state, ownerId, workout.id)) throw new Error("Workout has completed session");
 }
 
-function getExerciseName(state: LocalDataState, exerciseId: ExerciseId) {
-  return state.exercisesById[exerciseId]?.name ?? "Упражнение";
+function getExerciseName(state: LocalDataState, exerciseId: ExerciseId, ownerId: OwnerId) {
+  const exercise = state.exercisesById[exerciseId];
+  return isOwned(exercise, ownerId) ? exercise.name : "Упражнение";
 }
 
-function createWorkoutExercise(state: LocalDataState, exerciseId: ExerciseId, order: number, day?: RepeatDay, existingId?: string) {
-  if (!state.exercisesById[exerciseId]) {
+function createWorkoutExercise(state: LocalDataState, ownerId: OwnerId, exerciseId: ExerciseId, order: number, day?: RepeatDay, existingId?: string) {
+  if (!isOwned(state.exercisesById[exerciseId], ownerId)) {
     throw new DataNotFoundError("Exercise", exerciseId);
   }
 
   return {
     id: existingId ?? createId("workout-exercise"),
     exerciseId,
-    exerciseName: getExerciseName(state, exerciseId),
+    exerciseName: getExerciseName(state, exerciseId, ownerId),
     day,
     sets: [
       {
@@ -129,8 +144,8 @@ function normalizeWorkoutExerciseOrder(exercises: Workout["exercises"]) {
   });
 }
 
-function getQuickValueId(exerciseId: ExerciseId, metric: QuickValueMetric, clientId?: string) {
-  return `quick-value:${clientId ?? "global"}:${exerciseId}:${metric}`;
+function getQuickValueId(ownerId: OwnerId, exerciseId: ExerciseId, metric: QuickValueMetric, clientId?: string) {
+  return `quick-value:${ownerId}:${clientId ?? "global"}:${exerciseId}:${metric}`;
 }
 
 function normalizeQuickValues(values: number[]) {
@@ -138,6 +153,7 @@ function normalizeQuickValues(values: number[]) {
 }
 
 export function DataProvider({ children, persistenceAdapter = localPersistenceAdapter }: { children: ReactNode; persistenceAdapter?: PersistenceAdapter }) {
+  const currentOwnerId = LOCAL_OWNER_ID;
   const [state, dispatch] = useReducer(localReducer, undefined, createInitialState);
   const stateRef = useRef(state);
   const coordinatorRef = useRef(new PersistenceCoordinator(persistenceAdapter));
@@ -250,17 +266,22 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
       clients: {
         async list() {
           const currentState = stateRef.current;
-          return currentState.clientIds.map((id) => cloneClient(currentState.clientsById[id]));
+          return currentState.clientIds
+            .map((id) => currentState.clientsById[id])
+            .filter((client) => isOwned(client, currentOwnerId))
+            .map(cloneClient);
         },
         async getById(id) {
           const currentState = stateRef.current;
-          return currentState.clientsById[id] ? cloneClient(currentState.clientsById[id]) : null;
+          const client = currentState.clientsById[id];
+          return isOwned(client, currentOwnerId) ? cloneClient(client) : null;
         },
         async create(input: CreateClientInput) {
           const now = new Date().toISOString();
           const name = requiredTrim(input.name, "Новый клиент");
           const client = {
             id: createId("client"),
+            ownerId: currentOwnerId,
             name,
             phone: optionalTrim(input.phone),
             email: optionalTrim(input.email),
@@ -286,8 +307,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async update(id, patch: UpdateClientInput) {
           const currentState = stateRef.current;
-          const current = currentState.clientsById[id];
-          if (!current) throw new DataNotFoundError("Client", id);
+          const current = ensureOwned(currentState.clientsById[id], "Client", id, currentOwnerId);
 
           const client = {
             ...current,
@@ -314,17 +334,20 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         async list() {
           const currentState = stateRef.current;
           return currentState.exerciseIds
-            .map((id) => cloneExercise(currentState.exercisesById[id]))
+            .map((id) => currentState.exercisesById[id])
+            .filter((exercise) => isOwned(exercise, currentOwnerId))
+            .map(cloneExercise)
             .filter((exercise) => !exercise.archivedAt);
         },
         async getById(id) {
           const exercise = stateRef.current.exercisesById[id];
-          return exercise ? cloneExercise(exercise) : null;
+          return isOwned(exercise, currentOwnerId) ? cloneExercise(exercise) : null;
         },
         async create(input: CreateExerciseInput) {
           const now = new Date().toISOString();
           const exercise = {
             id: createId("exercise"),
+            ownerId: currentOwnerId,
             name: requiredTrim(input.name, "Новое упражнение"),
             category: input.category ?? "strength",
             source: "custom" as const,
@@ -340,8 +363,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneExercise(exercise);
         },
         async archive(id) {
-          const current = stateRef.current.exercisesById[id];
-          if (!current) throw new DataNotFoundError("Exercise", id);
+          const current = ensureOwned(stateRef.current.exercisesById[id], "Exercise", id, currentOwnerId);
           const exercise = cloneExercise({
             ...current,
             archivedAt: current.archivedAt ?? new Date().toISOString(),
@@ -354,21 +376,25 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
       workouts: {
         async list() {
           const currentState = stateRef.current;
-          return currentState.workoutIds.map((id) => cloneWorkout(currentState.workoutsById[id]));
+          return currentState.workoutIds
+            .map((id) => currentState.workoutsById[id])
+            .filter((workout) => isOwned(workout, currentOwnerId))
+            .map(cloneWorkout);
         },
         async getById(id) {
           const workout = stateRef.current.workoutsById[id];
-          return workout ? cloneWorkout(workout) : null;
+          return isOwned(workout, currentOwnerId) ? cloneWorkout(workout) : null;
         },
         async createDraft(input: CreateWorkoutDraftInput = {}) {
           const currentState = stateRef.current;
-          if (input.clientId && !currentState.clientsById[input.clientId]) {
+          if (input.clientId && !isOwned(currentState.clientsById[input.clientId], currentOwnerId)) {
             throw new DataNotFoundError("Client", input.clientId);
           }
 
           const now = new Date().toISOString();
           const workout: Workout = {
             id: createId("workout"),
+            ownerId: currentOwnerId,
             clientId: input.clientId,
             title: input.title ?? "Новая тренировка",
             startsAt: input.startsAt ?? new Date().toISOString(),
@@ -388,10 +414,13 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async updateDraft(draftId, patch: UpdateWorkoutDraftInput) {
           const currentState = stateRef.current;
-          const current = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
-          if (patch.clientId && !currentState.clientsById[patch.clientId]) {
+          const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
+          if (patch.clientId && !isOwned(currentState.clientsById[patch.clientId], currentOwnerId)) {
             throw new DataNotFoundError("Client", patch.clientId);
           }
+          patch.exercises?.forEach((exercise) => {
+            if (!isOwned(currentState.exercisesById[exercise.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exercise.exerciseId);
+          });
 
           const workout = cloneWorkout({
             ...current,
@@ -406,8 +435,8 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async setDraftClient(draftId, clientId) {
           const currentState = stateRef.current;
-          const current = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
-          if (!currentState.clientsById[clientId]) throw new DataNotFoundError("Client", clientId);
+          const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
+          if (!isOwned(currentState.clientsById[clientId], currentOwnerId)) throw new DataNotFoundError("Client", clientId);
 
           const workout = cloneWorkout({ ...current, clientId, updatedAt: new Date().toISOString() });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
@@ -415,9 +444,9 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async setDraftExercises(draftId, exerciseIds, options = {}) {
           const currentState = stateRef.current;
-          const current = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
+          const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           exerciseIds.forEach((exerciseId) => {
-            if (!currentState.exercisesById[exerciseId]) throw new DataNotFoundError("Exercise", exerciseId);
+            if (!isOwned(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           });
 
           const scopedExercises = current.exercises.filter((exercise) => exercise.day === options.day);
@@ -425,7 +454,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const existingByExerciseId = Object.fromEntries(scopedExercises.map((exercise) => [exercise.exerciseId, exercise]));
           const nextScopedExercises = exerciseIds.map((exerciseId, index) => {
             const existing = existingByExerciseId[exerciseId];
-            return existing ? { ...existing, order: index + 1, day: options.day } : createWorkoutExercise(currentState, exerciseId, index + 1, options.day);
+            return existing ? { ...existing, order: index + 1, day: options.day } : createWorkoutExercise(currentState, currentOwnerId, exerciseId, index + 1, options.day);
           });
           const nextScopedIds = nextScopedExercises.map((exercise) => exercise.id);
           const validConnectionIds = new Set(getAdjacentConnectionIds(nextScopedIds));
@@ -442,7 +471,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneWorkout(workout);
         },
         async updateDraftExercise(draftId, itemId, patch) {
-          const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          const current = ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           if (!current.exercises.some((exercise) => exercise.id === itemId)) throw new DataNotFoundError("Workout exercise", itemId);
 
           const workout = cloneWorkout({
@@ -454,7 +483,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneWorkout(workout);
         },
         async removeDraftExercise(draftId, itemId) {
-          const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          const current = ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           const removedExercise = current.exercises.find((exercise) => exercise.id === itemId);
           if (!removedExercise) throw new DataNotFoundError("Workout exercise", itemId);
 
@@ -476,7 +505,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneWorkout(workout);
         },
         async reorderDraftExercises(draftId, orderedItemIds) {
-          const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          const current = ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           const orderIndexById = Object.fromEntries(orderedItemIds.map((id, index) => [id, index]));
           const orderedExercise = current.exercises.find((exercise) => orderedItemIds.includes(exercise.id));
           if (!orderedExercise) return cloneWorkout(current);
@@ -504,20 +533,20 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async addExercise(draftId, exerciseId) {
           const currentState = stateRef.current;
-          const current = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
-          if (!currentState.exercisesById[exerciseId]) throw new DataNotFoundError("Exercise", exerciseId);
+          const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
+          if (!isOwned(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           if (current.exercises.some((exercise) => exercise.exerciseId === exerciseId)) return cloneWorkout(current);
 
           const workout = cloneWorkout({
             ...current,
             updatedAt: new Date().toISOString(),
-            exercises: [...current.exercises, createWorkoutExercise(currentState, exerciseId, current.exercises.length + 1)]
+            exercises: [...current.exercises, createWorkoutExercise(currentState, currentOwnerId, exerciseId, current.exercises.length + 1)]
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
           return cloneWorkout(workout);
         },
         async removeExercise(draftId, exerciseId) {
-          const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          const current = ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           const workout = cloneWorkout({
             ...current,
             updatedAt: new Date().toISOString(),
@@ -528,13 +557,12 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async createEditDraft(workoutId) {
           const currentState = stateRef.current;
-          const source = currentState.workoutsById[workoutId];
-          if (!source) throw new DataNotFoundError("Workout", workoutId);
-          ensureWorkoutCanChangePlan(currentState, source);
+          const source = ensureOwned(currentState.workoutsById[workoutId], "Workout", workoutId, currentOwnerId);
+          ensureWorkoutCanChangePlan(currentState, currentOwnerId, source);
 
           const existingDraft = currentState.workoutIds
             .map((id) => currentState.workoutsById[id])
-            .find((workout) => workout.status === "draft" && workout.sourceWorkoutId === workoutId);
+            .find((workout) => workout.ownerId === currentOwnerId && workout.status === "draft" && workout.sourceWorkoutId === workoutId);
           if (existingDraft) return cloneWorkout(existingDraft);
 
           const now = new Date().toISOString();
@@ -556,13 +584,12 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async applyEditDraft(draftId) {
           const currentState = stateRef.current;
-          const draft = ensureWorkoutDraft(currentState.workoutsById[draftId], draftId);
+          const draft = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           const sourceWorkoutId = draft.sourceWorkoutId;
           if (!sourceWorkoutId) return this.publishDraft(draftId);
 
-          const source = currentState.workoutsById[sourceWorkoutId];
-          if (!source) throw new DataNotFoundError("Workout", sourceWorkoutId);
-          ensureWorkoutCanChangePlan(currentState, source);
+          const source = ensureOwned(currentState.workoutsById[sourceWorkoutId], "Workout", sourceWorkoutId, currentOwnerId);
+          ensureWorkoutCanChangePlan(currentState, currentOwnerId, source);
 
           const workout = cloneWorkout({
             ...source,
@@ -589,7 +616,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneWorkout(workout);
         },
         async publishDraft(draftId) {
-          const current = ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          const current = ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           if (current.sourceWorkoutId) return this.applyEditDraft(draftId);
           const workout = cloneWorkout({
             ...current,
@@ -601,14 +628,13 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneWorkout(workout);
         },
         async discardDraft(draftId) {
-          ensureWorkoutDraft(stateRef.current.workoutsById[draftId], draftId);
+          ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           await commitActions([{ type: "workout/remove", workoutId: draftId }], "immediate");
         },
         async reschedule(workoutId, input: RescheduleWorkoutInput) {
           const currentState = stateRef.current;
-          const current = currentState.workoutsById[workoutId];
-          if (!current) throw new DataNotFoundError("Workout", workoutId);
-          ensureWorkoutCanChangePlan(currentState, current);
+          const current = ensureOwned(currentState.workoutsById[workoutId], "Workout", workoutId, currentOwnerId);
+          ensureWorkoutCanChangePlan(currentState, currentOwnerId, current);
           const startsAt = new Date(input.startsAt);
           if (Number.isNaN(startsAt.getTime())) throw new Error("Invalid workout date");
 
@@ -623,10 +649,9 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async cancel(workoutId, input = {}) {
           const currentState = stateRef.current;
-          const current = currentState.workoutsById[workoutId];
-          if (!current) throw new DataNotFoundError("Workout", workoutId);
+          const current = ensureOwned(currentState.workoutsById[workoutId], "Workout", workoutId, currentOwnerId);
           if (current.status !== "planned") throw new Error("Only planned workout can be cancelled");
-          if (hasActiveSession(currentState, workoutId)) throw new Error("Workout has active session");
+          if (hasActiveSession(currentState, currentOwnerId, workoutId)) throw new Error("Workout has active session");
 
           const workout = cloneWorkout({
             ...current,
@@ -642,22 +667,24 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
       sessions: {
         async list() {
           const currentState = stateRef.current;
-          return currentState.sessionIds.map((id) => cloneSession(currentState.sessionsById[id]));
+          return currentState.sessionIds
+            .map((id) => currentState.sessionsById[id])
+            .filter((session) => isOwned(session, currentOwnerId))
+            .map(cloneSession);
         },
         async listCompletedByClient(clientId) {
-          return selectCompletedSessionsByClient(stateRef.current, clientId);
+          return selectCompletedSessionsByClient(stateRef.current, clientId, currentOwnerId);
         },
         async getById(sessionId) {
           const session = stateRef.current.sessionsById[sessionId];
-          return session ? cloneSession(session) : null;
+          return isOwned(session, currentOwnerId) ? cloneSession(session) : null;
         },
         async start(workoutId) {
           const currentState = stateRef.current;
-          const workout = currentState.workoutsById[workoutId];
-          if (!workout) throw new DataNotFoundError("Workout", workoutId);
+          const workout = ensureOwned(currentState.workoutsById[workoutId], "Workout", workoutId, currentOwnerId);
           if (workout.status === "cancelled") throw new Error("Cancelled workout cannot be started");
 
-          const existingSession = currentState.sessionIds.map((id) => currentState.sessionsById[id]).find((session) => session.workoutId === workoutId && session.status === "active");
+          const existingSession = currentState.sessionIds.map((id) => currentState.sessionsById[id]).find((session) => session.ownerId === currentOwnerId && session.workoutId === workoutId && session.status === "active");
           if (existingSession) return cloneSession(existingSession);
 
           const now = new Date().toISOString();
@@ -674,6 +701,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           }));
           const session = {
             id: createId("session"),
+            ownerId: currentOwnerId,
             workoutId,
             clientId: workout.clientId,
             status: "active" as const,
@@ -688,6 +716,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
               type: "result/upsert" as const,
               result: {
                 id: createId("result"),
+                ownerId: currentOwnerId,
                 sessionId: session.id,
                 sessionExerciseItemId: sessionExercises[exerciseIndex]?.id,
                 exerciseId: exercise.exerciseId,
@@ -711,9 +740,8 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async addExercise(sessionId: SessionId, exerciseId: ExerciseId) {
           const currentState = stateRef.current;
-          const current = currentState.sessionsById[sessionId];
-          if (!current) throw new DataNotFoundError("Session", sessionId);
-          if (!currentState.exercisesById[exerciseId]) throw new DataNotFoundError("Exercise", exerciseId);
+          const current = ensureOwned(currentState.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
+          if (!isOwned(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           if (current.exercises.some((exercise) => exercise.exerciseId === exerciseId)) return cloneSession(current);
 
           const session = cloneSession({
@@ -724,8 +752,8 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
               {
                 id: createId("session-exercise"),
                 exerciseId,
-                exerciseName: getExerciseName(currentState, exerciseId),
-                exerciseNameSnapshot: getExerciseName(currentState, exerciseId),
+                exerciseName: getExerciseName(currentState, exerciseId, currentOwnerId),
+                exerciseNameSnapshot: getExerciseName(currentState, exerciseId, currentOwnerId),
                 order: current.exercises.length + 1
               }
             ]
@@ -734,8 +762,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneSession(session);
         },
         async removeExercise(sessionId, exerciseId) {
-          const current = stateRef.current.sessionsById[sessionId];
-          if (!current) throw new DataNotFoundError("Session", sessionId);
+          const current = ensureOwned(stateRef.current.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
           const session = cloneSession({
             ...current,
             updatedAt: new Date().toISOString(),
@@ -745,16 +772,14 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneSession(session);
         },
         async update(sessionId, patch: UpdateSessionInput) {
-          const current = stateRef.current.sessionsById[sessionId];
-          if (!current) throw new DataNotFoundError("Session", sessionId);
+          const current = ensureOwned(stateRef.current.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
           const session = cloneSession({ ...current, ...patch, updatedAt: new Date().toISOString() });
           await commitActions([{ type: "session/upsert", session }]);
           return cloneSession(session);
         },
         async complete(sessionId) {
           const currentState = stateRef.current;
-          const current = currentState.sessionsById[sessionId];
-          if (!current) throw new DataNotFoundError("Session", sessionId);
+          const current = ensureOwned(currentState.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
           if (current.status === "completed") return cloneSession(current);
           if (current.status !== "active") throw new Error("Only active session can be completed");
           const durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(current.startedAt).getTime()) / 1000));
@@ -764,28 +789,34 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneSession(session);
         },
         async getPreviousExercisePerformance(input) {
-          return selectPreviousExercisePerformance(stateRef.current, input);
+          return selectPreviousExercisePerformance(stateRef.current, { ...input, ownerId: currentOwnerId });
         }
       },
       results: {
         async listBySession(sessionId) {
           const currentState = stateRef.current;
-          return currentState.resultIds.filter((id) => currentState.resultsById[id].sessionId === sessionId).map((id) => cloneResult(currentState.resultsById[id]));
+          const session = currentState.sessionsById[sessionId];
+          if (!isOwned(session, currentOwnerId)) return [];
+          return currentState.resultIds
+            .map((id) => currentState.resultsById[id])
+            .filter((result) => result.ownerId === currentOwnerId && result.sessionId === sessionId)
+            .map(cloneResult);
         },
         async upsertSetResult(input: UpsertWorkoutResultInput) {
           const currentState = stateRef.current;
-          if (!currentState.sessionsById[input.sessionId]) throw new DataNotFoundError("Session", input.sessionId);
-          if (!currentState.exercisesById[input.exerciseId]) throw new DataNotFoundError("Exercise", input.exerciseId);
+          if (!isOwned(currentState.sessionsById[input.sessionId], currentOwnerId)) throw new DataNotFoundError("Session", input.sessionId);
+          if (!isOwned(currentState.exercisesById[input.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", input.exerciseId);
 
           const existing = currentState.resultIds
             .map((id) => currentState.resultsById[id])
             .find((result) => {
-              if (result.sessionId !== input.sessionId || result.setIndex !== input.setIndex) return false;
+              if (result.ownerId !== currentOwnerId || result.sessionId !== input.sessionId || result.setIndex !== input.setIndex) return false;
               if (input.sessionExerciseItemId || result.sessionExerciseItemId) return result.sessionExerciseItemId === input.sessionExerciseItemId;
               return result.exerciseId === input.exerciseId;
             });
           const result = {
             id: existing?.id ?? createId("result"),
+            ownerId: currentOwnerId,
             sessionId: input.sessionId,
             sessionExerciseItemId: input.sessionExerciseItemId ?? existing?.sessionExerciseItemId,
             exerciseId: input.exerciseId,
@@ -800,24 +831,28 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneResult(result);
         },
         async remove(resultId) {
-          if (!stateRef.current.resultsById[resultId]) throw new DataNotFoundError("Result", resultId);
+          if (!isOwned(stateRef.current.resultsById[resultId], currentOwnerId)) throw new DataNotFoundError("Result", resultId);
           await commitActions([{ type: "result/remove", resultId }], "immediate");
         }
       },
       quickValues: {
         async getForExercise(input) {
+          const currentState = stateRef.current;
+          if (!isOwned(currentState.exercisesById[input.exerciseId], currentOwnerId)) return null;
+          if (input.clientId && !isOwned(currentState.clientsById[input.clientId], currentOwnerId)) return null;
           const quickValue = stateRef.current.quickValueIds
             .map((id) => stateRef.current.quickValuesById[id])
-            .find((item) => item.exerciseId === input.exerciseId && item.metric === input.metric && item.clientId === input.clientId);
+            .find((item) => item.ownerId === currentOwnerId && item.exerciseId === input.exerciseId && item.metric === input.metric && item.clientId === input.clientId);
           return quickValue ? cloneQuickValue(quickValue) : null;
         },
         async upsert(input) {
           const currentState = stateRef.current;
-          if (!currentState.exercisesById[input.exerciseId]) throw new DataNotFoundError("Exercise", input.exerciseId);
-          if (input.clientId && !currentState.clientsById[input.clientId]) throw new DataNotFoundError("Client", input.clientId);
+          if (!isOwned(currentState.exercisesById[input.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", input.exerciseId);
+          if (input.clientId && !isOwned(currentState.clientsById[input.clientId], currentOwnerId)) throw new DataNotFoundError("Client", input.clientId);
 
           const quickValue: QuickValue = {
-            id: getQuickValueId(input.exerciseId, input.metric, input.clientId),
+            id: getQuickValueId(currentOwnerId, input.exerciseId, input.metric, input.clientId),
+            ownerId: currentOwnerId,
             exerciseId: input.exerciseId,
             clientId: input.clientId,
             metric: input.metric,
@@ -828,14 +863,14 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneQuickValue(quickValue);
         },
         async remove(id) {
-          if (!stateRef.current.quickValuesById[id]) throw new DataNotFoundError("QuickValue", id);
+          if (!isOwned(stateRef.current.quickValuesById[id], currentOwnerId)) throw new DataNotFoundError("QuickValue", id);
           await commitActions([{ type: "quickValue/remove", quickValueId: id }], "immediate");
         }
       }
     };
-  }, [commitActions]);
+  }, [commitActions, currentOwnerId]);
 
-  const value = useMemo(() => ({ state, data, hydrationStatus, persistenceStatus }), [data, hydrationStatus, persistenceStatus, state]);
+  const value = useMemo(() => ({ state, data, currentOwnerId, hydrationStatus, persistenceStatus }), [currentOwnerId, data, hydrationStatus, persistenceStatus, state]);
 
   if (hydrationStatus === "idle" || hydrationStatus === "loading") {
     return (
