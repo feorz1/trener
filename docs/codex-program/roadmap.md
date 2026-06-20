@@ -28,7 +28,7 @@
 | Wave | Thread | Branch | Status | Dependencies | Primary Checks |
 | --- | --- | --- | --- | --- | --- |
 | 0 | `00-orchestrator` / `01-baseline-decisions` | `codex/integration` | gate_0_ready | none | `npm run check` |
-| 1 | `02-owner-scope` | `codex/02-owner-scope` | implementation_verified | Gate 0 | `npm run check`, `npm run check:task-workflow` |
+| 1 | `02-owner-scope` | `codex/02-owner-scope` | merged | Gate 0 | `npm run check`, `npm run check:task-workflow` |
 | 2 | `03-persistence-v2` | `codex/03-persistence-v2` | not_started | owner scope merged | migration tests, hydration tests |
 | 3 | `04-session-routing` | `codex/04-session-routing` | not_started | ownership map fixed | route tests, architecture lint |
 | 4 | `05-result-types` | `codex/05-result-types` | not_started | ownership map fixed | result tests, summary tests |
@@ -50,7 +50,8 @@
 
 ## Confirmed Baseline Problems
 
-- Owner scope is absent from domain types, repositories, selectors, persistence snapshots, storage keys, and hooks.
+- Owner scope has landed for domain types, repositories, selectors, hooks, and legacy snapshot hydration.
+- Owner-scoped storage keys remain pending for Wave 2.
 - Persistence has schema version `1`, no real migration path, and one global storage key.
 - Session and summary routes are currently under `/workouts/[workoutId]` while resolving session IDs via fallback.
 - Hooks expose placeholder `isLoading: false` and `error: null`.
@@ -70,4 +71,4 @@
 
 Gate 0 status: ready for review on 2026-06-20 after `npm run check` passed.
 
-Wave 1 status: implementation verified on 2026-06-20 after `npm run check` and `npm run check:task-workflow` passed. Not merged into `codex/integration` yet.
+Wave 1 status: merged into `codex/integration` on 2026-06-20 as `9070b48` after `npm run check` and `npm run check:task-workflow` passed on the implementation branch.

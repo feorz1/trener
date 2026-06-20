@@ -11,7 +11,7 @@ Threads:
 | --- | --- | --- | --- | --- |
 | `00-orchestrator` | `codex/integration` | active in current workspace | `2e31559` baseline | `npm run check` passed |
 | `01-baseline-decisions` | `codex/integration` | documented, no product-code edits | `2e31559` baseline | `npm run check` passed |
-| `02-owner-scope` | `codex/02-owner-scope` | implementation verified, not merged | pending | `npm run check` passed; `npm run check:task-workflow` passed |
+| `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -27,7 +27,7 @@ Completed:
 
 Open findings:
 
-- Owner scope missing from domain entities, selectors, repositories, persistence snapshots, and storage keys.
+- Owner-scoped storage keys are still pending for Wave 2.
 - Persistence v2 missing: `CURRENT_SCHEMA_VERSION` is `1`, unsupported versions throw, and there is no v1-to-v2 migration.
 - Workout/session route semantics ambiguous: session and summary screens live under `app/workouts/[workoutId]` and fall back from `sessionId` to `workoutId`.
 - Async loading/error contracts are placeholders: app hooks return `isLoading: false` and `error: null`.
@@ -43,17 +43,19 @@ Blocked:
 
 Next:
 
-- Review and merge Wave 1 owner scope into `codex/integration`.
-- Do not begin Wave 2 persistence until Wave 1 owner scope is merged into `codex/integration`.
+- Start Wave 2 persistence on `codex/03-persistence-v2`.
 
 ## Wave 1
 
 Status:
 - implementation_verified
-- not_merged
+- merged
 
 Branch:
 - `codex/02-owner-scope`
+
+Integration:
+- Merged into `codex/integration` as `9070b48`.
 
 Completed:
 
@@ -75,8 +77,8 @@ Checks:
 - `npm run check:task-workflow`: passed on 2026-06-20.
 - Post-review targeted checks: `npm run typecheck` passed; `npm run test` passed.
 - Post-review full checks: `npm run check` passed; `npm run check:task-workflow` passed.
+- Post-merge integration checks on `codex/integration`: `npm run check` passed; `npm run check:task-workflow` passed.
 
 Remaining:
 
-- Merge `codex/02-owner-scope` into `codex/integration`.
 - Wave 2 must formalize persistence v2 and owner-scoped storage keys; Wave 1 only keeps old schema data loadable.
