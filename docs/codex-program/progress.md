@@ -13,7 +13,7 @@ Threads:
 | `01-baseline-decisions` | `codex/integration` | documented, no product-code edits | `2e31559` baseline | `npm run check` passed |
 | `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
-| `04-session-routing` | `codex/04-session-routing` | implementation verified after review fix | pending | `npm run check` passed; `npm run check:task-workflow` passed |
+| `04-session-routing` | `codex/04-session-routing` | merged into `codex/integration` | `d438d20` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -29,7 +29,6 @@ Completed:
 
 Open findings:
 
-- Session route split has passed local verification on `codex/04-session-routing`; post-fix independent review remains pending before merge.
 - Async loading/error contracts are placeholders: app hooks return `isLoading: false` and `error: null`.
 - Result model is still weight/repetitions-oriented; quick values are `weight | reps`.
 - Architecture lint now blocks app route JSON serialization, old workout-based session paths, and non-primitive router params.
@@ -43,8 +42,8 @@ Blocked:
 
 Next:
 
-- Run full Wave 3 checks and independent read-only review.
-- Merge Wave 3 into `codex/integration` only after review passes.
+- Orchestrate separate worktrees for Wave 4 result types, Wave 5 active-session invariant, and Wave 6 async states.
+- Do not implement Wave 4+ in the orchestrator chat.
 
 ## Wave 1
 
@@ -128,9 +127,13 @@ Remaining:
 
 Status:
 - implementation_reviewed
+- merged
 
 Branch:
 - `codex/04-session-routing`
+
+Integration:
+- Merged into `codex/integration` as `d438d20`.
 
 Completed:
 
@@ -159,4 +162,4 @@ Checks:
 
 Remaining:
 
-- Merge into `codex/integration` and run post-merge checks.
+- Post-merge checks on `codex/integration` passed.

@@ -30,7 +30,7 @@
 | 0 | `00-orchestrator` / `01-baseline-decisions` | `codex/integration` | gate_0_ready | none | `npm run check` |
 | 1 | `02-owner-scope` | `codex/02-owner-scope` | merged | Gate 0 | `npm run check`, `npm run check:task-workflow` |
 | 2 | `03-persistence-v2` | `codex/03-persistence-v2` | merged | owner scope merged | `npm run check`, `npm run check:task-workflow` |
-| 3 | `04-session-routing` | `codex/04-session-routing` | implementation_reviewed | ownership map fixed | `npm run check`, route architecture lint |
+| 3 | `04-session-routing` | `codex/04-session-routing` | merged | ownership map fixed | `npm run check`, route architecture lint |
 | 4 | `05-result-types` | `codex/05-result-types` | not_started | ownership map fixed | result tests, summary tests |
 | 5 | `06-active-session` | `codex/06-active-session` | not_started | owner scope, routing/result decisions | session invariant tests |
 | 6 | `07-async-states` | `codex/07-async-states` | not_started | stable repository errors | UI state and mutation tests |
@@ -73,3 +73,5 @@ Gate 0 status: ready for review on 2026-06-20 after `npm run check` passed.
 Wave 1 status: merged into `codex/integration` on 2026-06-20 as `9070b48` after `npm run check` and `npm run check:task-workflow` passed on the implementation branch.
 
 Wave 2 status: merged into `codex/integration` as `9cc3ff2` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed on the implementation branch.
+
+Wave 3 status: merged into `codex/integration` as `d438d20` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed on the implementation branch.
