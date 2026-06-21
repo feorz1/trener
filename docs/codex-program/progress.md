@@ -12,6 +12,7 @@ Threads:
 | `00-orchestrator` | `codex/integration` | active in current workspace | `2e31559` baseline | `npm run check` passed |
 | `01-baseline-decisions` | `codex/integration` | documented, no product-code edits | `2e31559` baseline | `npm run check` passed |
 | `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `03-persistence-v2` | `codex/03-persistence-v2` | implementation reviewed, not merged | pending | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -27,8 +28,7 @@ Completed:
 
 Open findings:
 
-- Owner-scoped storage keys are still pending for Wave 2.
-- Persistence v2 missing: `CURRENT_SCHEMA_VERSION` is `1`, unsupported versions throw, and there is no v1-to-v2 migration.
+- Persistence v2 implementation is reviewed on `codex/03-persistence-v2` and ready to commit/merge.
 - Workout/session route semantics ambiguous: session and summary screens live under `app/workouts/[workoutId]` and fall back from `sessionId` to `workoutId`.
 - Async loading/error contracts are placeholders: app hooks return `isLoading: false` and `error: null`.
 - Result model is still weight/repetitions-oriented; quick values are `weight | reps`.
@@ -43,7 +43,8 @@ Blocked:
 
 Next:
 
-- Start Wave 2 persistence on `codex/03-persistence-v2`.
+- Commit reviewed Wave 2 implementation.
+- Merge Wave 2 into `codex/integration`.
 
 ## Wave 1
 
@@ -82,3 +83,41 @@ Checks:
 Remaining:
 
 - Wave 2 must formalize persistence v2 and owner-scoped storage keys; Wave 1 only keeps old schema data loadable.
+
+## Wave 2
+
+Status:
+- implementation_reviewed
+- not_merged
+
+Branch:
+- `codex/03-persistence-v2`
+
+Completed:
+
+- Bumped persisted snapshot schema from `1` to `2`.
+- Added typed v1 legacy snapshot shape and current v2 snapshot shape.
+- Added v1-to-v2 migration that preserves entity IDs and assigns missing owner IDs to `local-trainer`.
+- Made v2 validation require explicit `ownerId` and `meta`.
+- Kept v1 validation compatible with legacy snapshots that lack owner IDs and meta.
+- Added owner-scoped v2 storage key: `trainer-app:<ownerId>:data:v2`.
+- Kept legacy v1 storage key as read fallback.
+- Made AsyncStorage clear remove both current and legacy keys.
+- Made hydration save the migrated/current snapshot only after successful load, preventing empty initial state from overwriting pre-hydration data.
+- Added persistence tests for schema v2, v1 migration, ID preservation, owner defaults, strict v2 owner validation, and storage key shape.
+- Ran independent read-only review for Wave 2; no P0/P1 findings were reported.
+
+Checks:
+
+- `npm run typecheck`: passed on 2026-06-20.
+- `npm run test:unit`: passed on 2026-06-20.
+- `npm run test:integration`: passed on 2026-06-20.
+- `npm run design:audit`: passed on 2026-06-20.
+- `npm run check`: passed on 2026-06-20.
+- `npm run check:task-workflow`: passed on 2026-06-20.
+
+Remaining:
+
+- Commit reviewed Wave 2 implementation.
+- Merge `codex/03-persistence-v2` into `codex/integration`.
+- P2 follow-ups: add AsyncStorage adapter regression coverage, add provider-level delayed hydration coverage, and tighten `meta` referential validation before those pointers become operational.

@@ -27,7 +27,7 @@ import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession,
 import { selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
 import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetConnectionsAfterReorder, sortWorkoutExercisesByOrder, syncSupersetConnectionsForScope } from "./local/supersetConnections";
 import { createInitialState } from "./seeds/mockSeed";
-import { localPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
+import { CURRENT_SCHEMA_VERSION, localPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
 import { theme } from "@/theme";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
@@ -152,6 +152,12 @@ function normalizeQuickValues(values: number[]) {
   return Array.from(new Set(values.filter((value) => Number.isFinite(value)))).slice(0, 5);
 }
 
+function getSnapshotSchemaVersion(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const version = (value as { schemaVersion?: unknown }).schemaVersion;
+  return typeof version === "number" ? version : undefined;
+}
+
 export function DataProvider({ children, persistenceAdapter = localPersistenceAdapter }: { children: ReactNode; persistenceAdapter?: PersistenceAdapter }) {
   const currentOwnerId = LOCAL_OWNER_ID;
   const [state, dispatch] = useReducer(localReducer, undefined, createInitialState);
@@ -201,14 +207,16 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
       try {
         const rawSnapshot = await persistenceAdapter.load();
-        const nextState = rawSnapshot ? hydrateDataState(migrateSnapshot(rawSnapshot)) : createInitialState();
+        const snapshot = rawSnapshot ? migrateSnapshot(rawSnapshot) : null;
+        const nextState = snapshot ? hydrateDataState(snapshot) : createInitialState();
+        const shouldWriteCurrentSnapshot = !rawSnapshot || getSnapshotSchemaVersion(rawSnapshot) !== CURRENT_SCHEMA_VERSION;
 
         if (cancelled) return;
 
         stateRef.current = nextState;
         dispatch({ type: "state/replace", state: nextState });
 
-        if (!rawSnapshot) {
+        if (shouldWriteCurrentSnapshot) {
           await coordinatorRef.current.saveImmediately(nextState);
         }
 

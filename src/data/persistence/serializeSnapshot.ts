@@ -2,7 +2,7 @@ import { createInitialState } from "../seeds/mockSeed";
 import type { LocalDataState } from "../local/localState";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "../local/localState";
 import { LOCAL_OWNER_ID, type OwnerId } from "../types";
-import type { PersistedSnapshot } from "./PersistedSnapshot";
+import { CURRENT_SCHEMA_VERSION, type PersistedSnapshot } from "./PersistedSnapshot";
 
 function getLatestId<T extends { id: string }>(items: T[]) {
   return items[items.length - 1]?.id ?? null;
@@ -13,7 +13,7 @@ export function serializeDataState(state: LocalDataState, savedAt = new Date().t
   const workouts = state.workoutIds.map((id) => cloneWorkout(state.workoutsById[id]));
 
   return {
-    schemaVersion: 1,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     savedAt,
     data: {
       clients: state.clientIds.map((id) => cloneClient(state.clientsById[id])),
