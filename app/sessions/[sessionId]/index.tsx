@@ -2,8 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Alert as NativeAlert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui";
-import { useClient, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
+import { Alert, Approach, Badge, Button, Divider, Header, Loader, Navigation, ProgressBar, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui";
+import { useClient, useDataMutation, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
 import { formatSessionDate } from "@/features/workouts/sessionHistory";
 import { defaultWorkoutResultType, formatResultDuration, formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
@@ -59,10 +59,14 @@ function buildSessionWorkout(workout?: Workout) {
 export default function WorkoutSessionScreen() {
   const { sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
   const sessionId = firstParam(rawSessionId);
-  const { session } = useSession(sessionId);
-  const { workout } = useWorkout(session?.workoutId);
-  const { client } = useClient(session?.clientId ?? workout?.clientId);
-  const { results } = useSessionResults(sessionId);
+  const sessionQuery = useSession(sessionId);
+  const { session } = sessionQuery;
+  const workoutQuery = useWorkout(session?.workoutId);
+  const { workout } = workoutQuery;
+  const clientQuery = useClient(session?.clientId ?? workout?.clientId);
+  const { client } = clientQuery;
+  const resultsQuery = useSessionResults(sessionId);
+  const { results } = resultsQuery;
   const resultActions = useResultActions();
   const sessionActions = useSessionActions();
   const clientName = client?.name ?? "Клиент";
@@ -108,6 +112,9 @@ export default function WorkoutSessionScreen() {
   const [sessionExercises, setSessionExercises] = useState(initialSessionExercises);
   const sessionStartedAtRef = useRef(session?.startedAt ? new Date(session.startedAt).getTime() : Date.now());
   const nextSetId = useRef(1);
+  const completeSessionMutation = useDataMutation(async (id: string) => sessionActions.complete(id));
+  const isLoading = sessionQuery.isLoading || workoutQuery.isLoading || clientQuery.isLoading || resultsQuery.isLoading;
+  const queryError = sessionQuery.error ?? workoutQuery.error ?? clientQuery.error ?? resultsQuery.error;
 
   useEffect(() => {
     setSessionExercises(initialSessionExercises);
@@ -243,9 +250,10 @@ export default function WorkoutSessionScreen() {
   }, [persistSet]);
 
   const completeSession = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || completeSessionMutation.isSubmitting) return;
 
-    await sessionActions.complete(sessionId);
+    const completedSession = await completeSessionMutation.mutate(sessionId).catch(() => null);
+    if (!completedSession) return;
 
     router.replace({
       pathname: "/sessions/[sessionId]/summary",
@@ -253,7 +261,7 @@ export default function WorkoutSessionScreen() {
         sessionId
       }
     });
-  }, [sessionActions, sessionId]);
+  }, [completeSessionMutation, sessionId]);
 
   const finishSession = useCallback(() => {
     const hasLoggedIncompleteSets = sessionExercises.some((exercise) => exercise.sets.some(isLoggedIncompleteSet));
@@ -284,7 +292,15 @@ export default function WorkoutSessionScreen() {
     router.dismissTo("/");
   }, []);
 
-  if (!session) {
+  if (isLoading) {
+    return <SessionState title="Загружаем тренировку" loading onBack={() => router.back()} />;
+  }
+
+  if (queryError) {
+    return <SessionState title="Не удалось загрузить тренировку" description={queryError.message} actionLabel="Повторить" onAction={sessionQuery.retry} onBack={() => router.back()} />;
+  }
+
+  if (sessionQuery.notFound || !session) {
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
         <Navigation title="Тренировка" onBack={() => router.back()} />
@@ -339,12 +355,51 @@ export default function WorkoutSessionScreen() {
               );
             })}
           </View>
+          {completeSessionMutation.error ? (
+            <View style={styles.inlineAlert}>
+              <Alert
+                tone="negative"
+                layout="expanded"
+                title="Тренировка не завершена"
+                description={completeSessionMutation.error.message}
+                width="fill"
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
-        <Button label="Добавить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={addExercise} />
-        <Button label={finishLabel} type="primary" size="large" width="fill" onPress={finishSession} />
+        <Button label="Добавить упражнение" type="secondaryNeutral" size="large" width="fill" state={completeSessionMutation.isSubmitting ? "disabled" : "active"} onPress={addExercise} />
+        <Button label={finishLabel} type="primary" size="large" width="fill" state={completeSessionMutation.isSubmitting ? "loading" : "active"} onPress={finishSession} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function SessionState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction,
+  onBack
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <Navigation title="Тренировка" onBack={onBack} />
+      <View style={styles.emptyState}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
+        <Text style={styles.emptyTitle}>{title}</Text>
+        {description ? <Text style={styles.copy}>{description}</Text> : null}
+        {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
       </View>
     </SafeAreaView>
   );
@@ -532,6 +587,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.sm
   },
+  inlineAlert: {
+    paddingTop: theme.spacing.md
+  },
   footer: {
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
@@ -543,6 +601,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: theme.spacing.lg,
     padding: theme.spacing.lg
+  },
+  emptyTitle: {
+    ...theme.typography.body.lg,
+    color: theme.colors.content.ink,
+    textAlign: "center"
   },
   copy: {
     ...theme.typography.body.md,

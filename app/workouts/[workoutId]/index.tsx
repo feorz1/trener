@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { Alert as NativeAlert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Button, Divider, Header, Icon, ListItemGym, Navigation } from "@/components/ui";
-import { isActiveSessionConflictError, useClient, useSessionActions, useSessions, useWorkout, useWorkoutActions } from "@/data";
+import { Alert, Badge, Button, Divider, Header, Icon, ListItemGym, Loader, Navigation } from "@/components/ui";
+import { isActiveSessionConflictError, useClient, useDataMutation, useSessionActions, useSessions, useWorkout, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
@@ -26,68 +26,73 @@ function formatWorkoutBadgeDate(value: string) {
 export default function WorkoutDetailsScreen() {
   const { workoutId: rawWorkoutId } = useLocalSearchParams<{ workoutId?: string | string[] }>();
   const workoutId = firstParam(rawWorkoutId);
-  const { workout, notFound } = useWorkout(workoutId);
-  const { client } = useClient(workout?.clientId);
-  const { sessions } = useSessions();
+  const workoutQuery = useWorkout(workoutId);
+  const { workout, notFound } = workoutQuery;
+  const clientQuery = useClient(workout?.clientId);
+  const { client } = clientQuery;
+  const sessionsQuery = useSessions();
+  const { sessions } = sessionsQuery;
   const sessionActions = useSessionActions();
   const workouts = useWorkoutActions();
   const { scrollProps } = useConditionalScroll();
-  const [busy, setBusy] = useState(false);
   const relatedSessions = useMemo(() => sessions.filter((session) => session.workoutId === workoutId), [sessions, workoutId]);
   const hasActiveSession = relatedSessions.some((session) => session.status === "active");
   const hasCompletedSession = relatedSessions.some((session) => session.status === "completed");
   const canEditPlan = Boolean(workout && workout.status !== "cancelled" && !hasActiveSession && !hasCompletedSession);
   const displayStatus = workout?.status === "cancelled" ? "Отменена" : hasCompletedSession ? "Завершена" : hasActiveSession ? "В процессе" : "Запланирована";
+  const isLoading = workoutQuery.isLoading || clientQuery.isLoading || sessionsQuery.isLoading;
+  const queryError = workoutQuery.error ?? clientQuery.error ?? sessionsQuery.error;
+  const startSessionMutation = useDataMutation(async (id: string) => sessionActions.start(id));
+  const editWorkoutMutation = useDataMutation(async (id: string) => workouts.createEditDraft(id));
+  const cancelWorkoutMutation = useDataMutation(async (id: string) => workouts.cancel(id));
+  const mutationError = startSessionMutation.error ?? editWorkoutMutation.error ?? cancelWorkoutMutation.error;
+  const isMutating = startSessionMutation.isSubmitting || editWorkoutMutation.isSubmitting || cancelWorkoutMutation.isSubmitting;
 
   const startSession = async () => {
-    if (!workoutId || !workout || workout.status === "cancelled") return;
+    if (!workoutId || !workout || workout.status === "cancelled" || isMutating) return;
     try {
-      const session = relatedSessions.find((item) => item.status === "active") ?? await sessionActions.start(workoutId);
+      const session = relatedSessions.find((item) => item.status === "active") ?? await startSessionMutation.mutate(workoutId);
       router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: session.id } });
     } catch (error) {
       if (!isActiveSessionConflictError(error)) throw error;
+      startSessionMutation.reset();
       router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: error.activeSession.id } });
     }
   };
 
   const editWorkout = async () => {
-    if (!workoutId || !canEditPlan || busy) return;
-    setBusy(true);
-    try {
-      const draft = await workouts.createEditDraft(workoutId);
-      router.push({ pathname: "/workouts/new", params: { draftId: draft.id } });
-    } finally {
-      setBusy(false);
-    }
+    if (!workoutId || !canEditPlan || isMutating) return;
+    const draft = await editWorkoutMutation.mutate(workoutId).catch(() => null);
+    if (!draft) return;
+    router.push({ pathname: "/workouts/new", params: { draftId: draft.id } });
   };
 
   const cancelWorkout = () => {
-    if (!workoutId || !canEditPlan || busy) return;
+    if (!workoutId || !canEditPlan || isMutating) return;
     NativeAlert.alert("Отменить тренировку?", "Тренировка исчезнет из предстоящих, но останется в локальных данных.", [
       { text: "Не отменять", style: "cancel" },
       {
         text: "Отменить тренировку",
         style: "destructive",
         onPress: () => {
-          setBusy(true);
-          void workouts.cancel(workoutId).finally(() => {
-            setBusy(false);
+          void cancelWorkoutMutation.mutate(workoutId).then(() => {
             router.back();
-          });
+          }).catch(() => undefined);
         }
       }
     ]);
   };
 
+  if (isLoading) {
+    return <WorkoutState title="Загружаем тренировку" loading />;
+  }
+
+  if (queryError) {
+    return <WorkoutState title="Не удалось загрузить тренировку" description={queryError.message} actionLabel="Повторить" onAction={workoutQuery.retry} />;
+  }
+
   if (notFound || !workout) {
-    return (
-      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <Navigation title="Тренировка" onBack={() => router.back()} />
-        <View style={styles.state}>
-          <Text style={styles.stateTitle}>Тренировка не найдена</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <WorkoutState title="Тренировка не найдена" />;
   }
 
   return (
@@ -96,7 +101,7 @@ export default function WorkoutDetailsScreen() {
         title="Тренировка"
         trailingSlot={
           canEditPlan ? (
-            <Pressable accessibilityLabel="Отменить тренировку" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={cancelWorkout} style={styles.trashButton}>
+            <Pressable accessibilityLabel="Отменить тренировку" accessibilityRole="button" accessibilityState={{ disabled: isMutating }} disabled={isMutating} hitSlop={theme.spacing.sm} onPress={cancelWorkout} style={[styles.trashButton, isMutating && styles.iconButtonDisabled]}>
               <Icon name="trash" size={theme.spacing.xl} color={theme.colors.status.negative} />
             </Pressable>
           ) : null
@@ -122,11 +127,22 @@ export default function WorkoutDetailsScreen() {
               <Badge label={String(workout.exercises.length)} tone="neutral" size="sm" icon={false} />
             </View>
             {canEditPlan ? (
-              <Pressable accessibilityLabel="Редактировать тренировку" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={editWorkout} style={styles.editButton}>
+              <Pressable accessibilityLabel="Редактировать тренировку" accessibilityRole="button" accessibilityState={{ disabled: isMutating }} disabled={isMutating} hitSlop={theme.spacing.sm} onPress={editWorkout} style={[styles.editButton, isMutating && styles.iconButtonDisabled]}>
                 <Icon name="edit" size={theme.spacing.lg} color={theme.colors.content.ink} />
               </Pressable>
             ) : null}
           </View>
+          {mutationError ? (
+            <View style={styles.inlineAlert}>
+              <Alert
+                tone="negative"
+                layout="expanded"
+                title="Действие не выполнено"
+                description={mutationError.message}
+                width="fill"
+              />
+            </View>
+          ) : null}
           <View style={styles.listGroup}>
             {workout.exercises.map((exercise, index) => (
               <ListItemGym
@@ -142,8 +158,34 @@ export default function WorkoutDetailsScreen() {
       </ScrollView>
 
       <View style={styles.actions}>
-        <Button label={hasActiveSession ? "Продолжить" : "Начать"} type="primary" size="large" width="fill" state={workout.status === "cancelled" || hasCompletedSession ? "disabled" : "active"} onPress={startSession} />
-        <Button label="Перенести" type="secondaryNeutral" size="large" width="fill" state={canEditPlan ? "active" : "disabled"} onPress={() => router.push({ pathname: "/workouts/[workoutId]/reschedule", params: { workoutId: workout.id } })} />
+        <Button label={hasActiveSession ? "Продолжить" : "Начать"} type="primary" size="large" width="fill" state={startSessionMutation.isSubmitting ? "loading" : workout.status === "cancelled" || hasCompletedSession || isMutating ? "disabled" : "active"} onPress={startSession} />
+        <Button label="Перенести" type="secondaryNeutral" size="large" width="fill" state={canEditPlan && !isMutating ? "active" : "disabled"} onPress={() => router.push({ pathname: "/workouts/[workoutId]/reschedule", params: { workoutId: workout.id } })} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function WorkoutState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <Navigation title="Тренировка" onBack={() => router.back()} />
+      <View style={styles.state}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
+        <Text style={styles.stateTitle}>{title}</Text>
+        {description ? <Text style={styles.stateCopy}>{description}</Text> : null}
+        {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
       </View>
     </SafeAreaView>
   );
@@ -202,6 +244,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xxs,
     paddingHorizontal: theme.spacing.sm
   },
+  inlineAlert: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.md
+  },
   actions: {
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
@@ -221,18 +267,28 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.background.canvasSoft
   },
+  iconButtonDisabled: {
+    opacity: 0.48
+  },
   emptyTrailing: {
     width: theme.spacing[0],
     height: theme.spacing[0]
   },
   state: {
     flex: 1,
+    alignItems: "stretch",
     justifyContent: "center",
+    gap: theme.spacing.lg,
     padding: theme.spacing.lg
   },
   stateTitle: {
     ...theme.typography.body.lg,
     color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  stateCopy: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
     textAlign: "center"
   }
 });

@@ -1,9 +1,9 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Navigation, Select, Variant } from "@/components/ui";
-import { useWorkoutActions, useWorkoutDraft } from "@/data";
+import { Alert, Button, Loader, Navigation, Select, Variant } from "@/components/ui";
+import { useDataMutation, useWorkoutActions, useWorkoutDraft } from "@/data";
 import { isCalendarSlot, parseDateKey, repeatDayLabels, repeatOptions, type CalendarSlot, type RepeatDay } from "@/features/workouts/scheduleOptions";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
@@ -75,7 +75,8 @@ export default function ScheduleWorkoutScreen() {
   }>();
   const draftIdValue = firstParam(draftId);
   const workouts = useWorkoutActions();
-  const { draft } = useWorkoutDraft(draftIdValue);
+  const draftQuery = useWorkoutDraft(draftIdValue);
+  const { draft } = draftQuery;
   const selectedDate = useMemo(() => parseDateKey(draft?.startsAt), [draft?.startsAt]);
   const fallbackDay = getNativeWeekdayDay(selectedDate);
   const initialDays = useMemo(() => {
@@ -86,6 +87,17 @@ export default function ScheduleWorkoutScreen() {
   const [scheduleTimes, setScheduleTimes] = useState<ScheduleTimes>(() => withDefaultScheduleTimes(initialDays, (draft?.scheduleTimes ?? {}) as ScheduleTimes));
   const { scrollProps } = useConditionalScroll();
   const canContinue = selectedDays.length > 0;
+  const continueAction = useCallback(async () => {
+    if (!canContinue || !draftIdValue) return null;
+    const firstDay = selectedDays[0];
+    const effectiveScheduleTimes = withDefaultScheduleTimes(selectedDays, scheduleTimes);
+    return workouts.updateDraft(draftIdValue, {
+      startsAt: buildStartsAt(selectedDate, firstDay ? effectiveScheduleTimes[firstDay] : undefined),
+      repeatDays: selectedDays,
+      scheduleTimes: effectiveScheduleTimes
+    });
+  }, [canContinue, draftIdValue, scheduleTimes, selectedDate, selectedDays, workouts]);
+  const continueMutation = useDataMutation(continueAction);
 
   useEffect(() => {
     setSelectedDays(initialDays);
@@ -120,14 +132,9 @@ export default function ScheduleWorkoutScreen() {
   };
 
   const continueToExercises = async () => {
-    if (!canContinue || !draftIdValue) return;
-    const firstDay = selectedDays[0];
-    const effectiveScheduleTimes = withDefaultScheduleTimes(selectedDays, scheduleTimes);
-    await workouts.updateDraft(draftIdValue, {
-      startsAt: buildStartsAt(selectedDate, firstDay ? effectiveScheduleTimes[firstDay] : undefined),
-      repeatDays: selectedDays,
-      scheduleTimes: effectiveScheduleTimes
-    });
+    if (continueMutation.isSubmitting) return;
+    const updatedDraft = await continueMutation.mutate().catch(() => null);
+    if (!updatedDraft) return;
 
     router.replace({
       pathname: "/workouts/new",
@@ -136,6 +143,18 @@ export default function ScheduleWorkoutScreen() {
       }
     });
   };
+
+  if (draftQuery.isLoading) {
+    return <ScheduleState title="Загружаем расписание" loading />;
+  }
+
+  if (draftQuery.error) {
+    return <ScheduleState title="Не удалось загрузить расписание" description={draftQuery.error.message} actionLabel="Повторить" onAction={draftQuery.retry} />;
+  }
+
+  if (!draftIdValue || draftQuery.notFound || !draft) {
+    return <ScheduleState title="Черновик не найден" description="Вернитесь к планированию и создайте тренировку заново." />;
+  }
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
@@ -168,10 +187,47 @@ export default function ScheduleWorkoutScreen() {
         </View>
 
         <View style={styles.emptyGrow} />
+        {continueMutation.error ? (
+          <View style={styles.inlineAlert}>
+            <Alert
+              tone="negative"
+              layout="expanded"
+              title="Расписание не сохранено"
+              description={continueMutation.error.message}
+              width="fill"
+            />
+          </View>
+        ) : null}
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button label="Продолжить" type="primary" size="large" width="fill" state={canContinue ? "active" : "disabled"} onPress={continueToExercises} />
+        <Button label="Продолжить" type="primary" size="large" width="fill" state={continueMutation.isSubmitting ? "loading" : canContinue ? "active" : "disabled"} onPress={continueToExercises} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function ScheduleState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <Navigation title="Создание тренировки" onBack={() => router.back()} />
+      <View style={styles.state}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
+        <Text style={styles.stateTitle}>{title}</Text>
+        {description ? <Text style={styles.stateCopy}>{description}</Text> : null}
+        {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
       </View>
     </SafeAreaView>
   );
@@ -196,8 +252,30 @@ const styles = StyleSheet.create({
   emptyGrow: {
     flex: 1
   },
+  inlineAlert: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg
+  },
   footer: {
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  state: {
+    flex: 1,
+    alignItems: "stretch",
+    justifyContent: "center",
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg
+  },
+  stateTitle: {
+    ...theme.typography.body.lg,
+    color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  stateCopy: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
+    textAlign: "center"
   }
 });

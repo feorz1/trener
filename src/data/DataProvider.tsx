@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { AppState, StyleSheet, Text, View } from "react-native";
 import type { DataLayer } from "./contracts";
 import { ActiveSessionConflictError, DataNotFoundError } from "./contracts";
 import { createId } from "./createId";
@@ -31,6 +31,7 @@ import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetCon
 import { createInitialState } from "./seeds/mockSeed";
 import { CURRENT_SCHEMA_VERSION, localPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
 import { theme } from "@/theme";
+import { Button, Loader } from "@/components/ui";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
 type SaveMode = "debounced" | "immediate";
@@ -40,7 +41,9 @@ type DataContextValue = {
   data: DataLayer;
   currentOwnerId: OwnerId;
   hydrationStatus: HydrationStatus;
+  hydrationError: Error | null;
   persistenceStatus: PersistenceStatus;
+  retryHydration: () => void;
 };
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -185,6 +188,43 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
     setHydrationStatus(status);
   }, []);
 
+  const hydrateLocalData = useCallback(
+    async (isCancelled: () => boolean = () => false) => {
+      updateHydrationStatus("loading");
+      setHydrationError(null);
+
+      try {
+        const rawSnapshot = await persistenceAdapter.load();
+        const snapshot = rawSnapshot ? migrateSnapshot(rawSnapshot) : null;
+        const nextState = snapshot ? hydrateDataState(snapshot) : createInitialState();
+        const shouldWriteCurrentSnapshot = !rawSnapshot || getSnapshotSchemaVersion(rawSnapshot) !== CURRENT_SCHEMA_VERSION;
+
+        if (isCancelled()) return;
+
+        stateRef.current = nextState;
+        dispatch({ type: "state/replace", state: nextState });
+
+        if (shouldWriteCurrentSnapshot) {
+          await coordinatorRef.current.saveImmediately(nextState);
+        }
+
+        if (isCancelled()) return;
+
+        updateHydrationStatus("ready");
+        setPersistenceStatus(coordinatorRef.current.getStatus());
+      } catch (error) {
+        if (__DEV__) {
+          console.warn("Local data hydration failed", error);
+        }
+        if (isCancelled()) return;
+        setHydrationError(error instanceof Error ? error : new Error("Local data hydration failed"));
+        updateHydrationStatus("error");
+        setPersistenceStatus(coordinatorRef.current.getStatus());
+      }
+    },
+    [persistenceAdapter, updateHydrationStatus]
+  );
+
   const commitActions = useCallback(async (actions: LocalDataAction[], mode: SaveMode = "debounced") => {
     const nextState = actions.reduce(localReducer, stateRef.current);
     stateRef.current = nextState;
@@ -205,47 +245,13 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
   useEffect(() => {
     let cancelled = false;
 
-    async function hydrate() {
-      updateHydrationStatus("loading");
-      setHydrationError(null);
-
-      try {
-        const rawSnapshot = await persistenceAdapter.load();
-        const snapshot = rawSnapshot ? migrateSnapshot(rawSnapshot) : null;
-        const nextState = snapshot ? hydrateDataState(snapshot) : createInitialState();
-        const shouldWriteCurrentSnapshot = !rawSnapshot || getSnapshotSchemaVersion(rawSnapshot) !== CURRENT_SCHEMA_VERSION;
-
-        if (cancelled) return;
-
-        stateRef.current = nextState;
-        dispatch({ type: "state/replace", state: nextState });
-
-        if (shouldWriteCurrentSnapshot) {
-          await coordinatorRef.current.saveImmediately(nextState);
-        }
-
-        if (cancelled) return;
-
-        updateHydrationStatus("ready");
-        setPersistenceStatus(coordinatorRef.current.getStatus());
-      } catch (error) {
-        if (__DEV__) {
-          console.warn("Local data hydration failed", error);
-        }
-        if (cancelled) return;
-        setHydrationError(error instanceof Error ? error : new Error("Local data hydration failed"));
-        updateHydrationStatus("error");
-        setPersistenceStatus(coordinatorRef.current.getStatus());
-      }
-    }
-
-    void hydrate();
+    void hydrateLocalData(() => cancelled);
 
     return () => {
       cancelled = true;
       coordinatorRef.current.cancelPending();
     };
-  }, [persistenceAdapter, updateHydrationStatus]);
+  }, [hydrateLocalData]);
 
   useEffect(() => {
     if (hydrationStatus !== "ready") return undefined;
@@ -874,26 +880,39 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
     };
   }, [commitActions, currentOwnerId]);
 
-  const value = useMemo(() => ({ state, data, currentOwnerId, hydrationStatus, persistenceStatus }), [currentOwnerId, data, hydrationStatus, persistenceStatus, state]);
+  const retryHydration = useCallback(() => {
+    void hydrateLocalData();
+  }, [hydrateLocalData]);
+
+  const value = useMemo(
+    () => ({ state, data, currentOwnerId, hydrationStatus, hydrationError, persistenceStatus, retryHydration }),
+    [currentOwnerId, data, hydrationError, hydrationStatus, persistenceStatus, retryHydration, state]
+  );
 
   if (hydrationStatus === "idle" || hydrationStatus === "loading") {
     return (
-      <View style={styles.statusScreen}>
-        <Text style={styles.statusTitle}>Загружаем данные</Text>
-      </View>
+      <DataContext.Provider value={value}>
+        <View style={styles.statusScreen}>
+          <Loader size="medium" tone="brand" />
+          <Text style={styles.statusTitle}>Загружаем данные</Text>
+        </View>
+      </DataContext.Provider>
     );
   }
 
   if (hydrationStatus === "error") {
     return (
-      <View style={styles.statusScreen}>
-        <Text style={styles.statusTitle}>Локальные данные не удалось восстановить</Text>
-        <Text style={styles.statusCopy}>Можно попробовать перезапустить приложение или сбросить локальные данные.</Text>
-        <Pressable accessibilityRole="button" style={styles.resetButton} onPress={() => void resetLocalData()}>
-          <Text style={styles.resetButtonText}>Сбросить локальные данные</Text>
-        </Pressable>
-        {__DEV__ && hydrationError ? <Text style={styles.devError}>{hydrationError.message}</Text> : null}
-      </View>
+      <DataContext.Provider value={value}>
+        <View style={styles.statusScreen}>
+          <Text style={styles.statusTitle}>Локальные данные не удалось восстановить</Text>
+          <Text style={styles.statusCopy}>Можно попробовать снова или сбросить локальные данные.</Text>
+          <View style={styles.statusActions}>
+            <Button label="Повторить" type="primary" size="large" width="fill" onPress={retryHydration} />
+            <Button label="Сбросить локальные данные" type="secondaryNeutral" size="large" width="fill" onPress={() => void resetLocalData()} />
+          </View>
+          {__DEV__ && hydrationError ? <Text style={styles.devError}>{hydrationError.message}</Text> : null}
+        </View>
+      </DataContext.Provider>
     );
   }
 
@@ -927,17 +946,9 @@ const styles = StyleSheet.create({
     color: theme.colors.content.body,
     textAlign: "center"
   },
-  resetButton: {
-    minHeight: theme.sizes.buttonMdHeight,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.xl,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.content.primary
-  },
-  resetButtonText: {
-    ...theme.typography.button.md,
-    color: theme.colors.content.onPrimary
+  statusActions: {
+    alignSelf: "stretch",
+    gap: theme.spacing.sm
   },
   devError: {
     ...theme.typography.body.sm,

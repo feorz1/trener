@@ -25,25 +25,108 @@ import type {
   QuickValue
 } from "./types";
 
-export class DataNotFoundError extends Error {
+export type DataErrorCode = "not_found" | "active_session_conflict" | "persistence" | "validation" | "unknown";
+
+export class DataError extends Error {
+  readonly retryable: boolean;
+
+  constructor(
+    public readonly code: DataErrorCode,
+    message: string,
+    options: { retryable?: boolean; cause?: unknown } = {}
+  ) {
+    super(message);
+    this.name = "DataError";
+    this.retryable = options.retryable ?? (code === "persistence" || code === "unknown");
+    if (options.cause !== undefined) {
+      this.cause = options.cause;
+    }
+  }
+}
+
+export class DataNotFoundError extends DataError {
   constructor(
     public readonly entity: string,
     public readonly id: string
   ) {
-    super(`${entity} not found: ${id}`);
+    super("not_found", `${entity} not found: ${id}`, { retryable: false });
     this.name = "DataNotFoundError";
   }
 }
 
-export class ActiveSessionConflictError extends Error {
+export class ActiveSessionConflictError extends DataError {
   constructor(public readonly activeSession: WorkoutSession) {
-    super(`Active session already exists: ${activeSession.id}`);
+    super("active_session_conflict", `Active session already exists: ${activeSession.id}`, { retryable: false });
     this.name = "ActiveSessionConflictError";
   }
 }
 
 export function isActiveSessionConflictError(error: unknown): error is ActiveSessionConflictError {
   return error instanceof ActiveSessionConflictError;
+}
+
+export function toDataError(error: unknown, fallbackMessage = "Data operation failed"): DataError {
+  if (error instanceof DataError) return error;
+  if (error instanceof Error) {
+    return new DataError("unknown", error.message || fallbackMessage, { cause: error });
+  }
+  return new DataError("unknown", fallbackMessage, { cause: error });
+}
+
+export type DataQueryHydrationStatus = "idle" | "loading" | "ready" | "error";
+
+export type DataQueryState = {
+  isLoading: boolean;
+  error: DataError | null;
+  retry: () => void;
+  refetch: () => void;
+};
+
+export function getDataQueryState(input: {
+  hydrationStatus: DataQueryHydrationStatus;
+  hydrationError: Error | null;
+  retryHydration: () => void;
+}): DataQueryState {
+  const error = input.hydrationStatus === "error" && input.hydrationError ? toDataError(input.hydrationError, "Local data hydration failed") : null;
+
+  return {
+    isLoading: input.hydrationStatus === "idle" || input.hydrationStatus === "loading",
+    error,
+    retry: input.retryHydration,
+    refetch: input.retryHydration
+  };
+}
+
+export type DataMutationStatus = "idle" | "submitting" | "success" | "error";
+
+export type DataMutationState = {
+  status: DataMutationStatus;
+  isSubmitting: boolean;
+  error: DataError | null;
+  reset: () => void;
+};
+
+export function createDataMutationGuard<TArgs extends unknown[], TResult>(
+  mutation: (...args: TArgs) => Promise<TResult>
+) {
+  let inFlight: Promise<TResult> | null = null;
+
+  return {
+    run(...args: TArgs) {
+      if (inFlight) return { promise: inFlight, started: false };
+
+      const promise = mutation(...args).finally(() => {
+        if (inFlight === promise) {
+          inFlight = null;
+        }
+      });
+      inFlight = promise;
+      return { promise, started: true };
+    },
+    isSubmitting() {
+      return Boolean(inFlight);
+    }
+  };
 }
 
 export interface ClientRepository {
