@@ -14,7 +14,7 @@ Threads:
 | `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `04-session-routing` | `codex/04-session-routing` | merged into `codex/integration` | `d438d20` merge | `npm run check` passed; `npm run check:task-workflow` passed |
-| `05-result-types` | `codex/05-result-types` | active worktree thread `019ee949-8a02-7900-b1b0-22fcc2efd43d` | pending | pending |
+| `05-result-types` | `codex/05-result-types` | merged into `codex/integration` | `7672087` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `06-active-session` | `codex/06-active-session` | paused worktree thread `019ee949-de84-7bf1-9915-4954ed490375` pending Wave 4 merge/rebase | pending | pending |
 | `07-async-states` | `codex/07-async-states` | paused worktree thread `019ee94a-389c-7a13-9dda-e0dec1de3373` pending Wave 4/5 merge/rebase | pending | pending |
 
@@ -45,9 +45,9 @@ Blocked:
 
 Next:
 
-- Collect handoffs from Wave 4 result types, Wave 5 active-session invariant, and Wave 6 async states.
+- Collect handoffs from Wave 5 active-session invariant and Wave 6 async states.
 - Run independent read-only review and merge gates before integrating any completed wave.
-- Resume Wave 5 only after Wave 4 lands and its draft worktree is reconciled.
+- Resume Wave 5 now that Wave 4 has landed; reconcile its draft worktree against `codex/integration`.
 - Resume Wave 6 only after Wave 4 and Wave 5 land and its draft worktree is reconciled.
 - Do not implement Wave 4+ in the orchestrator chat.
 
@@ -173,10 +173,14 @@ Remaining:
 ## Wave 4
 
 Status:
-- implementation_verified
+- implementation_reviewed
+- merged
 
 Branch:
 - `codex/05-result-types`
+
+Integration:
+- Merged into `codex/integration` as `7672087`.
 
 Completed:
 
@@ -195,6 +199,9 @@ Checks:
 - `npm run test:integration`: passed on 2026-06-21.
 - `npm run check`: passed on 2026-06-21.
 - `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked on 2026-06-21 because this worktree is missing harness directories: `plans`, `plans/archive`, `plans/prds`, `plans/sprints`, `tasks/archive`, `tasks/contracts`, `tasks/reviews`, `tasks/notes`, `.ai/harness/checks`, `.ai/harness/failures`, `.ai/harness/worktrees`, and `.ai/harness/runs`.
+- Independent read-only review initially found P1 runtime/editor blockers; fixes landed in `d2f9a3b`.
+- Second independent read-only review passed with no merge blockers.
+- Post-merge integration checks on `codex/integration`: `npm run check` passed; `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow` passed.
 
 Remaining:
 

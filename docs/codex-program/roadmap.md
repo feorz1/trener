@@ -31,8 +31,8 @@
 | 1 | `02-owner-scope` | `codex/02-owner-scope` | merged | Gate 0 | `npm run check`, `npm run check:task-workflow` |
 | 2 | `03-persistence-v2` | `codex/03-persistence-v2` | merged | owner scope merged | `npm run check`, `npm run check:task-workflow` |
 | 3 | `04-session-routing` | `codex/04-session-routing` | merged | ownership map fixed | `npm run check`, route architecture lint |
-| 4 | `05-result-types` | `codex/05-result-types` | in_progress | ownership map fixed | result tests, summary tests |
-| 5 | `06-active-session` | `codex/06-active-session` | paused_pending_wave_4 | owner scope, routing/result decisions | session invariant tests |
+| 4 | `05-result-types` | `codex/05-result-types` | merged | ownership map fixed | result tests, summary tests |
+| 5 | `06-active-session` | `codex/06-active-session` | resume_after_wave_4_merge | owner scope, routing/result decisions | session invariant tests |
 | 6 | `07-async-states` | `codex/07-async-states` | paused_pending_waves_4_5 | stable repository errors | UI state and mutation tests |
 | 7 | `08-mvp-hardening` | `codex/08-mvp-hardening` | not_started | async contracts | flow tests |
 | 8 | `09-tests-ci` | `codex/09-tests-ci` | not_started | MVP hardening | `npm run check`, CI |
@@ -54,7 +54,7 @@
 - Persistence v2 has landed: schema version `2`, v1-to-v2 migration, and owner-scoped storage key.
 - Session and summary route split is implemented on `codex/04-session-routing`: `/sessions/[sessionId]` and `/sessions/[sessionId]/summary`.
 - Hooks expose placeholder `isLoading: false` and `error: null`.
-- Result model supports only weight/repetitions-oriented values.
+- Result model supports `weight_reps`, `reps`, `duration`, and `distance_duration`.
 - Active session enforcement is per workout, not per owner.
 - Architecture lint now bans app route JSON serialization, old workout-based session paths, and non-primitive router params.
 - No API/auth directories, token storage, signed-out routes, or backend SDK/provider exist.
@@ -75,3 +75,5 @@ Wave 1 status: merged into `codex/integration` on 2026-06-20 as `9070b48` after 
 Wave 2 status: merged into `codex/integration` as `9cc3ff2` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed on the implementation branch.
 
 Wave 3 status: merged into `codex/integration` as `d438d20` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed on the implementation branch.
+
+Wave 4 status: merged into `codex/integration` as `7672087` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed after fixing the runtime/editor result-type blockers.
