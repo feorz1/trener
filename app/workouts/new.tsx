@@ -6,18 +6,20 @@ import Animated, { useAnimatedRef } from "react-native-reanimated";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Alert,
   Badge,
   Button,
   Divider,
   Header,
   Icon,
+  Loader,
   ListItemGym,
   Navigation,
   Select,
   SuperSet,
   Variant
 } from "@/components/ui";
-import { useClient, useExercises, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { useClient, useExercises, useDataMutation, useWorkoutActions, useWorkoutDraft } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { ApproachCountItem } from "@/components/ui";
@@ -204,7 +206,8 @@ export default function NewWorkoutScreen() {
   }>();
   const draftIdValue = firstParam(draftId);
   const activeDayValue = firstParam(activeDay);
-  const { draft } = useWorkoutDraft(draftIdValue);
+  const draftQuery = useWorkoutDraft(draftIdValue);
+  const { draft } = draftQuery;
   const workouts = useWorkoutActions();
   const { client: selectedClient } = useClient(draft?.clientId);
   const selectedWorkoutDays = useMemo<RepeatDay[]>(() => (draft?.repeatDays && draft.repeatDays.length > 0 ? draft.repeatDays : ["monday"]), [draft?.repeatDays]);
@@ -233,6 +236,17 @@ export default function NewWorkoutScreen() {
   const activeDayIndex = selectedWorkoutDays.indexOf(activeWorkoutDay);
   const nextWorkoutDay = activeDayIndex >= 0 ? selectedWorkoutDays[activeDayIndex + 1] : undefined;
   const canUseFooterAction = nextWorkoutDay ? hasExercises && activeDayHasTime : allSelectedDaysHaveExercises && allSelectedDaysHaveTimes;
+  const saveWorkoutAction = useCallback(async () => {
+    if (!draftIdValue) return null;
+
+    await workouts.updateDraft(draftIdValue, {
+      clientId: draft?.clientId,
+      repeatDays: selectedWorkoutDays,
+      scheduleTimes: selectedScheduleTimes
+    });
+    return workouts.publishDraft(draftIdValue);
+  }, [draft?.clientId, draftIdValue, selectedScheduleTimes, selectedWorkoutDays, workouts]);
+  const saveWorkoutMutation = useDataMutation(saveWorkoutAction);
   const supersetConnections = useMemo(
     () =>
       selectedExercises.slice(0, -1).map((exercise, index) => ({
@@ -382,16 +396,12 @@ export default function NewWorkoutScreen() {
   }, [nextWorkoutDay]);
 
   const saveWorkout = useCallback(async () => {
-    if (!draftIdValue) return;
+    if (!draftIdValue || saveWorkoutMutation.isSubmitting) return;
 
-    await workouts.updateDraft(draftIdValue, {
-      clientId: draft?.clientId,
-      repeatDays: selectedWorkoutDays,
-      scheduleTimes: selectedScheduleTimes
-    });
-    await workouts.publishDraft(draftIdValue);
+    const savedWorkout = await saveWorkoutMutation.mutate().catch(() => null);
+    if (!savedWorkout) return;
     router.dismissTo("/");
-  }, [draft?.clientId, draftIdValue, selectedScheduleTimes, selectedWorkoutDays, workouts]);
+  }, [draftIdValue, saveWorkoutMutation]);
 
   const handleFooterPress = () => {
     if (nextWorkoutDay) {
@@ -435,6 +445,18 @@ export default function NewWorkoutScreen() {
     },
     [openExerciseApproach, removeExercise, updateExerciseRowHeight]
   );
+
+  if (draftQuery.isLoading) {
+    return <WorkoutDraftState title="Загружаем черновик" loading />;
+  }
+
+  if (draftQuery.error) {
+    return <WorkoutDraftState title="Не удалось загрузить черновик" description={draftQuery.error.message} actionLabel="Повторить" onAction={draftQuery.retry} />;
+  }
+
+  if (!draftIdValue || draftQuery.notFound || !draft) {
+    return <WorkoutDraftState title="Черновик не найден" description="Вернитесь к планированию и создайте тренировку заново." />;
+  }
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
@@ -562,6 +584,17 @@ export default function NewWorkoutScreen() {
             </View>
           </View>
         )}
+        {saveWorkoutMutation.error ? (
+          <View style={styles.inlineAlert}>
+            <Alert
+              tone="negative"
+              layout="expanded"
+              title="Тренировка не сохранена"
+              description={saveWorkoutMutation.error.message}
+              width="fill"
+            />
+          </View>
+        ) : null}
       </Animated.ScrollView>
 
       <View style={styles.footer}>
@@ -570,9 +603,35 @@ export default function NewWorkoutScreen() {
           type="primary"
           size="large"
           width="fill"
-          state={canUseFooterAction ? "active" : "disabled"}
+          state={saveWorkoutMutation.isSubmitting ? "loading" : canUseFooterAction ? "active" : "disabled"}
           onPress={handleFooterPress}
         />
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function WorkoutDraftState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <Navigation title="Создание тренировки" onBack={() => router.back()} />
+      <View style={styles.screenState}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
+        <Text style={styles.screenStateTitle}>{title}</Text>
+        {description ? <Text style={styles.screenStateCopy}>{description}</Text> : null}
+        {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
       </View>
     </SafeAreaView>
   );
@@ -724,6 +783,28 @@ const styles = StyleSheet.create({
   footer: {
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  inlineAlert: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg
+  },
+  screenState: {
+    flex: 1,
+    alignItems: "stretch",
+    justifyContent: "center",
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg
+  },
+  screenStateTitle: {
+    ...theme.typography.body.lg,
+    color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  screenStateCopy: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
+    textAlign: "center"
   },
   modalBody: {
     gap: theme.spacing[0]

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ActiveSessionConflictError } from "../src/data/contracts";
+import { ActiveSessionConflictError, DataError, createDataMutationGuard, getDataQueryState, toDataError } from "../src/data/contracts";
 import { localReducer } from "../src/data/local/localReducer";
 import {
   selectActiveSession,
@@ -476,4 +476,58 @@ assert.equal(formatResultSet({ resultType: "reps", repetitions: 18 }), "18 по�
 assert.equal(formatResultSet({ resultType: "duration", durationSeconds: 75 }), "01:15");
 assert.equal(formatResultSet({ resultType: "distance_duration", distanceMeters: 400, durationSeconds: 120 }), "400 м × 02:00");
 
-console.log("Data layer integration tests passed.");
+async function runAsyncStatePrimitiveTests() {
+  const retryCalls: string[] = [];
+  const loadingQueryState = getDataQueryState({
+    hydrationStatus: "loading",
+    hydrationError: null,
+    retryHydration: () => retryCalls.push("loading")
+  });
+  assert.equal(loadingQueryState.isLoading, true);
+  assert.equal(loadingQueryState.error, null);
+  loadingQueryState.retry();
+  assert.deepEqual(retryCalls, ["loading"]);
+
+  const hydrationFailure = new Error("Hydration failed");
+  const errorQueryState = getDataQueryState({
+    hydrationStatus: "error",
+    hydrationError: hydrationFailure,
+    retryHydration: () => retryCalls.push("error")
+  });
+  assert.equal(errorQueryState.isLoading, false);
+  assert.equal(errorQueryState.error?.code, "unknown");
+  assert.equal(errorQueryState.error?.retryable, true);
+  errorQueryState.refetch();
+  assert.deepEqual(retryCalls, ["loading", "error"]);
+
+  const notFoundDataError = toDataError(new DataError("not_found", "Missing", { retryable: false }));
+  assert.equal(notFoundDataError.code, "not_found");
+  assert.equal(notFoundDataError.retryable, false);
+
+  let mutationRuns = 0;
+  const guardedMutation = createDataMutationGuard(async (value: string) => {
+    mutationRuns += 1;
+    await Promise.resolve();
+    return `saved:${value}`;
+  });
+  const firstMutation = guardedMutation.run("first");
+  const duplicateMutation = guardedMutation.run("second");
+  assert.equal(firstMutation.started, true);
+  assert.equal(duplicateMutation.started, false);
+  assert.equal(firstMutation.promise, duplicateMutation.promise);
+  assert.equal(guardedMutation.isSubmitting(), true);
+  assert.equal(await firstMutation.promise, "saved:first");
+  assert.equal(guardedMutation.isSubmitting(), false);
+  assert.equal(mutationRuns, 1);
+  const nextMutation = guardedMutation.run("third");
+  assert.equal(nextMutation.started, true);
+  assert.equal(await nextMutation.promise, "saved:third");
+  assert.equal(mutationRuns, 2);
+}
+
+runAsyncStatePrimitiveTests()
+  .then(() => console.log("Data layer integration tests passed."))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

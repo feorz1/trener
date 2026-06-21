@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, ListItemCell, Navigation, getListItemCellGroupPosition } from "@/components/ui";
+import { Badge, Button, ListItemCell, Loader, Navigation, getListItemCellGroupPosition } from "@/components/ui";
 import { useClient, useClientWorkoutHistory } from "@/data";
 import { formatDurationCompact } from "@/features/workouts/sessionHistory";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
@@ -42,19 +42,24 @@ function formatExerciseCount(count: number) {
 export default function ClientWorkoutHistoryScreen() {
   const { clientId: rawClientId } = useLocalSearchParams<{ clientId?: string | string[] }>();
   const clientId = firstParam(rawClientId);
-  const { client, notFound } = useClient(clientId);
-  const { sessions } = useClientWorkoutHistory(clientId);
+  const clientQuery = useClient(clientId);
+  const historyQuery = useClientWorkoutHistory(clientId);
+  const { client, notFound } = clientQuery;
+  const { sessions } = historyQuery;
   const { scrollProps } = useConditionalScroll();
+  const isLoading = clientQuery.isLoading || historyQuery.isLoading;
+  const error = clientQuery.error ?? historyQuery.error;
+
+  if (isLoading) {
+    return <HistoryState title="Загружаем историю" loading />;
+  }
+
+  if (error) {
+    return <HistoryState title="Не удалось загрузить историю" description={error.message} actionLabel="Повторить" onAction={clientQuery.retry} />;
+  }
 
   if (notFound || !client) {
-    return (
-      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-        <Navigation title="История" onBack={() => router.back()} />
-        <View style={styles.state}>
-          <Text style={styles.stateTitle}>Клиент не найден</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <HistoryState title="Клиент не найден" />;
   }
 
   return (
@@ -101,6 +106,32 @@ export default function ClientWorkoutHistoryScreen() {
   );
 }
 
+function HistoryState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <Navigation title="История" onBack={() => router.back()} />
+      <View style={styles.state}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
+        <Text style={styles.stateTitle}>{title}</Text>
+        {description ? <Text style={styles.stateCopy}>{description}</Text> : null}
+        {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
+      </View>
+    </SafeAreaView>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -143,12 +174,19 @@ const styles = StyleSheet.create({
   },
   state: {
     flex: 1,
+    alignItems: "stretch",
     justifyContent: "center",
+    gap: theme.spacing.lg,
     padding: theme.spacing.lg
   },
   stateTitle: {
     ...theme.typography.body.lg,
     color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  stateCopy: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
     textAlign: "center"
   }
 });

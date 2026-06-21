@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Alert,
   Badge,
   Button,
   Checkbox,
@@ -18,7 +19,7 @@ import {
   TextArea,
   Variant
 } from "@/components/ui";
-import { useClientActions, useWorkoutActions } from "@/data";
+import { useClientActions, useDataMutation, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -232,6 +233,31 @@ export default function NewClientScreen() {
     (step === "restrictions" && form.exerciseRestrictions.includes("other")) ||
     (step === "experience" && form.sports.includes("other"));
   const keyboardOffset = hasVisibleTextArea ? CLIENT_FORM_TEXT_AREA_KEYBOARD_OFFSET : CLIENT_FORM_KEYBOARD_OFFSET;
+  const createClientAction = useCallback(async () => {
+    const createdClient = await clients.create({
+      name: form.name,
+      phone: [form.phonePrefix, form.phone].filter(Boolean).join(" "),
+      telegram: form.telegram,
+      gender: form.gender,
+      goal: getGoalSummary(form),
+      status: "new",
+      notes: getRestrictionLabels(form).join(", "),
+      restrictions: getRestrictionLabels(form),
+      metrics: {
+        weightKg: form.weight,
+        heightCm: form.height,
+        attendanceRate: 100
+      }
+    });
+
+    const draftIdValue = firstParam(draftId);
+    if (draftIdValue) {
+      await workouts.setDraftClient(draftIdValue, createdClient.id);
+    }
+
+    return createdClient;
+  }, [clients, draftId, form, workouts]);
+  const createClientMutation = useDataMutation(createClientAction);
 
   const updateForm = <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -256,21 +282,10 @@ export default function NewClientScreen() {
   };
 
   const createClient = async () => {
-    const createdClient = await clients.create({
-      name: form.name,
-      phone: [form.phonePrefix, form.phone].filter(Boolean).join(" "),
-      telegram: form.telegram,
-      gender: form.gender,
-      goal: getGoalSummary(form),
-      status: "new",
-      notes: getRestrictionLabels(form).join(", "),
-      restrictions: getRestrictionLabels(form),
-      metrics: {
-        weightKg: form.weight,
-        heightCm: form.height,
-        attendanceRate: 100
-      }
-    });
+    if (createClientMutation.isSubmitting) return;
+
+    const createdClient = await createClientMutation.mutate().catch(() => null);
+    if (!createdClient) return;
 
     if (!firstParam(returnTo)) {
       router.back();
@@ -278,10 +293,6 @@ export default function NewClientScreen() {
     }
 
     const draftIdValue = firstParam(draftId);
-    if (draftIdValue) {
-      await workouts.setDraftClient(draftIdValue, createdClient.id);
-    }
-
     router.replace({
       pathname: firstParam(returnTo) === "/workouts/schedule" ? "/workouts/schedule" : "/workouts/new",
       params: draftIdValue ? { draftId: draftIdValue } : { clientId: createdClient.id }
@@ -338,11 +349,29 @@ export default function NewClientScreen() {
         {step === "summary" ? (
           <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
         ) : null}
+        {createClientMutation.error ? (
+          <View style={styles.inlineAlert}>
+            <Alert
+              tone="negative"
+              layout="expanded"
+              title="Клиент не создан"
+              description={createClientMutation.error.message}
+              width="fill"
+            />
+          </View>
+        ) : null}
       </KeyboardAwareScrollView>
 
       {keyboardVisible ? null : (
         <View style={styles.footer}>
-          <Button label={step === "summary" ? "Создать клиента" : "Продолжить"} type="primary" size="large" width="fill" onPress={step === "summary" ? createClient : goNext} />
+          <Button
+            label={step === "summary" ? "Создать клиента" : "Продолжить"}
+            type="primary"
+            size="large"
+            width="fill"
+            state={createClientMutation.isSubmitting ? "loading" : "active"}
+            onPress={step === "summary" ? createClient : goNext}
+          />
         </View>
       )}
     </SafeAreaView>
@@ -782,5 +811,10 @@ const styles = StyleSheet.create({
   footer: {
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  inlineAlert: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg
   }
 });

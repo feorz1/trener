@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Button, Divider, ListItemCell, Navigation, getListItemCellGroupPosition } from "@/components/ui";
+import { Badge, Button, Divider, ListItemCell, Loader, Navigation, getListItemCellGroupPosition } from "@/components/ui";
 import { useClient, useClientWorkoutHistory } from "@/data";
 import { formatDurationCompact } from "@/features/workouts/sessionHistory";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
@@ -14,17 +14,21 @@ function firstParam(value?: string | string[]) {
 export default function ClientProfileScreen() {
   const { clientId: rawClientId } = useLocalSearchParams<{ clientId?: string | string[] }>();
   const clientId = firstParam(rawClientId);
-  const { client, isLoading, error, notFound } = useClient(clientId);
-  const { sessions } = useClientWorkoutHistory(clientId);
+  const clientQuery = useClient(clientId);
+  const historyQuery = useClientWorkoutHistory(clientId);
+  const { client, notFound } = clientQuery;
+  const { sessions } = historyQuery;
   const { scrollProps } = useConditionalScroll();
   const latestSessions = sessions.slice(0, 3);
+  const isLoading = clientQuery.isLoading || historyQuery.isLoading;
+  const error = clientQuery.error ?? historyQuery.error;
 
   if (isLoading) {
-    return <ClientState title="Загружаем клиента" />;
+    return <ClientState title="Загружаем клиента" loading />;
   }
 
   if (error) {
-    return <ClientState title="Не удалось загрузить клиента" actionLabel="Назад" onAction={() => router.back()} />;
+    return <ClientState title="Не удалось загрузить клиента" description={error.message} actionLabel="Повторить" onAction={clientQuery.retry} />;
   }
 
   if (notFound || !client) {
@@ -132,12 +136,26 @@ function formatExerciseCount(count: number) {
   return `${count} упражнений`;
 }
 
-function ClientState({ title, actionLabel, onAction }: { title: string; actionLabel?: string; onAction?: () => void }) {
+function ClientState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title="Профиль" onBack={() => router.back()} />
       <View style={styles.state}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
         <Text style={styles.stateTitle}>{title}</Text>
+        {description ? <Text style={styles.stateCopy}>{description}</Text> : null}
         {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
       </View>
     </SafeAreaView>
@@ -201,6 +219,7 @@ const styles = StyleSheet.create({
   },
   state: {
     flex: 1,
+    alignItems: "stretch",
     justifyContent: "center",
     gap: theme.spacing.lg,
     padding: theme.spacing.lg
@@ -208,6 +227,11 @@ const styles = StyleSheet.create({
   stateTitle: {
     ...theme.typography.body.lg,
     color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  stateCopy: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
     textAlign: "center"
   }
 });
