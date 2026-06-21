@@ -46,6 +46,14 @@ Wave 10 remaining blockers:
 - Privacy/retention/deletion requirements are not finalized.
 - Release candidate acceptance gates are not finalized.
 
+Planned local work before unblock:
+
+- Document production hardening baseline and release-readiness gates. Completed in Wave 13 as `docs/production/**`; runtime production hardening remains blocked.
+
+Production runtime remaining blockers:
+
+- Production signing/release pipeline, monitoring/crash reporting provider, alerting policy, privacy/retention/delete/export policy, accessibility acceptance criteria, and release candidate gates must be accepted before final audit can claim release readiness.
+
 ## Offline/Sync
 
 - Server truth/source-of-truth policy must be confirmed before backend mutation rollout.

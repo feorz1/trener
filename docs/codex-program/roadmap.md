@@ -45,8 +45,8 @@
 | 12C | `16-backend-workouts` | `codex/16-backend-workouts` | blocked | backend provider/API | contract tests |
 | 12D | `17-backend-sessions` | `codex/17-backend-sessions` | blocked | backend provider/API | idempotency tests |
 | 12E | `18-backend-results` | `codex/18-backend-results` | blocked | backend provider/API | history/result tests |
-| 13 | `19-production-hardening` | `codex/19-production-hardening` | not_started | backend/auth readiness | production checks |
-| Final | `20-final-audit` | `codex/20-final-audit` | not_started | all waves complete | read-only independent audit |
+| 13 | `19-production-hardening` | `codex/19-production-hardening` | baseline_merged_runtime_blocked | backend/auth readiness | production checks |
+| Final | `20-final-audit` | `codex/20-final-audit` | blocked | all waves complete | read-only independent audit |
 
 ## Confirmed Baseline Problems
 
@@ -96,3 +96,5 @@ Wave 10 status: merged into `codex/integration` as `f257f00` after `npm run chec
 Wave 11 status: merged into `codex/integration` as `174ea01` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added provider-neutral `docs/backend/**` database contract docs covering ownership, entity/table shape, lifecycle fields, result shape, active-session invariant, idempotency/conflict behavior, indexes, migration questions, and privacy/security notes. No backend provider, SDK, runtime API client, route change, persistence migration, auth provider, or production config was added.
 
 Wave 12A preflight status: merged into `codex/integration` as `3ae20aa` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added `docs/backend/clients-preflight.md` with blocker evidence, decisions required before client rollout, contract-only test prerequisites, forbidden runtime work, and future verification gates. Runtime backend clients remain blocked; no provider, SDK, network transport, repository adapter, route, persistence, auth, or production config was added.
+
+Wave 13 baseline status: merged into `codex/integration` as `c92e86f` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added `docs/production/**` production hardening baseline docs for security/privacy, monitoring/crash reporting, build/release config, performance, accessibility, release gates, rollback posture, and explicit blockers. No signing config, monitoring SDK, secrets, production auth, backend provider, network transport, route, persistence, UI, or runtime config was added.

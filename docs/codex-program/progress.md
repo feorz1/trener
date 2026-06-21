@@ -530,3 +530,36 @@ Remaining:
 
 - Runtime client rollout remains blocked until backend provider/stack, API base URLs, credentials/secret policy, server ownership rules, production auth provider, account/workspace model, conflict policy, and privacy/retention decisions are accepted.
 - Wave 12B+ backend domain work must remain in separate thread/worktree scopes and must not implement real provider/network behavior until those decisions exist.
+
+## Wave 13 Production Hardening Baseline
+
+Status:
+- baseline_merged
+- runtime_blocked
+
+Branch:
+- `codex/19-production-hardening`
+
+Merge:
+- `c92e86f Merge production hardening baseline`
+
+Completed:
+
+- Added `docs/production/README.md` as the Wave 13 baseline entrypoint.
+- Added `docs/production/release-readiness.md` with release-readiness gates for local checks, task workflow governance, security/privacy, monitoring, release config, backend-aware release posture, accessibility, performance, and rollback notes.
+- Added `docs/production/security-privacy.md` with sensitive data classes, token/snapshot boundary, owner-scope security expectations, privacy/retention requirements, and production blockers.
+- Kept the diff documentation-only under `docs/production/**`; no signing config, monitoring SDK, secrets, production auth, backend provider, network transport, route, persistence, UI, or runtime config was added.
+- Review-fixed wording in the security/privacy rollback section before merge.
+
+Checks:
+
+- Worker `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+- Orchestrator `npm ci`: passed in the Wave 13 worktree before full checks, with existing dependency audit warnings.
+- Orchestrator `npm run check`: passed on 2026-06-21 in the Wave 13 worktree.
+- Post-merge `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration`.
+- Post-merge `npm run check`: passed on 2026-06-21 on `codex/integration`.
+
+Remaining:
+
+- Final audit cannot start as release-ready until backend provider/stack, API URLs/secrets, production auth provider, credential policy, monitoring/crash provider, production signing/release pipeline, privacy/retention/delete/export policy, and accessibility acceptance criteria are accepted.
+- Backend domain runtime waves remain blocked by backend/auth decisions and must not be implemented in the orchestrator chat.
