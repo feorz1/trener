@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { ActiveSessionConflictError } from "../src/data/contracts";
 import { localReducer } from "../src/data/local/localReducer";
 import {
+  selectActiveSession,
+  selectActiveSessionConflict,
+  selectActiveSessionForWorkout,
   selectClientById,
   selectClients,
   selectExerciseById,
@@ -58,6 +62,14 @@ const session: WorkoutSession = {
   exercises: [{ id: "session-exercise-integration", exerciseId, exerciseName: seed.exercisesById[exerciseId].name, order: 1 }]
 };
 
+const alternateDraft: Workout = {
+  ...draft,
+  id: "workout-integration-alternate",
+  title: "Integration alternate",
+  startsAt: "2026-06-19T12:30:00.000Z",
+  exercises: [{ ...draft.exercises[0], id: "workout-exercise-integration-alternate" }]
+};
+
 const result: WorkoutResult = {
   id: "result-integration",
   ownerId: LOCAL_OWNER_ID,
@@ -88,6 +100,35 @@ const completedState = localReducer(stateWithSession, { type: "result/upsert", r
 const completedHydrated = hydrateDataState(serializeDataState(completedState));
 assert.equal(completedHydrated.resultIds.filter((id) => id === result.id).length, 1);
 assert.equal(completedHydrated.resultsById[result.id].completed, true);
+
+const stateWithAlternateDraft = localReducer(stateWithSession, { type: "workout/upsert", workout: alternateDraft });
+assert.equal(selectActiveSession(stateWithAlternateDraft, LOCAL_OWNER_ID)?.id, session.id);
+assert.equal(selectActiveSessionForWorkout(stateWithAlternateDraft, LOCAL_OWNER_ID, draft.id)?.id, session.id);
+assert.equal(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, draft.id), null);
+assert.equal(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, alternateDraft.id)?.id, session.id);
+
+const conflict = new ActiveSessionConflictError(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, alternateDraft.id)!);
+assert.equal(conflict.name, "ActiveSessionConflictError");
+assert.equal(conflict.activeSession.id, session.id);
+assert.equal(conflict.activeSession.workoutId, draft.id);
+
+const stateAfterRepeatedActiveUpsert = localReducer(stateWithSession, { type: "session/upsert", session: { ...session, updatedAt: "2026-06-19T10:50:00.000Z" } });
+assert.equal(stateAfterRepeatedActiveUpsert.sessionIds.filter((id) => id === session.id).length, 1);
+assert.equal(selectActiveSessionForWorkout(stateAfterRepeatedActiveUpsert, LOCAL_OWNER_ID, draft.id)?.id, session.id);
+
+const completedSession: WorkoutSession = {
+  ...session,
+  status: "completed",
+  completedAt: "2026-06-19T11:45:00.000Z",
+  durationSeconds: 3600,
+  updatedAt: "2026-06-19T11:45:00.000Z"
+};
+const stateCompletedOnce = localReducer(stateWithDraft, { type: "session/upsert", session: completedSession });
+const stateCompletedTwice = localReducer(stateCompletedOnce, { type: "session/upsert", session: completedSession });
+assert.equal(stateCompletedTwice.sessionIds.filter((id) => id === completedSession.id).length, 1);
+assert.equal(stateCompletedTwice.sessionsById[completedSession.id].status, "completed");
+assert.equal(stateCompletedTwice.sessionsById[completedSession.id].completedAt, completedSession.completedAt);
+assert.equal(selectActiveSessionConflict(stateCompletedTwice, LOCAL_OWNER_ID, alternateDraft.id), null);
 
 const otherOwnerId = "other-trainer" as OwnerId;
 const otherClient = {

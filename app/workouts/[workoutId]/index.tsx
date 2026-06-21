@@ -3,7 +3,7 @@ import { Alert as NativeAlert, Pressable, ScrollView, StyleSheet, Text, View } f
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Badge, Button, Divider, Header, Icon, ListItemGym, Navigation } from "@/components/ui";
-import { useClient, useSessionActions, useSessions, useWorkout, useWorkoutActions } from "@/data";
+import { isActiveSessionConflictError, useClient, useSessionActions, useSessions, useWorkout, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
@@ -41,8 +41,13 @@ export default function WorkoutDetailsScreen() {
 
   const startSession = async () => {
     if (!workoutId || !workout || workout.status === "cancelled") return;
-    const session = relatedSessions.find((item) => item.status === "active") ?? await sessionActions.start(workoutId);
-    router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: session.id } });
+    try {
+      const session = relatedSessions.find((item) => item.status === "active") ?? await sessionActions.start(workoutId);
+      router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: session.id } });
+    } catch (error) {
+      if (!isActiveSessionConflictError(error)) throw error;
+      router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: error.activeSession.id } });
+    }
   };
 
   const editWorkout = async () => {

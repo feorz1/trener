@@ -59,6 +59,24 @@ export function selectSessionById(state: LocalDataState, id: SessionId | undefin
   return isOwned(session, ownerId) ? cloneSession(session) : null;
 }
 
+export function selectActiveSession(state: LocalDataState, ownerId: OwnerId) {
+  const session = state.sessionIds.map((id) => state.sessionsById[id]).find((item) => item.ownerId === ownerId && item.status === "active");
+  return session ? cloneSession(session) : null;
+}
+
+export function selectActiveSessionForWorkout(state: LocalDataState, ownerId: OwnerId, workoutId: WorkoutId | undefined) {
+  if (!workoutId) return null;
+  const session = state.sessionIds
+    .map((id) => state.sessionsById[id])
+    .find((item) => item.ownerId === ownerId && item.workoutId === workoutId && item.status === "active");
+  return session ? cloneSession(session) : null;
+}
+
+export function selectActiveSessionConflict(state: LocalDataState, ownerId: OwnerId, workoutId: WorkoutId | undefined) {
+  if (!workoutId || selectActiveSessionForWorkout(state, ownerId, workoutId)) return null;
+  return selectActiveSession(state, ownerId);
+}
+
 export function selectResultsBySession(state: LocalDataState, sessionId: SessionId | undefined, ownerId: OwnerId) {
   if (!sessionId) return [];
   const session = state.sessionsById[sessionId];
