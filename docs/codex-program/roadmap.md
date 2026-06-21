@@ -32,7 +32,7 @@
 | 2 | `03-persistence-v2` | `codex/03-persistence-v2` | merged | owner scope merged | `npm run check`, `npm run check:task-workflow` |
 | 3 | `04-session-routing` | `codex/04-session-routing` | merged | ownership map fixed | `npm run check`, route architecture lint |
 | 4 | `05-result-types` | `codex/05-result-types` | merged | ownership map fixed | result tests, summary tests |
-| 5 | `06-active-session` | `codex/06-active-session` | resume_after_wave_4_merge | owner scope, routing/result decisions | session invariant tests |
+| 5 | `06-active-session` | `codex/06-active-session` | blocked_thread_system_error | owner scope, routing/result decisions | session invariant tests |
 | 6 | `07-async-states` | `codex/07-async-states` | paused_pending_waves_4_5 | stable repository errors | UI state and mutation tests |
 | 7 | `08-mvp-hardening` | `codex/08-mvp-hardening` | not_started | async contracts | flow tests |
 | 8 | `09-tests-ci` | `codex/09-tests-ci` | not_started | MVP hardening | `npm run check`, CI |

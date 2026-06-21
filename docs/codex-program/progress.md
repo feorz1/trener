@@ -15,7 +15,7 @@ Threads:
 | `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `04-session-routing` | `codex/04-session-routing` | merged into `codex/integration` | `d438d20` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `05-result-types` | `codex/05-result-types` | merged into `codex/integration` | `7672087` merge | `npm run check` passed; `npm run check:task-workflow` passed |
-| `06-active-session` | `codex/06-active-session` | paused worktree thread `019ee949-de84-7bf1-9915-4954ed490375` pending Wave 4 merge/rebase | pending | pending |
+| `06-active-session` | `codex/06-active-session` | resume blocked: thread `019ee949-de84-7bf1-9915-4954ed490375` is in `systemError`; draft worktree preserved | pending | pending |
 | `07-async-states` | `codex/07-async-states` | paused worktree thread `019ee94a-389c-7a13-9dda-e0dec1de3373` pending Wave 4/5 merge/rebase | pending | pending |
 
 Completed:
@@ -47,7 +47,8 @@ Next:
 
 - Collect handoffs from Wave 5 active-session invariant and Wave 6 async states.
 - Run independent read-only review and merge gates before integrating any completed wave.
-- Resume Wave 5 now that Wave 4 has landed; reconcile its draft worktree against `codex/integration`.
+- Restore or recreate the Wave 5 worker thread before continuing; do not implement Wave 5 in the orchestrator chat.
+- Wave 5 draft worktree currently has uncommitted changes in `app/(tabs)/index.tsx`, `app/workouts/[workoutId]/index.tsx`, `scripts/test-data-layer-integration.ts`, `src/data/DataProvider.tsx`, `src/data/contracts.ts`, and `src/data/local/localSelectors.ts`.
 - Resume Wave 6 only after Wave 4 and Wave 5 land and its draft worktree is reconciled.
 - Do not implement Wave 4+ in the orchestrator chat.
 
