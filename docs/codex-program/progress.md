@@ -18,6 +18,8 @@ Threads:
 | `06-active-session` | `codex/06-active-session` | merged into `codex/integration` | `310b024` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `07-async-states` | `codex/07-async-states-rescue` | merged into `codex/integration` | `37b2c0e` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `08-mvp-hardening` | `codex/08-mvp-hardening` | merged into `codex/integration` | `eb00fc5` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `09-tests-ci` | `codex/09-tests-ci` | merged into `codex/integration` | `5b42e36` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `10-pre-backend-review` | `codex/10-pre-backend-review` | read-only review complete | no commit | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -35,7 +37,7 @@ Open findings:
 
 - Architecture lint now blocks app route JSON serialization, old workout-based session paths, and non-primitive router params.
 - Backend/auth/provider decisions are external blockers.
-- `.expo-export-check/` generated output policy needs cleanup in tests/CI wave.
+- `.expo-export-check/` generated output policy is covered by Wave 8 regression tests and remains ignored after `npm run check`.
 
 Blocked:
 
@@ -44,9 +46,9 @@ Blocked:
 
 Next:
 
-- Start the pre-backend review gate in a separate thread/worktree after preparing a read-only handoff.
-- Keep API boundary, auth shell, and database contract blocked until the pre-backend gate is reviewed.
-- Do not implement backend/auth/API work in the orchestrator chat.
+- Start Wave 9 API boundary in a separate thread/worktree after preparing a narrow handoff.
+- Keep auth shell, database contract, backend providers, and production hardening blocked until their later waves.
+- Do not implement API/auth/backend work in the orchestrator chat.
 
 ## Wave 1
 
@@ -365,3 +367,32 @@ Checks:
 Remaining:
 
 - No open Wave 8 P1/P2 items known.
+
+## Pre-Backend Review Gate
+
+Status:
+- reviewed
+- clear_to_start_wave_9
+
+Branch:
+- `codex/10-pre-backend-review`
+
+Completed:
+
+- Ran a separate read-only review thread after Waves 1-8 were merged.
+- Confirmed no P0/P1 blockers before Wave 9 API boundary work.
+- Confirmed owner scope, persistence v2, session routing, result types, active-session invariant, async states, MVP hardening, and tests/CI are ready for API-boundary work.
+- Confirmed no API/auth/backend/token-storage surface has been started.
+- Confirmed no product-code or docs edits were made by the review thread.
+
+Checks:
+
+- `npm run check`: passed on 2026-06-21 in the review worktree after installing dependencies with `npm ci`.
+- Initial `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because empty local repo-harness runtime directories were absent in the worktree.
+- After recreating `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees`, `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+
+Recommendation:
+
+- Wave 9 `codex/11-api-boundary` may start.
+- Keep Wave 9 limited to DTO/repository boundaries, typed errors, adapters/contracts, and contract tests.
+- Keep auth shell, database contract, backend providers, and production hardening in later waves.

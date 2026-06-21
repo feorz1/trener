@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Waves 4, 5, 6, 7, and 8 are merged into `codex/integration`. The next writer is the pre-backend review gate (`10-pre-backend-review`) in a separate thread/worktree. It should be read-only unless review evidence requires docs-only notes; API boundary, auth shell, database contract, backend, and production hardening remain forbidden until this gate is reviewed.
+Waves 4, 5, 6, 7, and 8 are merged into `codex/integration`, and the pre-backend review gate (`10-pre-backend-review`) found no P0/P1 blockers. The next implementation writer is Wave 9 (`11-api-boundary`) in a separate thread/worktree. Keep its scope limited to `src/api/**`, DTO schemas/mappers, repository interfaces/adapters, typed errors, and contract tests. Auth shell, database contract, backend providers, and production hardening remain forbidden until their later waves.
