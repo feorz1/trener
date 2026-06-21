@@ -77,7 +77,9 @@ export type WorkoutSession = {
   clientId?: string;
   status: WorkoutSessionStatus;
   startedAt: string;
+  startedTimezone?: string;
   completedAt?: string;
+  completedTimezone?: string;
   durationSeconds?: number;
   workoutTitleSnapshot?: string;
   createdAt?: string;

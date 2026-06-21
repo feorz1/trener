@@ -18,6 +18,7 @@ import {
   selectResultsBySession,
   selectSessionById,
   selectSessions,
+  selectLatestWorkoutDraft,
   selectWorkoutById,
   selectWorkouts
 } from "./local/localSelectors";
@@ -137,6 +138,13 @@ export function useWorkoutDraft(draftId?: WorkoutId) {
   const result = useWorkout(draftId);
   const workout = result.workout?.status === "draft" ? result.workout : null;
   return { ...result, workout, draft: workout, notFound: !result.isLoading && !result.error && Boolean(draftId && !workout) };
+}
+
+export function useLatestWorkoutDraft() {
+  const { currentOwnerId, state } = useDataContext();
+  const query = useQueryState();
+  const draft = useMemo(() => selectLatestWorkoutDraft(state, currentOwnerId), [currentOwnerId, state]);
+  return { draft, ...query };
 }
 
 export function useWorkoutActions() {

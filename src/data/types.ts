@@ -40,9 +40,12 @@ export type CreateExerciseInput = {
   notes?: string;
 };
 
+export type UpdateExerciseInput = Partial<Omit<Exercise, "id" | "ownerId" | "source" | "createdAt" | "updatedAt" | "archivedAt">>;
+
 export type CreateWorkoutDraftInput = {
   clientId?: ClientId;
   startsAt?: string;
+  timezone?: string;
   durationMinutes?: number;
   title?: string;
   focus?: string;
@@ -66,7 +69,9 @@ export type SetDraftExercisesOptions = {
 
 export type UpdateWorkoutDraftExerciseInput = Partial<Omit<Workout["exercises"][number], "id" | "exerciseId">>;
 
-export type UpdateSessionInput = Partial<Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "completedAt" | "durationSeconds" | "workoutTitleSnapshot">>;
+export type UpdateSessionInput = Partial<
+  Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "startedTimezone" | "completedAt" | "completedTimezone" | "durationSeconds" | "workoutTitleSnapshot">
+>;
 
 export type UpsertWorkoutResultInput = {
   sessionId: SessionId;

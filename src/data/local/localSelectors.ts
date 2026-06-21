@@ -33,7 +33,10 @@ export function selectClientById(state: LocalDataState, id: ClientId | undefined
 }
 
 export function selectExercises(state: LocalDataState, ownerId: OwnerId) {
-  return state.exerciseIds.map((id) => state.exercisesById[id]).filter((exercise) => isOwned(exercise, ownerId)).map(cloneExercise);
+  return state.exerciseIds
+    .map((id) => state.exercisesById[id])
+    .filter((exercise) => isOwned(exercise, ownerId) && !exercise.archivedAt)
+    .map(cloneExercise);
 }
 
 export function selectExerciseById(state: LocalDataState, id: ExerciseId | undefined, ownerId: OwnerId) {
@@ -48,6 +51,15 @@ export function selectWorkouts(state: LocalDataState, ownerId: OwnerId) {
 export function selectWorkoutById(state: LocalDataState, id: WorkoutId | undefined, ownerId: OwnerId) {
   const workout = id ? state.workoutsById[id] : undefined;
   return isOwned(workout, ownerId) ? cloneWorkout(workout) : null;
+}
+
+export function selectLatestWorkoutDraft(state: LocalDataState, ownerId: OwnerId) {
+  const draft = state.workoutIds
+    .map((id) => state.workoutsById[id])
+    .filter((workout) => workout.ownerId === ownerId && workout.status === "draft")
+    .sort((left, right) => new Date(right.updatedAt ?? right.createdAt ?? right.startsAt).getTime() - new Date(left.updatedAt ?? left.createdAt ?? left.startsAt).getTime())[0];
+
+  return draft ? cloneWorkout(draft) : null;
 }
 
 export function selectSessions(state: LocalDataState, ownerId: OwnerId) {

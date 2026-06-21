@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Chip, Divider, ListItemGym, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
-import { useExercises, useSession, useSessionActions, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { Alert, Button, Checkbox, Chip, Divider, Icon, ListItemGym, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
+import { useDataMutation, useExerciseActions, useExercises, useSession, useSessionActions, useWorkoutActions, useWorkoutDraft } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 
@@ -43,6 +43,7 @@ export default function ExerciseSelectionScreen() {
   const hasDraftContext = Boolean(draftId);
   const hasSessionContext = Boolean(sessionId);
   const { exercises } = useExercises();
+  const exerciseActions = useExerciseActions();
   const { draft } = useWorkoutDraft(draftId);
   const { session } = useSession(sessionId);
   const workouts = useWorkoutActions();
@@ -56,6 +57,7 @@ export default function ExerciseSelectionScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>(selectedFromStore);
   const [search, setSearch] = useState("");
   const [selectedMuscle, setSelectedMuscle] = useState("all");
+  const archiveExerciseMutation = useDataMutation(async (exerciseId: string) => exerciseActions.archive(exerciseId));
   const { scrollProps } = useConditionalScroll();
   const normalizedSearch = search.trim().toLowerCase();
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -97,6 +99,13 @@ export default function ExerciseSelectionScreen() {
     }
   };
 
+  const archiveExercise = async (exerciseId: string) => {
+    const archived = await archiveExerciseMutation.mutate(exerciseId).catch(() => null);
+    if (archived) {
+      setSelectedIds((current) => current.filter((id) => id !== exerciseId));
+    }
+  };
+
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title="Упражнения" onBack={() => router.back()} />
@@ -111,6 +120,7 @@ export default function ExerciseSelectionScreen() {
         <>
 
       <View style={styles.filter}>
+        {archiveExerciseMutation.error ? <Alert tone="negative" layout="compact" width="fill" title={archiveExerciseMutation.error.message} /> : null}
         <Search value={search} width="fill" placeholder="Поиск упражнений" onChangeText={setSearch} onClear={() => setSearch("")} />
         <View style={styles.chips}>
           {muscleFilters.map((muscle) => (
@@ -149,6 +159,7 @@ export default function ExerciseSelectionScreen() {
             {filteredExercises.map((exercise, index) => {
               const selected = selectedIdSet.has(exercise.id);
               const alreadyInSession = hasSessionContext && existingExerciseIds.has(exercise.id);
+              const isCustom = exercise.source === "custom";
               const previousSelected = index > 0 && selectedIdSet.has(filteredExercises[index - 1].id);
               const nextSelected = index < filteredExercises.length - 1 && selectedIdSet.has(filteredExercises[index + 1].id);
 
@@ -161,6 +172,26 @@ export default function ExerciseSelectionScreen() {
                   width="fill"
                   selected={selected}
                   disabled={alreadyInSession}
+                  trailingSlot={
+                    isCustom ? (
+                      <View style={styles.exerciseActions}>
+                        <Button
+                          type="tertiary"
+                          size="smallIcon"
+                          accessibilityLabel={`Редактировать ${exercise.name}`}
+                          icon={<Icon name="edit" size={theme.sizes.buttonIconSmall} color={theme.colors.content.inkDeep} />}
+                          onPress={() => router.push({ pathname: "/workouts/exercise-new", params: { exerciseId: exercise.id } })}
+                        />
+                        <Checkbox
+                          accessibilityLabel={`Выбрать ${exercise.name}`}
+                          selected={selected}
+                          showLabel={false}
+                          onChange={() => toggleExercise(exercise.id)}
+                        />
+                      </View>
+                    ) : undefined
+                  }
+                  onDelete={isCustom ? () => void archiveExercise(exercise.id) : undefined}
                   onPress={alreadyInSession ? undefined : () => toggleExercise(exercise.id)}
                   onSelectedChange={alreadyInSession ? undefined : () => toggleExercise(exercise.id)}
                 />
@@ -204,6 +235,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm
+  },
+  exerciseActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.xs
   },
   body: {
     flex: 1,

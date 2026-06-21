@@ -9,6 +9,7 @@ import {
   selectClients,
   selectExerciseById,
   selectExercises,
+  selectLatestWorkoutDraft,
   selectPreviousExercisePerformance,
   selectQuickValue,
   selectResultsBySession,
@@ -19,6 +20,7 @@ import {
 } from "../src/data/local/localSelectors";
 import { createInitialState } from "../src/data/seeds/mockSeed";
 import { hydrateDataState, serializeDataState } from "../src/data/persistence";
+import { assertUniqueActiveExerciseName, getNormalizedExerciseName } from "../src/data/local/exerciseValidation";
 import { buildWorkoutResultFromSet, buildWorkoutResultFromUpsertInput } from "../src/data/local/resultBuilders";
 import { getSessionTotalVolume, formatResultSet } from "../src/features/workouts/sessionHistory";
 import { summarizeWorkoutResult } from "../src/features/workouts/sessionResult";
@@ -95,6 +97,22 @@ assert.equal(hydrated.sessionsById[session.id].status, "active");
 assert.equal(hydrated.resultsById[result.id].completed, false);
 assert.equal(hydrated.resultsById[result.id].weight, 22);
 
+const timezoneSession: WorkoutSession = {
+  ...session,
+  id: "session-timezone-policy",
+  startedTimezone: "Europe/Moscow",
+  completedAt: "2026-06-19T11:45:00.000Z",
+  completedTimezone: "Europe/Moscow",
+  status: "completed",
+  durationSeconds: 3600
+};
+const timezoneState = localReducer(stateWithDraft, { type: "session/upsert", session: timezoneSession });
+const timezoneHydrated = hydrateDataState(serializeDataState(timezoneState));
+assert.equal(timezoneHydrated.sessionsById[timezoneSession.id].startedAt, timezoneSession.startedAt);
+assert.equal(timezoneHydrated.sessionsById[timezoneSession.id].startedTimezone, "Europe/Moscow");
+assert.equal(timezoneHydrated.sessionsById[timezoneSession.id].completedAt, timezoneSession.completedAt);
+assert.equal(timezoneHydrated.sessionsById[timezoneSession.id].completedTimezone, "Europe/Moscow");
+
 const completedResult = { ...result, completed: true };
 const completedState = localReducer(stateWithSession, { type: "result/upsert", result: completedResult });
 const completedHydrated = hydrateDataState(serializeDataState(completedState));
@@ -106,6 +124,9 @@ assert.equal(selectActiveSession(stateWithAlternateDraft, LOCAL_OWNER_ID)?.id, s
 assert.equal(selectActiveSessionForWorkout(stateWithAlternateDraft, LOCAL_OWNER_ID, draft.id)?.id, session.id);
 assert.equal(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, draft.id), null);
 assert.equal(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, alternateDraft.id)?.id, session.id);
+assert.equal(selectLatestWorkoutDraft(stateWithAlternateDraft, LOCAL_OWNER_ID)?.id, alternateDraft.id);
+const stateAfterDraftDiscard = localReducer(stateWithAlternateDraft, { type: "workout/remove", workoutId: alternateDraft.id });
+assert.equal(selectLatestWorkoutDraft(stateAfterDraftDiscard, LOCAL_OWNER_ID)?.id, draft.id);
 
 const conflict = new ActiveSessionConflictError(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, alternateDraft.id)!);
 assert.equal(conflict.name, "ActiveSessionConflictError");
@@ -196,6 +217,29 @@ assert.ok(selectSessions(mixedOwnerState, LOCAL_OWNER_ID).every((item) => item.o
 assert.equal(selectClientById(mixedOwnerState, otherClient.id, otherOwnerId)?.id, otherClient.id);
 assert.equal(selectWorkoutById(mixedOwnerState, otherWorkout.id, otherOwnerId)?.id, otherWorkout.id);
 assert.equal(selectResultsBySession(mixedOwnerState, otherSession.id, otherOwnerId).length, 1);
+
+const customExercise = {
+  ...seed.exercisesById[exerciseId],
+  id: "exercise-custom-duplicate",
+  name: "  Авторская   тяга  ",
+  source: "custom" as const,
+  createdAt: "2026-06-19T09:00:00.000Z",
+  updatedAt: "2026-06-19T09:00:00.000Z"
+};
+const stateWithCustomExercise = localReducer(seed, { type: "exercise/upsert", exercise: customExercise });
+assert.equal(getNormalizedExerciseName(customExercise.name), "авторская тяга");
+assert.throws(
+  () => assertUniqueActiveExerciseName(stateWithCustomExercise, { ownerId: LOCAL_OWNER_ID, name: "авторская тяга" }),
+  (error) => error instanceof DataError && error.code === "validation"
+);
+assert.doesNotThrow(() => assertUniqueActiveExerciseName(stateWithCustomExercise, { ownerId: LOCAL_OWNER_ID, name: "авторская тяга", excludeExerciseId: customExercise.id }));
+const stateWithArchivedCustomExercise = localReducer(stateWithCustomExercise, {
+  type: "exercise/upsert",
+  exercise: { ...customExercise, archivedAt: "2026-06-19T10:00:00.000Z" }
+});
+assert.equal(selectExercises(stateWithArchivedCustomExercise, LOCAL_OWNER_ID).some((exercise) => exercise.id === customExercise.id), false);
+assert.doesNotThrow(() => assertUniqueActiveExerciseName(stateWithArchivedCustomExercise, { ownerId: LOCAL_OWNER_ID, name: "Авторская тяга" }));
+assert.doesNotThrow(() => assertUniqueActiveExerciseName(stateWithCustomExercise, { ownerId: otherOwnerId, name: "Авторская тяга" }));
 
 const legacyQuickValue: QuickValue = {
   id: `quick-value:${clientId}:${exerciseId}:weight`,

@@ -1,12 +1,9 @@
-import { useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header, ListItemCell } from "@/components/ui";
 import { theme } from "@/theme";
 
 export default function SettingsScreen() {
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [autoTimerEnabled, setAutoTimerEnabled] = useState(false);
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
 
@@ -38,26 +35,26 @@ export default function SettingsScreen() {
           <View style={styles.listGroup}>
             <ListItemCell
               title="Уведомления"
-              subtitle="Напоминания о тренировках"
+              subtitle="Будет доступно позже"
               leading="icon"
               leadingIconName="bell"
               trailing="switch"
-              selected={notificationsEnabled}
-              onSelectedChange={setNotificationsEnabled}
+              selected={false}
+              disabled
               groupPosition="first"
             />
             <ListItemCell
               title="Автозапуск таймера"
-              subtitle="После старта подхода"
+              subtitle="Будет доступно позже"
               leading="icon"
               leadingIconName="clock"
               trailing="switch"
-              selected={autoTimerEnabled}
-              onSelectedChange={setAutoTimerEnabled}
+              selected={false}
+              disabled
               groupPosition="middle"
             />
-            <ListItemCell title="Единицы измерения" leading="icon" leadingIconName="chart" trailing="text" trailingText="кг / см" groupPosition="middle" />
-            <ListItemCell title="Тема" leading="icon" leadingIconName="settings" trailing="text" trailingText="Системная" groupPosition="last" />
+            <ListItemCell title="Единицы измерения" subtitle="Будет доступно позже" leading="icon" leadingIconName="chart" trailing="text" trailingText="кг / см" disabled groupPosition="middle" />
+            <ListItemCell title="Тема" subtitle="Будет доступно позже" leading="icon" leadingIconName="settings" trailing="text" trailingText="Системная" disabled groupPosition="last" />
           </View>
         </View>
       </View>
