@@ -1,6 +1,6 @@
 import { createInitialState } from "../seeds/mockSeed";
 import { LOCAL_OWNER_ID, type Client, type Exercise, type QuickValue, type Workout, type WorkoutResult, type WorkoutSession } from "../types";
-import type { PersistedSnapshot } from "./PersistedSnapshot";
+import type { LegacyPersistedSnapshot, PersistedSnapshot } from "./PersistedSnapshot";
 
 export class InvalidSnapshotError extends Error {
   constructor(message: string) {
@@ -19,6 +19,10 @@ function isString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || isString(value);
+}
+
+function hasValidOwnerId(value: unknown, required: boolean) {
+  return required ? isString(value) : isOptionalString(value);
 }
 
 function getOwnerId(value: { ownerId?: unknown }) {
@@ -47,9 +51,9 @@ function assertUniqueIds(items: Array<{ id: string }>, entityName: string) {
   }
 }
 
-function validateClient(value: unknown): value is Client {
+function validateClient(value: unknown, requireOwnerId: boolean): value is Client {
   if (!isRecord(value) || !isString(value.id) || !isString(value.name) || !isString(value.goal) || !isString(value.avatarInitials) || !isString(value.nextWorkoutAt) || !isString(value.notes)) return false;
-  if (!isOptionalString(value.ownerId)) return false;
+  if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   if (!["active", "paused", "new"].includes(String(value.status))) return false;
   if (value.gender !== undefined && !["male", "female"].includes(String(value.gender))) return false;
   if (!isOptionalString(value.phone) || !isOptionalString(value.email) || !isOptionalString(value.birthDate) || !isOptionalString(value.telegram) || !isOptionalStringArray(value.restrictions)) return false;
@@ -59,9 +63,9 @@ function validateClient(value: unknown): value is Client {
     && typeof value.metrics.attendanceRate === "number" && Number.isFinite(value.metrics.attendanceRate);
 }
 
-function validateExercise(value: unknown): value is Exercise {
+function validateExercise(value: unknown, requireOwnerId: boolean): value is Exercise {
   if (!isRecord(value) || !isString(value.id) || !isString(value.name) || !Array.isArray(value.primaryMuscles) || !isString(value.equipment)) return false;
-  if (!isOptionalString(value.ownerId)) return false;
+  if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   if (!["strength", "mobility", "cardio"].includes(String(value.category))) return false;
   if (value.source !== undefined && !["built_in", "custom"].includes(String(value.source))) return false;
   if (!value.primaryMuscles.every(isString)) return false;
@@ -69,9 +73,9 @@ function validateExercise(value: unknown): value is Exercise {
   return isOptionalString(value.coachNotes) && isOptionalString(value.notes) && isOptionalString(value.archivedAt) && isOptionalString(value.createdAt) && isOptionalString(value.updatedAt);
 }
 
-function validateWorkout(value: unknown): value is Workout {
+function validateWorkout(value: unknown, requireOwnerId: boolean): value is Workout {
   if (!isRecord(value) || !isString(value.id) || !isOptionalString(value.clientId) || !isString(value.title) || !isIsoString(value.startsAt) || typeof value.durationMinutes !== "number" || !Number.isFinite(value.durationMinutes) || !isString(value.focus) || !isString(value.location)) return false;
-  if (!isOptionalString(value.ownerId)) return false;
+  if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   if (!["draft", "planned", "active", "inProgress", "completed", "cancelled", "moved"].includes(String(value.status))) return false;
   if (!Array.isArray(value.exercises)) return false;
   return value.exercises.every((exercise) => {
@@ -83,23 +87,23 @@ function validateWorkout(value: unknown): value is Workout {
   });
 }
 
-function validateSession(value: unknown): value is WorkoutSession {
+function validateSession(value: unknown, requireOwnerId: boolean): value is WorkoutSession {
   if (!isRecord(value) || !isString(value.id) || !isString(value.workoutId) || !isOptionalString(value.clientId) || !isIsoString(value.startedAt) || !isOptionalString(value.completedAt) || !isFiniteOptionalNumber(value.durationSeconds)) return false;
-  if (!isOptionalString(value.ownerId)) return false;
+  if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   if (value.completedAt !== undefined && !isIsoString(value.completedAt)) return false;
   if (!["active", "completed", "cancelled"].includes(String(value.status)) || !Array.isArray(value.exercises)) return false;
   return value.exercises.every((exercise) => isRecord(exercise) && isString(exercise.id) && isString(exercise.exerciseId) && isString(exercise.exerciseName) && typeof exercise.order === "number" && Number.isFinite(exercise.order));
 }
 
-function validateResult(value: unknown): value is WorkoutResult {
+function validateResult(value: unknown, requireOwnerId: boolean): value is WorkoutResult {
   if (!isRecord(value) || !isString(value.id) || !isString(value.sessionId) || !isString(value.exerciseId) || typeof value.setIndex !== "number" || !Number.isFinite(value.setIndex) || !isOptionalString(value.setId) || !isOptionalString(value.unit) || typeof value.completed !== "boolean") return false;
-  if (!isOptionalString(value.ownerId)) return false;
+  if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   return isFiniteOptionalNumber(value.weight) && isFiniteOptionalNumber(value.repetitions);
 }
 
-function validateQuickValue(value: unknown): value is QuickValue {
+function validateQuickValue(value: unknown, requireOwnerId: boolean): value is QuickValue {
   if (!isRecord(value) || !isString(value.id) || !isString(value.exerciseId) || !isOptionalString(value.clientId) || !["weight", "reps"].includes(String(value.metric)) || !Array.isArray(value.values) || !isIsoString(value.updatedAt)) return false;
-  if (!isOptionalString(value.ownerId)) return false;
+  if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   return value.values.every((item) => typeof item === "number" && Number.isFinite(item));
 }
 
@@ -109,11 +113,16 @@ function getArray(parent: Record<string, unknown>, key: string) {
   return value;
 }
 
-export function validatePersistedSnapshot(value: unknown): PersistedSnapshot {
+function validateSnapshot(value: unknown, schemaVersion: 1 | 2, requireOwnerId: boolean) {
   if (!isRecord(value)) throw new InvalidSnapshotError("snapshot must be an object");
-  if (value.schemaVersion !== 1) throw new InvalidSnapshotError("unsupported schema version");
+  if (value.schemaVersion !== schemaVersion) throw new InvalidSnapshotError("unsupported schema version");
   if (!isIsoString(value.savedAt)) throw new InvalidSnapshotError("snapshot.savedAt must be an ISO string");
   if (!isRecord(value.data)) throw new InvalidSnapshotError("snapshot.data must be an object");
+  if (schemaVersion === 2) {
+    if (!isRecord(value.meta)) throw new InvalidSnapshotError("snapshot.meta must be an object");
+    if (!(value.meta.activeSessionId === null || isString(value.meta.activeSessionId))) throw new InvalidSnapshotError("snapshot.meta.activeSessionId must be null or a string");
+    if (!(value.meta.lastWorkoutDraftId === null || isString(value.meta.lastWorkoutDraftId))) throw new InvalidSnapshotError("snapshot.meta.lastWorkoutDraftId must be null or a string");
+  }
 
   const clients = getArray(value.data, "clients");
   const exercises = Array.isArray(value.data.exercises) ? value.data.exercises : [];
@@ -122,12 +131,12 @@ export function validatePersistedSnapshot(value: unknown): PersistedSnapshot {
   const results = getArray(value.data, "results");
   const quickValues = getArray(value.data, "quickValues");
 
-  if (!clients.every(validateClient)) throw new InvalidSnapshotError("snapshot clients are invalid");
-  if (!exercises.every(validateExercise)) throw new InvalidSnapshotError("snapshot exercises are invalid");
-  if (!workouts.every(validateWorkout)) throw new InvalidSnapshotError("snapshot workouts are invalid");
-  if (!sessions.every(validateSession)) throw new InvalidSnapshotError("snapshot sessions are invalid");
-  if (!results.every(validateResult)) throw new InvalidSnapshotError("snapshot results are invalid");
-  if (!quickValues.every(validateQuickValue)) throw new InvalidSnapshotError("snapshot quick values are invalid");
+  if (!clients.every((client) => validateClient(client, requireOwnerId))) throw new InvalidSnapshotError("snapshot clients are invalid");
+  if (!exercises.every((exercise) => validateExercise(exercise, requireOwnerId))) throw new InvalidSnapshotError("snapshot exercises are invalid");
+  if (!workouts.every((workout) => validateWorkout(workout, requireOwnerId))) throw new InvalidSnapshotError("snapshot workouts are invalid");
+  if (!sessions.every((session) => validateSession(session, requireOwnerId))) throw new InvalidSnapshotError("snapshot sessions are invalid");
+  if (!results.every((result) => validateResult(result, requireOwnerId))) throw new InvalidSnapshotError("snapshot results are invalid");
+  if (!quickValues.every((quickValue) => validateQuickValue(quickValue, requireOwnerId))) throw new InvalidSnapshotError("snapshot quick values are invalid");
 
   assertUniqueIds(clients, "clients");
   assertUniqueIds(exercises, "exercises");
@@ -180,5 +189,13 @@ export function validatePersistedSnapshot(value: unknown): PersistedSnapshot {
     if (exerciseOwnerById.get(quickValue.exerciseId) !== ownerId) throw new InvalidSnapshotError("quick value references exercise from another owner");
   });
 
-  return value as PersistedSnapshot;
+  return value;
+}
+
+export function validateLegacyPersistedSnapshot(value: unknown): LegacyPersistedSnapshot {
+  return validateSnapshot(value, 1, false) as LegacyPersistedSnapshot;
+}
+
+export function validatePersistedSnapshot(value: unknown): PersistedSnapshot {
+  return validateSnapshot(value, 2, true) as PersistedSnapshot;
 }
