@@ -15,8 +15,8 @@ Threads:
 | `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `04-session-routing` | `codex/04-session-routing` | merged into `codex/integration` | `d438d20` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `05-result-types` | `codex/05-result-types` | merged into `codex/integration` | `7672087` merge | `npm run check` passed; `npm run check:task-workflow` passed |
-| `06-active-session` | `codex/06-active-session` | resume blocked: thread `019ee949-de84-7bf1-9915-4954ed490375` is in `systemError`; draft worktree preserved | pending | pending |
-| `07-async-states` | `codex/07-async-states` | paused worktree thread `019ee94a-389c-7a13-9dda-e0dec1de3373` pending Wave 4/5 merge/rebase | pending | pending |
+| `06-active-session` | `codex/06-active-session` | merged into `codex/integration` | `310b024` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `07-async-states` | `codex/07-async-states` | paused worktree thread `019ee94a-389c-7a13-9dda-e0dec1de3373` pending resume/rebase after Wave 4/5 merge | pending | pending |
 
 Completed:
 
@@ -45,11 +45,9 @@ Blocked:
 
 Next:
 
-- Collect handoffs from Wave 5 active-session invariant and Wave 6 async states.
+- Collect handoff from Wave 6 async states.
 - Run independent read-only review and merge gates before integrating any completed wave.
-- Restore or recreate the Wave 5 worker thread before continuing; do not implement Wave 5 in the orchestrator chat.
-- Wave 5 draft worktree currently has uncommitted changes in `app/(tabs)/index.tsx`, `app/workouts/[workoutId]/index.tsx`, `scripts/test-data-layer-integration.ts`, `src/data/DataProvider.tsx`, `src/data/contracts.ts`, and `src/data/local/localSelectors.ts`.
-- Resume Wave 6 only after Wave 4 and Wave 5 land and its draft worktree is reconciled.
+- Resume Wave 6 now that Wave 4 and Wave 5 have landed, and reconcile its draft worktree against `codex/integration`.
 - Do not implement Wave 4+ in the orchestrator chat.
 
 ## Wave 1
@@ -223,3 +221,41 @@ Review gate fix checks:
 - `npm run test:integration`: passed on 2026-06-21.
 - `npm run check`: passed on 2026-06-21.
 - `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: still blocked on 2026-06-21 because this worktree is missing required harness directories.
+
+## Wave 5
+
+Status:
+- implementation_reviewed
+- merged
+
+Branch:
+- `codex/06-active-session`
+
+Integration:
+- Merged into `codex/integration` as `310b024`.
+
+Completed:
+
+- Added `ActiveSessionConflictError` and typed conflict detection.
+- Added owner-wide active-session selectors plus workout-specific active-session helpers.
+- Made starting the same workout return the existing active session instead of creating a duplicate.
+- Made starting a different workout while another owner session is active throw a typed conflict.
+- Updated home and workout flows to route users into the already active session when a conflict is returned.
+- Preserved idempotent completed-session behavior after the result-type wave.
+- Added integration coverage for active-session selectors, same-workout idempotency, different-workout conflict handling, and completed-session cleanup.
+
+Checks:
+
+- `npm run test:integration`: passed on 2026-06-21.
+- `npm run check`: passed on 2026-06-21 in the Wave 5 worktree.
+- `npm run check`: passed on 2026-06-21 after merge on `codex/integration`.
+- `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 after restoring tracked workflow directories and refreshing the handoff resume packet.
+
+Review gate:
+
+- Independent subagent review was unavailable because the session hit the active thread limit.
+- Fallback local read-only review checked `codex/integration..codex/06-active-session` and found no merge blockers.
+
+Remaining:
+
+- Wave 6 must reconcile its paused async-state draft against the latest `codex/integration` before implementation continues.
