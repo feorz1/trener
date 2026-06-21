@@ -80,6 +80,7 @@ function validateExercise(value: unknown, requireOwnerId: boolean): value is Exe
 function validateWorkout(value: unknown, requireOwnerId: boolean): value is Workout {
   if (!isRecord(value) || !isString(value.id) || !isOptionalString(value.clientId) || !isString(value.title) || !isIsoString(value.startsAt) || typeof value.durationMinutes !== "number" || !Number.isFinite(value.durationMinutes) || !isString(value.focus) || !isString(value.location)) return false;
   if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
+  if (!isOptionalString(value.timezone)) return false;
   if (!["draft", "planned", "active", "inProgress", "completed", "cancelled", "moved"].includes(String(value.status))) return false;
   if (!Array.isArray(value.exercises)) return false;
   return value.exercises.every((exercise) => {
@@ -102,6 +103,7 @@ function validateWorkout(value: unknown, requireOwnerId: boolean): value is Work
 function validateSession(value: unknown, requireOwnerId: boolean): value is WorkoutSession {
   if (!isRecord(value) || !isString(value.id) || !isString(value.workoutId) || !isOptionalString(value.clientId) || !isIsoString(value.startedAt) || !isOptionalString(value.completedAt) || !isFiniteOptionalNumber(value.durationSeconds)) return false;
   if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
+  if (!isOptionalString(value.startedTimezone) || !isOptionalString(value.completedTimezone)) return false;
   if (value.completedAt !== undefined && !isIsoString(value.completedAt)) return false;
   if (!["active", "completed", "cancelled"].includes(String(value.status)) || !Array.isArray(value.exercises)) return false;
   return value.exercises.every((exercise) => isRecord(exercise) && isString(exercise.id) && isString(exercise.exerciseId) && isString(exercise.exerciseName) && isOptionalString(exercise.exerciseNameSnapshot) && isOptionalResultType(exercise.resultTypeSnapshot) && typeof exercise.order === "number" && Number.isFinite(exercise.order));

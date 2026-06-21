@@ -9,6 +9,7 @@ import type {
   ResultId,
   SessionId,
   UpdateClientInput,
+  UpdateExerciseInput,
   UpdateSessionInput,
   UpdateWorkoutDraftInput,
   SetDraftExercisesOptions,
@@ -140,6 +141,7 @@ export interface ExerciseRepository {
   list(): Promise<Exercise[]>;
   getById(id: ExerciseId): Promise<Exercise | null>;
   create(input: CreateExerciseInput): Promise<Exercise>;
+  update(id: ExerciseId, patch: UpdateExerciseInput): Promise<Exercise>;
   archive(id: ExerciseId): Promise<Exercise>;
 }
 

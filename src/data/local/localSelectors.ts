@@ -50,6 +50,15 @@ export function selectWorkoutById(state: LocalDataState, id: WorkoutId | undefin
   return isOwned(workout, ownerId) ? cloneWorkout(workout) : null;
 }
 
+export function selectLatestWorkoutDraft(state: LocalDataState, ownerId: OwnerId) {
+  const draft = state.workoutIds
+    .map((id) => state.workoutsById[id])
+    .filter((workout) => workout.ownerId === ownerId && workout.status === "draft")
+    .sort((left, right) => new Date(right.updatedAt ?? right.createdAt ?? right.startsAt).getTime() - new Date(left.updatedAt ?? left.createdAt ?? left.startsAt).getTime())[0];
+
+  return draft ? cloneWorkout(draft) : null;
+}
+
 export function selectSessions(state: LocalDataState, ownerId: OwnerId) {
   return state.sessionIds.map((id) => state.sessionsById[id]).filter((session) => isOwned(session, ownerId)).map(cloneSession);
 }

@@ -4,8 +4,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
-import { Button, Card, Header, Icon } from "@/components/ui";
-import { isActiveSessionConflictError, useClients, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
+import { Alert, Button, Card, Header, Icon } from "@/components/ui";
+import { isActiveSessionConflictError, useClients, useDataMutation, useLatestWorkoutDraft, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { Client, Workout, WorkoutResult, WorkoutSession, WorkoutStatus } from "@/types";
@@ -233,6 +233,7 @@ export default function IndexScreen() {
   const { clients } = useClients();
   const { sessions: workoutSessions } = useSessions();
   const { results } = useResults();
+  const { draft: latestDraft } = useLatestWorkoutDraft();
   const sessions = useSessionActions();
   const workoutActions = useWorkoutActions();
   const {
@@ -265,6 +266,9 @@ export default function IndexScreen() {
   const { scrollProps } = useConditionalScroll();
   const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
   const floatingAddBottom = Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing.lg;
+  const startSessionMutation = useDataMutation(async (workoutId: string) => sessions.start(workoutId));
+  const createDraftMutation = useDataMutation(async (startsAt?: string) => workoutActions.createDraft({ startsAt }));
+  const actionError = startSessionMutation.error ?? createDraftMutation.error;
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -367,7 +371,7 @@ export default function IndexScreen() {
 
   const openWorkoutSession = async (workoutId: string) => {
     try {
-      const session = await sessions.start(workoutId);
+      const session = await startSessionMutation.mutate(workoutId);
 
       router.push({
         pathname: "/sessions/[sessionId]",
@@ -409,9 +413,18 @@ export default function IndexScreen() {
   };
 
   const openPlanningChoice = async () => {
-    const draft = await workoutActions.createDraft({
-      startsAt: parseDateKey(selectedDayKey)?.toISOString()
-    });
+    if (createDraftMutation.isSubmitting) return;
+
+    if (latestDraft) {
+      router.push({
+        pathname: "/workouts/planning",
+        params: { date: selectedDayKey }
+      });
+      return;
+    }
+
+    const draft = await createDraftMutation.mutate(parseDateKey(selectedDayKey)?.toISOString()).catch(() => null);
+    if (!draft) return;
 
     router.push({
       pathname: "/workouts/client-select",
@@ -454,6 +467,7 @@ export default function IndexScreen() {
           <CalendarDayStrip weeks={weekPages} selectedKey={selectedDayKey} todayKey={todayKey} width="full" style={styles.calendarStrip} onSelect={selectDay} />
 
           <View style={styles.cards}>
+            {actionError ? <Alert tone="negative" layout="compact" width="fill" title={actionError.message} /> : null}
             {shouldShowDayPlan ? (
               <Card
                 variant="dayPlan"
@@ -518,7 +532,7 @@ export default function IndexScreen() {
             }
           ]}
         >
-          <FloatingAddWorkoutButton onPress={openPlanningChoice} />
+          <FloatingAddWorkoutButton disabled={createDraftMutation.isSubmitting} onPress={openPlanningChoice} />
         </Animated.View>
       ) : null}
 
@@ -526,15 +540,17 @@ export default function IndexScreen() {
   );
 }
 
-function FloatingAddWorkoutButton({ onPress }: { onPress: () => void }) {
+function FloatingAddWorkoutButton({ disabled, onPress }: { disabled?: boolean; onPress: () => void }) {
   return (
     <Pressable
       accessibilityHint="Открывает планирование тренировки"
       accessibilityLabel="Добавить тренировку"
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       hitSlop={FAB_HIT_SLOP}
       onPress={onPress}
-      style={({ pressed }) => [styles.floatingAddButton, pressed && styles.floatingAddButtonPressed]}
+      style={({ pressed }) => [styles.floatingAddButton, disabled && styles.floatingAddButtonDisabled, pressed && styles.floatingAddButtonPressed]}
     >
       <View pointerEvents="none" style={styles.floatingAddShadow} />
       <LiquidGlassView
@@ -608,6 +624,9 @@ const styles = StyleSheet.create({
   },
   floatingAddButtonPressed: {
     opacity: 0.86
+  },
+  floatingAddButtonDisabled: {
+    opacity: 0.45
   },
   floatingAddGlass: {
     flex: 1,

@@ -3,7 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Button, Divider, ListItemGym, Navigation, ProgressBar, type WorkoutSetValue } from "@/components/ui";
+import { Alert, Badge, Button, Divider, ListItemGym, Loader, Navigation, ProgressBar, type WorkoutSetValue } from "@/components/ui";
 import { useClient, useSession, useSessionResults, useWorkout } from "@/data";
 import {
   defaultWorkoutResultType,
@@ -114,10 +114,14 @@ export default function WorkoutSummaryScreen() {
   const sessionId = firstParam(rawSessionId);
   const openedFrom = firstParam(rawFrom);
   const usesBackNavigation = openedFrom === "client" || openedFrom === "home";
-  const { session } = useSession(sessionId);
-  const { workout } = useWorkout(session?.workoutId);
-  const { client } = useClient(session?.clientId ?? workout?.clientId);
-  const { results } = useSessionResults(sessionId);
+  const sessionQuery = useSession(sessionId);
+  const { session } = sessionQuery;
+  const workoutQuery = useWorkout(session?.workoutId);
+  const { workout } = workoutQuery;
+  const clientQuery = useClient(session?.clientId ?? workout?.clientId);
+  const { client } = clientQuery;
+  const resultsQuery = useSessionResults(sessionId);
+  const { results } = resultsQuery;
   const snapshot = useMemo(() => session ? buildSnapshot(session, client?.name ?? "Клиент", results) : null, [client?.name, results, session]);
   const summary = useMemo(
     () =>
@@ -170,6 +174,14 @@ export default function WorkoutSummaryScreen() {
 
     closeSummary();
   };
+  const isLoading = sessionQuery.isLoading || workoutQuery.isLoading || clientQuery.isLoading || resultsQuery.isLoading;
+  const loadError = sessionQuery.error ?? workoutQuery.error ?? clientQuery.error ?? resultsQuery.error;
+  const retryLoad = () => {
+    sessionQuery.retry();
+    workoutQuery.retry();
+    clientQuery.retry();
+    resultsQuery.retry();
+  };
 
   useEffect(() => {
     if (!snapshot || hapticPlayedRef.current) return;
@@ -182,6 +194,29 @@ export default function WorkoutSummaryScreen() {
 
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, [completionIsFull, snapshot, summary.loggedSets]);
+
+  if (isLoading) {
+    return (
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+        <Navigation title="Итоги тренировки" backIconName={backIconName} backAccessibilityLabel={backAccessibilityLabel} onBack={handleBack} />
+        <View style={styles.emptyState}>
+          <Loader size="medium" tone="brand" />
+          <Text style={styles.emptyTitle}>Загружаем итоги</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+        <Navigation title="Итоги тренировки" backIconName={backIconName} backAccessibilityLabel={backAccessibilityLabel} onBack={handleBack} />
+        <View style={styles.emptyState}>
+          <Alert tone="negative" layout="action" width="fill" title="Не удалось загрузить итоги" description={loadError.message} actionLabel="Повторить" onAction={retryLoad} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!snapshot) {
     return (

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { AppState, StyleSheet, Text, View } from "react-native";
 import type { DataLayer } from "./contracts";
-import { ActiveSessionConflictError, DataNotFoundError } from "./contracts";
+import { ActiveSessionConflictError, DataError, DataNotFoundError } from "./contracts";
 import { createId } from "./createId";
 import { LOCAL_OWNER_ID } from "./types";
 import type {
@@ -25,6 +25,7 @@ import type {
 import { localReducer, type LocalDataAction } from "./local/localReducer";
 import type { LocalDataState } from "./local/localState";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "./local/localState";
+import { assertUniqueActiveExerciseName, normalizeExercisePatch } from "./local/exerciseValidation";
 import { buildWorkoutResultFromSet, buildWorkoutResultFromUpsertInput } from "./local/resultBuilders";
 import { selectActiveSessionConflict, selectActiveSessionForWorkout, selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
 import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetConnectionsAfterReorder, sortWorkoutExercisesByOrder, syncSupersetConnectionsForScope } from "./local/supersetConnections";
@@ -72,6 +73,24 @@ function requiredTrim(value: string, fallback: string) {
   return trimmed || fallback;
 }
 
+function normalizeTimezone(value?: string) {
+  const timezone = optionalTrim(value);
+
+  try {
+    return Intl.DateTimeFormat(undefined, timezone ? { timeZone: timezone } : undefined).resolvedOptions().timeZone || "UTC";
+  } catch {
+    throw new DataError("validation", "Некорректный часовой пояс", { retryable: false });
+  }
+}
+
+function normalizeIsoDate(value: string, fieldName: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new DataError("validation", `${fieldName} должен быть ISO-датой`, { retryable: false });
+  }
+  return date.toISOString();
+}
+
 function ensureWorkoutDraft(workout: Workout | undefined, id: string) {
   if (!workout || workout.status !== "draft") {
     throw new DataNotFoundError("Workout draft", id);
@@ -88,6 +107,29 @@ function ensureOwned<T extends { ownerId: OwnerId }>(entity: T | undefined, enti
 
 function isOwned<T extends { ownerId: OwnerId }>(entity: T | undefined, ownerId: OwnerId): entity is T {
   return Boolean(entity && entity.ownerId === ownerId);
+}
+
+function isAvailableExercise(entity: { ownerId: OwnerId; archivedAt?: string } | undefined, ownerId: OwnerId) {
+  return Boolean(entity && entity.ownerId === ownerId && !entity.archivedAt);
+}
+
+function validateDraftForPublish(state: LocalDataState, ownerId: OwnerId, draft: Workout) {
+  if (draft.clientId && !isOwned(state.clientsById[draft.clientId], ownerId)) {
+    throw new DataNotFoundError("Client", draft.clientId);
+  }
+
+  draft.exercises.forEach((exercise) => {
+    const sourceExercise = state.exercisesById[exercise.exerciseId];
+    if (!isOwned(sourceExercise, ownerId)) throw new DataNotFoundError("Exercise", exercise.exerciseId);
+    if (sourceExercise.archivedAt) {
+      throw new DataError("validation", "В черновике есть архивное упражнение", { retryable: false });
+    }
+  });
+
+  return {
+    startsAt: normalizeIsoDate(draft.startsAt, "Дата тренировки"),
+    timezone: normalizeTimezone(draft.timezone)
+  };
 }
 
 function getSessionsForWorkout(state: LocalDataState, ownerId: OwnerId, workoutId: string) {
@@ -114,7 +156,7 @@ function getExerciseName(state: LocalDataState, exerciseId: ExerciseId, ownerId:
 }
 
 function createWorkoutExercise(state: LocalDataState, ownerId: OwnerId, exerciseId: ExerciseId, order: number, day?: RepeatDay, existingId?: string) {
-  if (!isOwned(state.exercisesById[exerciseId], ownerId)) {
+  if (!isAvailableExercise(state.exercisesById[exerciseId], ownerId)) {
     throw new DataNotFoundError("Exercise", exerciseId);
   }
 
@@ -363,14 +405,16 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         },
         async create(input: CreateExerciseInput) {
           const now = new Date().toISOString();
+          const name = requiredTrim(input.name, "Новое упражнение");
+          assertUniqueActiveExerciseName(stateRef.current, { ownerId: currentOwnerId, name });
           const exercise = {
             id: createId("exercise"),
             ownerId: currentOwnerId,
-            name: requiredTrim(input.name, "Новое упражнение"),
+            name,
             category: input.category ?? "strength",
             source: "custom" as const,
-            primaryMuscles: input.primaryMuscles.length > 0 ? input.primaryMuscles : ["all"],
-            secondaryMuscles: input.secondaryMuscles,
+            primaryMuscles: optionalTrimList(input.primaryMuscles) ?? ["all"],
+            secondaryMuscles: optionalTrimList(input.secondaryMuscles),
             equipment: optionalTrim(input.equipment) ?? "Не указано",
             coachNotes: optionalTrim(input.coachNotes),
             notes: optionalTrim(input.notes),
@@ -380,8 +424,43 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
           return cloneExercise(exercise);
         },
+        async update(id, patch) {
+          const currentState = stateRef.current;
+          const current = ensureOwned(currentState.exercisesById[id], "Exercise", id, currentOwnerId);
+          if (current.source !== "custom") {
+            throw new DataError("validation", "Можно редактировать только свои упражнения", { retryable: false });
+          }
+
+          const normalizedPatch = normalizeExercisePatch(patch);
+          const name = normalizedPatch.name !== undefined ? requiredTrim(normalizedPatch.name, current.name) : current.name;
+          if (normalizedPatch.name !== undefined) {
+            assertUniqueActiveExerciseName(currentState, { ownerId: currentOwnerId, name, excludeExerciseId: id });
+          }
+
+          const exercise = cloneExercise({
+            ...current,
+            ...normalizedPatch,
+            id: current.id,
+            ownerId: current.ownerId,
+            source: current.source,
+            name,
+            primaryMuscles: normalizedPatch.primaryMuscles !== undefined ? optionalTrimList(normalizedPatch.primaryMuscles) ?? ["all"] : current.primaryMuscles,
+            secondaryMuscles: normalizedPatch.secondaryMuscles !== undefined ? optionalTrimList(normalizedPatch.secondaryMuscles) : current.secondaryMuscles,
+            equipment: normalizedPatch.equipment !== undefined ? optionalTrim(normalizedPatch.equipment) ?? "Не указано" : current.equipment,
+            coachNotes: normalizedPatch.coachNotes !== undefined ? optionalTrim(normalizedPatch.coachNotes) : current.coachNotes,
+            notes: normalizedPatch.notes !== undefined ? optionalTrim(normalizedPatch.notes) : current.notes,
+            archivedAt: current.archivedAt,
+            createdAt: current.createdAt,
+            updatedAt: new Date().toISOString()
+          });
+          await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
+          return cloneExercise(exercise);
+        },
         async archive(id) {
           const current = ensureOwned(stateRef.current.exercisesById[id], "Exercise", id, currentOwnerId);
+          if (current.source !== "custom") {
+            throw new DataError("validation", "Можно архивировать только свои упражнения", { retryable: false });
+          }
           const exercise = cloneExercise({
             ...current,
             archivedAt: current.archivedAt ?? new Date().toISOString(),
@@ -415,8 +494,8 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
             ownerId: currentOwnerId,
             clientId: input.clientId,
             title: input.title ?? "Новая тренировка",
-            startsAt: input.startsAt ?? new Date().toISOString(),
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            startsAt: input.startsAt ? normalizeIsoDate(input.startsAt, "Дата тренировки") : new Date().toISOString(),
+            timezone: normalizeTimezone(input.timezone),
             durationMinutes: input.durationMinutes ?? 60,
             focus: input.focus ?? "",
             location: input.location ?? "Зал",
@@ -437,12 +516,14 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
             throw new DataNotFoundError("Client", patch.clientId);
           }
           patch.exercises?.forEach((exercise) => {
-            if (!isOwned(currentState.exercisesById[exercise.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exercise.exerciseId);
+            if (!isAvailableExercise(currentState.exercisesById[exercise.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exercise.exerciseId);
           });
 
           const workout = cloneWorkout({
             ...current,
             ...patch,
+            startsAt: patch.startsAt !== undefined ? normalizeIsoDate(patch.startsAt, "Дата тренировки") : current.startsAt,
+            timezone: patch.timezone !== undefined ? normalizeTimezone(patch.timezone) : current.timezone,
             updatedAt: new Date().toISOString(),
             exercises: patch.exercises ?? current.exercises,
             repeatDays: patch.repeatDays ?? current.repeatDays,
@@ -464,7 +545,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const currentState = stateRef.current;
           const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           exerciseIds.forEach((exerciseId) => {
-            if (!isOwned(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
+            if (!isAvailableExercise(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           });
 
           const scopedExercises = current.exercises.filter((exercise) => exercise.day === options.day);
@@ -552,7 +633,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         async addExercise(draftId, exerciseId) {
           const currentState = stateRef.current;
           const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
-          if (!isOwned(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
+          if (!isAvailableExercise(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           if (current.exercises.some((exercise) => exercise.exerciseId === exerciseId)) return cloneWorkout(current);
 
           const workout = cloneWorkout({
@@ -608,13 +689,14 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
 
           const source = ensureOwned(currentState.workoutsById[sourceWorkoutId], "Workout", sourceWorkoutId, currentOwnerId);
           ensureWorkoutCanChangePlan(currentState, currentOwnerId, source);
+          const publishMeta = validateDraftForPublish(currentState, currentOwnerId, draft);
 
           const workout = cloneWorkout({
             ...source,
             clientId: draft.clientId,
             title: draft.title || source.title,
-            startsAt: draft.startsAt,
-            timezone: draft.timezone,
+            startsAt: publishMeta.startsAt,
+            timezone: publishMeta.timezone,
             durationMinutes: draft.durationMinutes,
             focus: draft.focus,
             location: draft.location,
@@ -634,11 +716,15 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           return cloneWorkout(workout);
         },
         async publishDraft(draftId) {
-          const current = ensureWorkoutDraft(ensureOwned(stateRef.current.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
+          const currentState = stateRef.current;
+          const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           if (current.sourceWorkoutId) return this.applyEditDraft(draftId);
+          const publishMeta = validateDraftForPublish(currentState, currentOwnerId, current);
           const workout = cloneWorkout({
             ...current,
             title: current.title || "Тренировка",
+            startsAt: publishMeta.startsAt,
+            timezone: publishMeta.timezone,
             status: "planned",
             updatedAt: new Date().toISOString()
           });
@@ -659,7 +745,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const workout = cloneWorkout({
             ...current,
             startsAt: startsAt.toISOString(),
-            timezone: input.timezone ?? current.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timezone: normalizeTimezone(input.timezone ?? current.timezone),
             updatedAt: new Date().toISOString()
           });
           await commitActions([{ type: "workout/upsert", workout }], "immediate");
@@ -728,6 +814,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
             clientId: workout.clientId,
             status: "active" as const,
             startedAt: now,
+            startedTimezone: normalizeTimezone(workout.timezone),
             workoutTitleSnapshot: workout.title,
             createdAt: now,
             updatedAt: now,
@@ -801,7 +888,9 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           if (current.status !== "active") throw new Error("Only active session can be completed");
           const durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(current.startedAt).getTime()) / 1000));
           const completedAt = new Date().toISOString();
-          const session = cloneSession({ ...current, status: "completed", completedAt, durationSeconds, updatedAt: completedAt });
+          const workout = currentState.workoutsById[current.workoutId];
+          const completedTimezone = current.completedTimezone ?? current.startedTimezone ?? (isOwned(workout, currentOwnerId) ? workout.timezone : undefined);
+          const session = cloneSession({ ...current, status: "completed", completedAt, completedTimezone: normalizeTimezone(completedTimezone), durationSeconds, updatedAt: completedAt });
           await commitActions([{ type: "session/upsert", session }], "immediate");
           return cloneSession(session);
         },
