@@ -35,7 +35,7 @@
 | 5 | `06-active-session` | `codex/06-active-session` | merged | owner scope, routing/result decisions | session invariant tests |
 | 6 | `07-async-states` | `codex/07-async-states-rescue` | merged | stable repository errors | UI state and mutation tests |
 | 7 | `08-mvp-hardening` | `codex/08-mvp-hardening` | merged | async contracts | flow tests |
-| 8 | `09-tests-ci` | `codex/09-tests-ci` | not_started | MVP hardening | `npm run check`, CI |
+| 8 | `09-tests-ci` | `codex/09-tests-ci` | implementation_verified | MVP hardening | `npm run check`, CI |
 | Gate | `10-pre-backend-review` | `codex/10-pre-backend-review` | not_started | waves 1-8 merged | read-only review |
 | 9 | `11-api-boundary` | `codex/11-api-boundary` | not_started | pre-backend gate clear | contract tests |
 | 10 | `12-auth-shell` | `codex/12-auth-shell` | not_started | API boundary | auth state tests |

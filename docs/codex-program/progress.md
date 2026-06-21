@@ -331,3 +331,31 @@ Checks:
 Remaining:
 
 - Wave 8 should harden CI/test surfaces and generated-output policy, including `.expo-export-check/`.
+
+## Wave 8
+
+Status:
+- implementation_verified
+
+Branch:
+- `codex/09-tests-ci`
+
+Completed:
+
+- Added a generated-output policy regression test that verifies `build:check` exports to `.expo-export-check`, clears stale output, and that git ignores the export directory.
+- Added the generated-output policy test to `test:unit`, so `npm run check` catches policy drift before the export step.
+- Extended architecture-lint regression coverage to include unsafe params passed through `router.replace` and `router.dismissTo`, matching the existing lint surface.
+- Confirmed no tracked CI workflow config exists in this repository; the aggregate local gate remains `npm run check`.
+- Confirmed `.expo-export-check/` is ignored after `npm run check` and does not leave untracked output.
+
+Checks:
+
+- Baseline `npm run check`: passed on 2026-06-21 after installing dependencies in this worktree with `npm ci`.
+- `npm run test:unit`: passed on 2026-06-21 with generated-output and router-method regression coverage.
+- Final `npm run check`: passed on 2026-06-21.
+- Initial `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees` were absent in this worktree.
+- After recreating those empty local harness runtime directories, `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+
+Remaining:
+
+- No open Wave 8 P1/P2 items known.
