@@ -13,6 +13,7 @@ Threads:
 | `01-baseline-decisions` | `codex/integration` | documented, no product-code edits | `2e31559` baseline | `npm run check` passed |
 | `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `04-session-routing` | `codex/04-session-routing` | implementation verified after review fix | pending | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -28,10 +29,10 @@ Completed:
 
 Open findings:
 
-- Workout/session route semantics ambiguous: session and summary screens live under `app/workouts/[workoutId]` and fall back from `sessionId` to `workoutId`.
+- Session route split has passed local verification on `codex/04-session-routing`; post-fix independent review remains pending before merge.
 - Async loading/error contracts are placeholders: app hooks return `isLoading: false` and `error: null`.
 - Result model is still weight/repetitions-oriented; quick values are `weight | reps`.
-- Architecture lint blocks JSON params only under `app/workouts/*`; `src/features/workouts/sessionResult.ts` still contains legacy JSON snapshot helpers.
+- Architecture lint now blocks app route JSON serialization, old workout-based session paths, and non-primitive router params.
 - Backend/auth/provider decisions are external blockers.
 - `.expo-export-check/` generated output policy needs cleanup in tests/CI wave.
 
@@ -42,8 +43,8 @@ Blocked:
 
 Next:
 
-- Run post-merge Wave 2 checks on `codex/integration`.
-- Start Wave 3 session routing on `codex/04-session-routing`.
+- Run full Wave 3 checks and independent read-only review.
+- Merge Wave 3 into `codex/integration` only after review passes.
 
 ## Wave 1
 
@@ -122,3 +123,40 @@ Checks:
 Remaining:
 
 - P2 follow-ups: add AsyncStorage adapter regression coverage, add provider-level delayed hydration coverage, and tighten `meta` referential validation before those pointers become operational.
+
+## Wave 3
+
+Status:
+- implementation_reviewed
+
+Branch:
+- `codex/04-session-routing`
+
+Completed:
+
+- Moved active session screen from `app/workouts/[workoutId]/session.tsx` to `app/sessions/[sessionId]/index.tsx`.
+- Moved summary screen from `app/workouts/[workoutId]/summary.tsx` to `app/sessions/[sessionId]/summary.tsx`.
+- Removed `sessionId ?? workoutId` fallback semantics from session and summary screens.
+- Updated navigation call sites to pass only `sessionId` for session and summary routes.
+- Kept `/workouts/[workoutId]` and `/workouts/[workoutId]/reschedule` as workout-only routes.
+- Extended architecture lint to ban app route JSON serialization and old workout-based session/summary paths.
+- Extended architecture lint with AST checks for router params so callbacks, arrays, and domain objects cannot be passed through app route params.
+- Added architecture-lint regression coverage for primitive params, domain-object params, inline callback params, shorthand callback params, indirect route-object callback params, and array params.
+- Removed unused legacy JSON snapshot route-param helpers from `src/features/workouts/sessionResult.ts`.
+- Added route-type generation before `tsc` so Expo Router typed paths reflect the current `app/` tree before typecheck.
+- Ran independent read-only review for Wave 3; fixed the first P1 finding by adding primitive-only router-param AST enforcement.
+- Ran post-fix independent read-only review; fixed the follow-up P1 shorthand/indirect route-object bypass in the router-param lint.
+- Ran final follow-up independent read-only review; no P0/P1 findings remained and Wave 3 was cleared to merge after checks.
+
+Checks:
+
+- `npm run typecheck`: passed on 2026-06-21.
+- `npm run lint`: passed on 2026-06-21.
+- `npm run test`: passed on 2026-06-21.
+- `npm run test:unit`: passed on 2026-06-21 with architecture-lint regression coverage.
+- `npm run check`: passed on 2026-06-21.
+- `npm run check:task-workflow`: passed on 2026-06-21.
+
+Remaining:
+
+- Merge into `codex/integration` and run post-merge checks.

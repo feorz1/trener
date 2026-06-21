@@ -17,7 +17,6 @@ import { theme } from "@/theme";
 import type { WorkoutSession } from "@/types";
 
 type RouteParams = {
-  workoutId?: string | string[];
   sessionId?: string | string[];
   from?: string | string[];
 };
@@ -97,8 +96,8 @@ function formatSummaryDay(value?: string) {
 }
 
 export default function WorkoutSummaryScreen() {
-  const { workoutId: rawWorkoutId, sessionId: rawSessionId, from: rawFrom } = useLocalSearchParams<RouteParams>();
-  const sessionId = firstParam(rawSessionId) ?? firstParam(rawWorkoutId);
+  const { sessionId: rawSessionId, from: rawFrom } = useLocalSearchParams<RouteParams>();
+  const sessionId = firstParam(rawSessionId);
   const openedFrom = firstParam(rawFrom);
   const usesBackNavigation = openedFrom === "client" || openedFrom === "home";
   const { session } = useSession(sessionId);

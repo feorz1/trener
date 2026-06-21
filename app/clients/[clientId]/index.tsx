@@ -86,7 +86,7 @@ export default function ClientProfileScreen() {
                   trailingIconName="chevron right"
                   surface="canvasSoft"
                   groupPosition={getListItemCellGroupPosition(index, latestSessions.length)}
-                  onPress={() => router.push({ pathname: "/workouts/[workoutId]/summary", params: { workoutId: session.id, sessionId: session.id, from: "client" } })}
+                  onPress={() => router.push({ pathname: "/sessions/[sessionId]/summary", params: { sessionId: session.id, from: "client" } })}
                 />
               ))}
             </View>
