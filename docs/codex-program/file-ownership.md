@@ -34,8 +34,8 @@ These files need explicit coordination before any parallel writes:
 - `src/data/persistence/validation.ts`
 - `src/data/persistence/serializeSnapshot.ts`
 - `app/(tabs)/index.tsx`
-- `app/workouts/[workoutId]/session.tsx`
-- `app/workouts/[workoutId]/summary.tsx`
+- `app/sessions/[sessionId]/index.tsx`
+- `app/sessions/[sessionId]/summary.tsx`
 - `scripts/lint-architecture.ts`
 
 ## Merge Rules
@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-After Gate 0 acceptance, the next implementation writer should own `02-owner-scope` on branch `codex/02-owner-scope`.
+Current implementation writers are `05-result-types`, `06-active-session`, and `07-async-states` in separate worktrees. The orchestrator should collect their handoffs, run review gates, and merge into `codex/integration` in roadmap order.

@@ -14,6 +14,9 @@ Threads:
 | `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `04-session-routing` | `codex/04-session-routing` | merged into `codex/integration` | `d438d20` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `05-result-types` | `codex/05-result-types` | active worktree thread `019ee949-8a02-7900-b1b0-22fcc2efd43d` | pending | pending |
+| `06-active-session` | `codex/06-active-session` | active worktree thread `019ee949-de84-7bf1-9915-4954ed490375` | pending | pending |
+| `07-async-states` | `codex/07-async-states` | active worktree thread `019ee94a-389c-7a13-9dda-e0dec1de3373` | pending | pending |
 
 Completed:
 
@@ -42,7 +45,8 @@ Blocked:
 
 Next:
 
-- Orchestrate separate worktrees for Wave 4 result types, Wave 5 active-session invariant, and Wave 6 async states.
+- Collect handoffs from Wave 4 result types, Wave 5 active-session invariant, and Wave 6 async states.
+- Run independent read-only review and merge gates before integrating any completed wave.
 - Do not implement Wave 4+ in the orchestrator chat.
 
 ## Wave 1

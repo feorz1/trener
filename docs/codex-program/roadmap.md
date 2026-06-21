@@ -31,9 +31,9 @@
 | 1 | `02-owner-scope` | `codex/02-owner-scope` | merged | Gate 0 | `npm run check`, `npm run check:task-workflow` |
 | 2 | `03-persistence-v2` | `codex/03-persistence-v2` | merged | owner scope merged | `npm run check`, `npm run check:task-workflow` |
 | 3 | `04-session-routing` | `codex/04-session-routing` | merged | ownership map fixed | `npm run check`, route architecture lint |
-| 4 | `05-result-types` | `codex/05-result-types` | not_started | ownership map fixed | result tests, summary tests |
-| 5 | `06-active-session` | `codex/06-active-session` | not_started | owner scope, routing/result decisions | session invariant tests |
-| 6 | `07-async-states` | `codex/07-async-states` | not_started | stable repository errors | UI state and mutation tests |
+| 4 | `05-result-types` | `codex/05-result-types` | in_progress | ownership map fixed | result tests, summary tests |
+| 5 | `06-active-session` | `codex/06-active-session` | in_progress | owner scope, routing/result decisions | session invariant tests |
+| 6 | `07-async-states` | `codex/07-async-states` | in_progress | stable repository errors | UI state and mutation tests |
 | 7 | `08-mvp-hardening` | `codex/08-mvp-hardening` | not_started | async contracts | flow tests |
 | 8 | `09-tests-ci` | `codex/09-tests-ci` | not_started | MVP hardening | `npm run check`, CI |
 | Gate | `10-pre-backend-review` | `codex/10-pre-backend-review` | not_started | waves 1-8 merged | read-only review |
