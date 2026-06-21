@@ -37,8 +37,8 @@
 | 7 | `08-mvp-hardening` | `codex/08-mvp-hardening` | merged | async contracts | flow tests |
 | 8 | `09-tests-ci` | `codex/09-tests-ci` | merged | MVP hardening | `npm run check`, CI |
 | Gate | `10-pre-backend-review` | `codex/10-pre-backend-review` | reviewed | waves 1-8 merged | read-only review |
-| 9 | `11-api-boundary` | `codex/11-api-boundary` | ready_to_start | pre-backend gate clear | contract tests |
-| 10 | `12-auth-shell` | `codex/12-auth-shell` | not_started | API boundary | auth state tests |
+| 9 | `11-api-boundary` | `codex/11-api-boundary` | merged | pre-backend gate clear | contract tests |
+| 10 | `12-auth-shell` | `codex/12-auth-shell` | ready_to_start | API boundary | auth state tests |
 | 11 | `13-database-contract` | `codex/13-database-contract` | not_started | API/auth decisions | docs review |
 | 12A | `14-backend-clients` | `codex/14-backend-clients` | blocked | backend provider/API | contract tests |
 | 12B | `15-backend-exercises` | `codex/15-backend-exercises` | blocked | backend provider/API | contract tests |
@@ -88,3 +88,5 @@ Wave 7 status: merged into `codex/integration` as `eb00fc5` after `npm run check
 Wave 8 status: merged into `codex/integration` as `5b42e36` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added generated-output policy coverage and router-method architecture-lint regression coverage; no product code changed.
 
 Pre-backend review gate status: reviewed in `codex/10-pre-backend-review` with no P0/P1 blockers and no tracked file changes. `npm run check` passed after dependency install; `npm run check:task-workflow` passed after recreating empty local harness runtime directories. Wave 9 `codex/11-api-boundary` may start, limited to DTO/repository boundaries, typed errors, adapters/contracts, and contract tests.
+
+Wave 9 status: merged into `codex/integration` as `9f0ade1` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added contract-only `src/api/**` DTOs/schemas/mappers/errors/repository boundaries and focused API boundary tests; no backend provider, auth shell, route guard, UI, token storage, or persistence migration was added.

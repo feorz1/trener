@@ -20,6 +20,7 @@ Threads:
 | `08-mvp-hardening` | `codex/08-mvp-hardening` | merged into `codex/integration` | `eb00fc5` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `09-tests-ci` | `codex/09-tests-ci` | merged into `codex/integration` | `5b42e36` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `10-pre-backend-review` | `codex/10-pre-backend-review` | read-only review complete | no commit | `npm run check` passed; `npm run check:task-workflow` passed |
+| `11-api-boundary` | `codex/11-api-boundary` | merged into `codex/integration` | `9f0ade1` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -46,9 +47,9 @@ Blocked:
 
 Next:
 
-- Start Wave 9 API boundary in a separate thread/worktree after preparing a narrow handoff.
-- Keep auth shell, database contract, backend providers, and production hardening blocked until their later waves.
-- Do not implement API/auth/backend work in the orchestrator chat.
+- Start Wave 10 auth shell in a separate thread/worktree after preparing a narrow handoff.
+- Keep database contract, backend providers, and production hardening blocked until their later waves.
+- Do not implement auth/backend work in the orchestrator chat.
 
 ## Wave 1
 
@@ -401,9 +402,13 @@ Recommendation:
 
 Status:
 - implementation_verified
+- merged
 
 Branch:
 - `codex/11-api-boundary`
+
+Integration:
+- Merged into `codex/integration` as `9f0ade1`.
 
 Completed:
 
@@ -419,8 +424,14 @@ Checks:
 - `npm run check`: passed on 2026-06-21.
 - Initial `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because empty local repo-harness runtime directories were absent in this worktree.
 - After recreating `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees`, `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+- Orchestrator acceptance `npx tsx scripts/test-api-boundary-contracts.ts`: passed on 2026-06-21.
+- Orchestrator acceptance `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 in the Wave 9 worktree.
+- Orchestrator acceptance `npm run check`: passed on 2026-06-21 in the Wave 9 worktree.
+- Post-merge `npm run check`: passed on 2026-06-21 on `codex/integration`.
+- Post-merge `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration`.
 
 Remaining:
 
 - Real backend provider/base URL/credentials and server ownership rules remain external blockers.
-- Wave 10 auth shell may start after this branch is handed off and accepted by the orchestrator.
+- P2 follow-up before real backend providers: tighten runtime schema validation for enum-like DTO fields that currently parse as strings and rely on TypeScript casts.
+- Wave 10 auth shell may start in a separate thread/worktree.
