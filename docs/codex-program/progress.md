@@ -200,3 +200,18 @@ Remaining:
 
 - No P0/P1 product risks known in Wave 4 scope.
 - Repo-harness directory setup must be restored outside this wave before the strict task-workflow gate can pass in this worktree.
+
+Review gate fixes:
+
+- Fixed DataProvider session start/upsert so result type, exercise-name snapshot, duration, and distance fields are initialized and persisted in the production data path.
+- Made the active-session Approach editor render metric inputs for `weight_reps`, `reps`, `duration`, and `distance_duration`, and emit matching result fields.
+- Updated unfinished-set guard to include duration/distance metrics.
+- Updated persistence validation for result-type workout/session/result fields and `duration`/`distance` quick values.
+- Added focused integration coverage for the pure result builders used by DataProvider plus persistence round-trip coverage for duration/distance quick values.
+
+Review gate fix checks:
+
+- `npm run typecheck`: passed on 2026-06-21.
+- `npm run test:integration`: passed on 2026-06-21.
+- `npm run check`: passed on 2026-06-21.
+- `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: still blocked on 2026-06-21 because this worktree is missing required harness directories.

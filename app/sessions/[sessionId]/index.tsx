@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { Alert as NativeAlert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet } from "@/components/ui";
+import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui";
 import { useClient, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
 import { formatSessionDate } from "@/features/workouts/sessionHistory";
 import { defaultWorkoutResultType, formatResultDuration, formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
@@ -172,7 +172,7 @@ export default function WorkoutSessionScreen() {
   );
 
   const handleSetValueChange = useCallback(
-    (exerciseId: string, setId: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => {
+    (exerciseId: string, setId: string, patch: ApproachSetValuePatch) => {
       setSessionExercises((current) =>
         current.map((exercise) => {
           if (exercise.id !== exerciseId) return exercise;
@@ -227,7 +227,9 @@ export default function WorkoutSessionScreen() {
           resultType: exercise.resultType ?? defaultWorkoutResultType,
           unit: kgUnit,
           weight: templateSet?.weight,
-          reps: templateSet?.reps
+          reps: templateSet?.reps,
+          durationSeconds: templateSet?.durationSeconds,
+          distanceMeters: templateSet?.distanceMeters
         };
 
         const nextExercise = {
@@ -254,9 +256,7 @@ export default function WorkoutSessionScreen() {
   }, [sessionActions, sessionId]);
 
   const finishSession = useCallback(() => {
-    const hasLoggedIncompleteSets = sessionExercises.some((exercise) =>
-      exercise.sets.some((set) => set.state !== "selected" && (Number.isFinite(set.weight) || Number.isFinite(set.reps)))
-    );
+    const hasLoggedIncompleteSets = sessionExercises.some((exercise) => exercise.sets.some(isLoggedIncompleteSet));
 
     if (!hasLoggedIncompleteSets) {
       void completeSession();
@@ -370,7 +370,7 @@ function SessionExerciseCard({
   onDeleteSet: (setId: string) => void;
   onNoteChange: (nextNote: string) => void;
   onSetStateChange: (id: string, state: ApproachSet["state"]) => void;
-  onSetValueChange: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
+  onSetValueChange: (id: string, patch: ApproachSetValuePatch) => void;
   onSetsReorder: (nextSets: ApproachSet[]) => void;
 }) {
   const previousPerformanceInput = {
@@ -432,6 +432,11 @@ function formatPreviousSet(set: { resultType?: string; weight?: number; repetiti
   if (Number.isFinite(set.repetitions)) return `${set.repetitions} повт.`;
   if (Number.isFinite(set.weight)) return `${set.weight} ${set.unit ?? "кг"}`;
   return "без данных";
+}
+
+function isLoggedIncompleteSet(set: SessionResultSet) {
+  if (set.state === "selected") return false;
+  return Number.isFinite(set.weight) || Number.isFinite(set.reps) || Number.isFinite(set.durationSeconds) || Number.isFinite(set.distanceMeters);
 }
 
 function WorkoutTimerBadge({ startedAtRef }: { startedAtRef: MutableRefObject<number> }) {

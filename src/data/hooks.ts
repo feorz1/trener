@@ -14,7 +14,7 @@ import {
   selectWorkoutById,
   selectWorkouts
 } from "./local/localSelectors";
-import type { ClientId, ExerciseId, QuickValueMetric, SessionId, WorkoutId } from "./types";
+import type { ClientId, ExerciseId, QuickValueMetric, SessionId, WorkoutId, WorkoutResultType } from "./types";
 
 export function useDataLayer() {
   return useDataContext().data;
@@ -122,9 +122,9 @@ export function useQuickValue(exerciseId?: ExerciseId, metric?: QuickValueMetric
   return { quickValue, isLoading: false, error: null as Error | null };
 }
 
-export function usePreviousExercisePerformance(input: { clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }) {
+export function usePreviousExercisePerformance(input: { clientId?: ClientId; exerciseId?: ExerciseId; resultType?: WorkoutResultType; before?: string; excludeSessionId?: SessionId }) {
   const { currentOwnerId, state } = useDataContext();
-  const previousPerformance = useMemo(() => selectPreviousExercisePerformance(state, { ...input, ownerId: currentOwnerId }), [currentOwnerId, input.before, input.clientId, input.excludeSessionId, input.exerciseId, state]);
+  const previousPerformance = useMemo(() => selectPreviousExercisePerformance(state, { ...input, ownerId: currentOwnerId }), [currentOwnerId, input.before, input.clientId, input.excludeSessionId, input.exerciseId, input.resultType, state]);
   return { previousPerformance, isLoading: false, error: null as Error | null };
 }
 

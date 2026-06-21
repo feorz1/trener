@@ -24,6 +24,7 @@ import Animated, {
   type SharedValue
 } from "react-native-reanimated";
 import { theme } from "@/theme";
+import type { WorkoutResultType } from "@/types";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
@@ -36,12 +37,18 @@ export type ApproachSetStatus = "empty" | "completed" | "disabled";
 export type ApproachSet = {
   id: string;
   index: number;
+  resultType?: WorkoutResultType;
   reps?: number;
   weight?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
   unit?: string;
   state?: ApproachCountState;
   status?: ApproachSetStatus;
 };
+
+export type ApproachSetMetric = "weight" | "reps" | "durationSeconds" | "distanceMeters";
+export type ApproachSetValuePatch = Partial<Pick<ApproachSet, ApproachSetMetric>>;
 
 export type ApproachProps = {
   title?: string;
@@ -57,7 +64,7 @@ export type ApproachProps = {
   onDeleteSet?: (id: string) => void;
   onNoteChange?: (note: string) => void;
   onSetStateChange?: (id: string, state: ApproachCountState) => void;
-  onSetValueChange?: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
+  onSetValueChange?: (id: string, patch: ApproachSetValuePatch) => void;
   onSetsReorder?: (sets: ApproachSet[]) => void;
   style?: StyleProp<ViewStyle>;
 };
@@ -76,14 +83,46 @@ function getStateById(sets: ApproachSet[]) {
   }, {});
 }
 
+type ApproachMetricValues = Record<ApproachSetMetric, string>;
+
+const emptyMetricValues: ApproachMetricValues = {
+  weight: "",
+  reps: "",
+  durationSeconds: "",
+  distanceMeters: ""
+};
+
 function getValueById(sets: ApproachSet[]) {
-  return sets.reduce<Record<string, { reps: string; weight: string }>>((valueById, set) => {
+  return sets.reduce<Record<string, ApproachMetricValues>>((valueById, set) => {
     valueById[set.id] = {
+      ...emptyMetricValues,
       reps: set.reps === undefined ? "" : String(set.reps),
-      weight: set.weight === undefined ? "" : String(set.weight)
+      weight: set.weight === undefined ? "" : String(set.weight),
+      durationSeconds: set.durationSeconds === undefined ? "" : String(set.durationSeconds),
+      distanceMeters: set.distanceMeters === undefined ? "" : String(set.distanceMeters)
     };
     return valueById;
   }, {});
+}
+
+function getResultType(set: ApproachSet): WorkoutResultType {
+  return set.resultType ?? "weight_reps";
+}
+
+function getMetricConfigs(resultType: WorkoutResultType): Array<{ key: ApproachSetMetric; label: string }> {
+  if (resultType === "reps") return [{ key: "reps", label: "\u041F\u041E\u0412\u0422\u041E\u0420\u041E\u0412" }];
+  if (resultType === "duration") return [{ key: "durationSeconds", label: "\u0421\u0415\u041A" }];
+  if (resultType === "distance_duration") {
+    return [
+      { key: "distanceMeters", label: "\u041C" },
+      { key: "durationSeconds", label: "\u0421\u0415\u041A" }
+    ];
+  }
+
+  return [
+    { key: "weight", label: "\u041A\u0413" },
+    { key: "reps", label: "\u041F\u041E\u0412\u0422\u041E\u0420\u041E\u0412" }
+  ];
 }
 
 function parseMetricValue(value: string) {
@@ -334,18 +373,17 @@ export function Approach({
     onSetStateChange?.(id, nextState);
   };
 
-  const updateSetValue = (id: string, key: "reps" | "weight", value: string) => {
+  const updateSetValue = (id: string, key: ApproachSetMetric, value: string) => {
     const nextValue = sanitizeMetricValue(value);
     setValueById((current) => ({
       ...current,
       [id]: {
-        ...(current[id] ?? { reps: "", weight: "" }),
+        ...(current[id] ?? emptyMetricValues),
         [key]: nextValue
       }
     }));
     const parsedValue = parseMetricValue(nextValue);
-    const patch: Partial<Pick<ApproachSet, "weight" | "reps">> = key === "weight" ? { weight: parsedValue } : { reps: parsedValue };
-    onSetValueChange?.(id, patch);
+    onSetValueChange?.(id, { [key]: parsedValue });
   };
 
   const saveNote = () => {
@@ -401,7 +439,7 @@ export function Approach({
               <ApproachRowLayer isDragging={isDragging} top={dragSourceTop}>
                 <ApproachCount
                   set={{ ...set, index: index + 1, state: resolvedState }}
-                  values={valueById[set.id] ?? { reps: "", weight: "" }}
+                  values={valueById[set.id] ?? emptyMetricValues}
                   showDeleteAction={showDeleteAction}
                   deleteOpen={openDeleteRowId === set.id}
                   dragY={dragY}
@@ -431,7 +469,7 @@ export function Approach({
           <DragOverlay dragY={dragY} top={dragOverlayTop}>
             <ApproachCount
               set={{ ...draggedSet, index: dragState!.startIndex + 1, state: stateById[draggedSet.id] ?? draggedSet.state ?? "default" }}
-              values={valueById[draggedSet.id] ?? { reps: "", weight: "" }}
+              values={valueById[draggedSet.id] ?? emptyMetricValues}
               showDeleteAction={false}
               dragY={dragY}
               dragBounds={{
@@ -554,7 +592,7 @@ function ApproachCount({
   onToggle
 }: {
   set: ApproachSet;
-  values: { reps: string; weight: string };
+  values: ApproachMetricValues;
   showDeleteAction: boolean;
   deleteOpen?: boolean;
   dragY: SharedValue<number>;
@@ -563,7 +601,7 @@ function ApproachCount({
   onDelete?: () => void;
   onDeleteOpenChange?: (open: boolean) => void;
   onFocus?: () => void;
-  onMetricChange: (key: "reps" | "weight", value: string) => void;
+  onMetricChange: (key: ApproachSetMetric, value: string) => void;
   onMoveEnd?: () => void;
   onMoveStart?: () => void;
   onMoveTargetChange?: (targetIndex: number) => void;
@@ -657,20 +695,16 @@ function ApproachCount({
       )}
 
       <View style={styles.metrics}>
-        <Metric
-          disabled={isMuted}
-          label={set.unit ?? "\u041A\u0413"}
-          value={values.weight}
-          onChange={(value) => onMetricChange("weight", value)}
-          onFocus={onFocus}
-        />
-        <Metric
-          disabled={isMuted}
-          label={"\u041F\u041E\u0412\u0422\u041E\u0420\u041E\u0412"}
-          value={values.reps}
-          onChange={(value) => onMetricChange("reps", value)}
-          onFocus={onFocus}
-        />
+        {getMetricConfigs(getResultType(set)).map((metric) => (
+          <Metric
+            key={metric.key}
+            disabled={isMuted}
+            label={metric.key === "weight" ? set.unit ?? metric.label : metric.label}
+            value={values[metric.key]}
+            onChange={(value) => onMetricChange(metric.key, value)}
+            onFocus={onFocus}
+          />
+        ))}
       </View>
 
       {statusControl}

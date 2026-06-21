@@ -15,6 +15,7 @@ import {
 } from "../src/data/local/localSelectors";
 import { createInitialState } from "../src/data/seeds/mockSeed";
 import { hydrateDataState, serializeDataState } from "../src/data/persistence";
+import { buildWorkoutResultFromSet, buildWorkoutResultFromUpsertInput } from "../src/data/local/resultBuilders";
 import { getSessionTotalVolume, formatResultSet } from "../src/features/workouts/sessionHistory";
 import { summarizeWorkoutResult } from "../src/features/workouts/sessionResult";
 import { LOCAL_OWNER_ID, type OwnerId, type QuickValue, type Workout, type WorkoutResult, type WorkoutResultType, type WorkoutSession } from "../src/data/types";
@@ -176,6 +177,33 @@ assert.equal(stateWithCanonicalQuickValue.quickValueIds.includes(legacyQuickValu
 assert.equal(stateWithCanonicalQuickValue.quickValueIds.filter((id) => id === canonicalQuickValue.id).length, 1);
 assert.deepEqual(selectQuickValue(stateWithCanonicalQuickValue, { ownerId: LOCAL_OWNER_ID, exerciseId, metric: "weight", clientId })?.values, [12]);
 
+const durationQuickValue: QuickValue = {
+  id: `quick-value:${LOCAL_OWNER_ID}:${clientId}:${exerciseId}:duration`,
+  ownerId: LOCAL_OWNER_ID,
+  exerciseId,
+  clientId,
+  metric: "duration",
+  values: [75, 90],
+  updatedAt: "2026-06-19T10:55:00.000Z"
+};
+const distanceQuickValue: QuickValue = {
+  id: `quick-value:${LOCAL_OWNER_ID}:${clientId}:${exerciseId}:distance`,
+  ownerId: LOCAL_OWNER_ID,
+  exerciseId,
+  clientId,
+  metric: "distance",
+  values: [400, 500],
+  updatedAt: "2026-06-19T10:56:00.000Z"
+};
+const stateWithResultTypeQuickValues = [
+  { type: "quickValue/upsert" as const, quickValue: durationQuickValue },
+  { type: "quickValue/upsert" as const, quickValue: distanceQuickValue }
+].reduce(localReducer, stateWithCanonicalQuickValue);
+const hydratedResultTypeQuickValues = hydrateDataState(serializeDataState(stateWithResultTypeQuickValues));
+
+assert.deepEqual(selectQuickValue(hydratedResultTypeQuickValues, { ownerId: LOCAL_OWNER_ID, exerciseId, metric: "duration", clientId })?.values, [75, 90]);
+assert.deepEqual(selectQuickValue(hydratedResultTypeQuickValues, { ownerId: LOCAL_OWNER_ID, exerciseId, metric: "distance", clientId })?.values, [400, 500]);
+
 const snapshotWorkout: Workout = {
   ...draft,
   id: "workout-result-type-snapshot",
@@ -229,6 +257,48 @@ assert.equal(stateAfterSnapshotRefresh.sessionsById[unsnapshottedSession.id].exe
 assert.equal(stateAfterSnapshotRefresh.sessionsById[unsnapshottedSession.id].exercises[0].resultTypeSnapshot, "duration");
 assert.equal(snapshotResult.exerciseNameSnapshot, "Original duration exercise");
 assert.equal(snapshotResult.resultType, "duration");
+
+const dataProviderStartResult = buildWorkoutResultFromSet({
+  id: "result-data-provider-start-distance-duration",
+  ownerId: LOCAL_OWNER_ID,
+  sessionId: unsnapshottedSession.id,
+  sessionExerciseItemId: "session-exercise-duration",
+  exercise: {
+    ...snapshotWorkout.exercises[0],
+    resultType: "distance_duration",
+    sets: [{ id: "distance-duration-target", order: 1, targetDistanceMeters: 500, targetDurationSeconds: 180, completed: false }]
+  },
+  set: { id: "distance-duration-target", order: 1, targetDistanceMeters: 500, targetDurationSeconds: 180, completed: false }
+});
+
+assert.equal(dataProviderStartResult.exerciseNameSnapshot, "Original duration exercise");
+assert.equal(dataProviderStartResult.resultType, "distance_duration");
+assert.equal(dataProviderStartResult.distanceMeters, 500);
+assert.equal(dataProviderStartResult.durationSeconds, 180);
+
+const dataProviderUpsertResult = buildWorkoutResultFromUpsertInput({
+  id: dataProviderStartResult.id,
+  ownerId: LOCAL_OWNER_ID,
+  existing: dataProviderStartResult,
+  upsert: {
+    sessionId: dataProviderStartResult.sessionId,
+    sessionExerciseItemId: dataProviderStartResult.sessionExerciseItemId,
+    exerciseId,
+    exerciseNameSnapshot: dataProviderStartResult.exerciseNameSnapshot,
+    resultType: "distance_duration",
+    setIndex: 1,
+    setId: dataProviderStartResult.setId,
+    distanceMeters: 650,
+    durationSeconds: 165,
+    completed: true
+  }
+});
+
+assert.equal(dataProviderUpsertResult.id, dataProviderStartResult.id);
+assert.equal(dataProviderUpsertResult.resultType, "distance_duration");
+assert.equal(dataProviderUpsertResult.exerciseNameSnapshot, "Original duration exercise");
+assert.equal(dataProviderUpsertResult.distanceMeters, 650);
+assert.equal(dataProviderUpsertResult.durationSeconds, 165);
 
 function buildCompletedResultState(
   currentState: typeof seed,

@@ -3,7 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Action, type ActionLayout } from "@/components/ui/Action";
 import { Alert, type AlertLayout, type AlertTone } from "@/components/ui/Alert";
-import { Approach, type ApproachCountState, type ApproachSet } from "@/components/ui/Approach";
+import { Approach, type ApproachCountState, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui/Approach";
 import { Avatar, type AvatarSize, type AvatarType } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button, type ButtonSize, type ButtonState, type ButtonType } from "@/components/ui/Button";
@@ -830,7 +830,7 @@ type PreviewContentProps = {
   approachNote: string;
   onApproachNoteChange: (value: string) => void;
   onApproachSetStateChange: (id: string, state: ApproachCountState) => void;
-  onApproachSetValueChange: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
+  onApproachSetValueChange: (id: string, patch: ApproachSetValuePatch) => void;
   onApproachSetDelete: (id: string) => void;
   onApproachAddSet: () => void;
   onApproachRestore: () => void;
