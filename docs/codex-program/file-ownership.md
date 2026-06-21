@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Waves 4, 5, 6, 7, 8, and 9 are merged into `codex/integration`. The next implementation writer is Wave 10 (`12-auth-shell`) in a separate thread/worktree. Keep its scope limited to auth provider shell, signed-out/signed-in boundaries, route guards, current owner integration, secure credential boundary, logout cleanup, expired-session handling, and local-data migration choice. Database contract, backend providers, and production hardening remain forbidden until their later waves.
+Waves 4, 5, 6, 7, 8, 9, and 10 are merged into `codex/integration`. The next implementation writer is Wave 11 (`13-database-contract`) in a separate thread/worktree. Keep its scope limited to `docs/backend/**` database contracts and reviewable backend documentation. Runtime backend providers, API clients, auth provider SDKs, app route changes, and production hardening remain forbidden until their later waves.

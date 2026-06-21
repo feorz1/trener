@@ -434,15 +434,18 @@ Remaining:
 
 - Real backend provider/base URL/credentials and server ownership rules remain external blockers.
 - P2 follow-up before real backend providers: tighten runtime schema validation for enum-like DTO fields that currently parse as strings and rely on TypeScript casts.
-- Wave 10 auth shell may start in a separate thread/worktree.
+- Wave 11 database contract may start in a separate thread/worktree, limited to `docs/backend/**`.
 
 ## Wave 10
 
 Status:
-- implementation_verified
+- merged
 
 Branch:
 - `codex/12-auth-shell`
+
+Merge:
+- `f257f00 Merge auth shell wave`
 
 Completed:
 

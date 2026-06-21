@@ -38,7 +38,7 @@
 | 8 | `09-tests-ci` | `codex/09-tests-ci` | merged | MVP hardening | `npm run check`, CI |
 | Gate | `10-pre-backend-review` | `codex/10-pre-backend-review` | reviewed | waves 1-8 merged | read-only review |
 | 9 | `11-api-boundary` | `codex/11-api-boundary` | merged | pre-backend gate clear | contract tests |
-| 10 | `12-auth-shell` | `codex/12-auth-shell` | implementation_verified | API boundary | auth state tests |
+| 10 | `12-auth-shell` | `codex/12-auth-shell` | merged | API boundary | auth state tests |
 | 11 | `13-database-contract` | `codex/13-database-contract` | ready_to_start | API/auth decisions | docs review |
 | 12A | `14-backend-clients` | `codex/14-backend-clients` | blocked | backend provider/API | contract tests |
 | 12B | `15-backend-exercises` | `codex/15-backend-exercises` | blocked | backend provider/API | contract tests |
@@ -91,4 +91,4 @@ Pre-backend review gate status: reviewed in `codex/10-pre-backend-review` with n
 
 Wave 9 status: merged into `codex/integration` as `9f0ade1` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added contract-only `src/api/**` DTOs/schemas/mappers/errors/repository boundaries and focused API boundary tests; no backend provider, auth shell, route guard, UI, token storage, or persistence migration was added.
 
-Wave 10 status: verified on `codex/12-auth-shell` after `npm run check` and `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow` passed. It added a development-only auth shell, signed-in/signed-out route guards, current-owner integration, logout cleanup semantics, expired-session handling, focused auth tests, and blocker notes. No production auth SDK, backend provider, database contract, storage key migration, or production hardening was added.
+Wave 10 status: merged into `codex/integration` as `f257f00` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added a development-only auth shell, signed-in/signed-out route guards, current-owner integration, logout cleanup semantics, expired-session handling, focused auth tests, and blocker notes. No production auth SDK, backend provider, database contract, storage key migration, or production hardening was added.
