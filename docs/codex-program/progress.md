@@ -396,3 +396,31 @@ Recommendation:
 - Wave 9 `codex/11-api-boundary` may start.
 - Keep Wave 9 limited to DTO/repository boundaries, typed errors, adapters/contracts, and contract tests.
 - Keep auth shell, database contract, backend providers, and production hardening in later waves.
+
+## Wave 9
+
+Status:
+- implementation_verified
+
+Branch:
+- `codex/11-api-boundary`
+
+Completed:
+
+- Added contract-only `src/api/**` boundary for DTOs, schemas, DTO/domain mappers, typed API errors, request cancellation, idempotency, cache policy, and repository adapter interfaces.
+- Kept app runtime on the existing local data provider; no backend provider, SDK, network transport, auth shell, route guard, token storage, storage key, migration, screen, or route behavior was implemented.
+- Added focused API boundary contract coverage to `scripts/test-api-boundary-contracts.ts`.
+- Wired the focused API boundary contract test into `test:unit` so `npm run check` covers boundary drift.
+
+Checks:
+
+- `npm run test:unit`: passed on 2026-06-21 with API boundary contract coverage.
+- `npm run typecheck`: passed on 2026-06-21.
+- `npm run check`: passed on 2026-06-21.
+- Initial `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because empty local repo-harness runtime directories were absent in this worktree.
+- After recreating `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees`, `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+
+Remaining:
+
+- Real backend provider/base URL/credentials and server ownership rules remain external blockers.
+- Wave 10 auth shell may start after this branch is handed off and accepted by the orchestrator.

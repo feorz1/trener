@@ -10,10 +10,14 @@
 
 Planned local work before unblock:
 
-- Define app-owned repository contracts.
-- Define DTO schemas and mappers.
-- Define error normalization.
+- Define app-owned repository contracts. Completed locally in Wave 9 as `src/api/**` contracts; real provider remains blocked.
+- Define DTO schemas and mappers. Completed locally in Wave 9 as contract-only DTO schemas/mappers.
+- Define error normalization. Completed locally in Wave 9 as typed API error normalization.
 - Document database model and ownership rules.
+
+Wave 9 remaining blocker:
+
+- A real backend provider, base URL, credential policy, and server ownership model are still required before backend repository implementations can begin.
 
 ## Auth
 
