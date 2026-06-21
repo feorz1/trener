@@ -237,6 +237,7 @@ const stateWithArchivedCustomExercise = localReducer(stateWithCustomExercise, {
   type: "exercise/upsert",
   exercise: { ...customExercise, archivedAt: "2026-06-19T10:00:00.000Z" }
 });
+assert.equal(selectExercises(stateWithArchivedCustomExercise, LOCAL_OWNER_ID).some((exercise) => exercise.id === customExercise.id), false);
 assert.doesNotThrow(() => assertUniqueActiveExerciseName(stateWithArchivedCustomExercise, { ownerId: LOCAL_OWNER_ID, name: "Авторская тяга" }));
 assert.doesNotThrow(() => assertUniqueActiveExerciseName(stateWithCustomExercise, { ownerId: otherOwnerId, name: "Авторская тяга" }));
 

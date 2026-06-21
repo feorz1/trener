@@ -33,7 +33,10 @@ export function selectClientById(state: LocalDataState, id: ClientId | undefined
 }
 
 export function selectExercises(state: LocalDataState, ownerId: OwnerId) {
-  return state.exerciseIds.map((id) => state.exercisesById[id]).filter((exercise) => isOwned(exercise, ownerId)).map(cloneExercise);
+  return state.exerciseIds
+    .map((id) => state.exercisesById[id])
+    .filter((exercise) => isOwned(exercise, ownerId) && !exercise.archivedAt)
+    .map(cloneExercise);
 }
 
 export function selectExerciseById(state: LocalDataState, id: ExerciseId | undefined, ownerId: OwnerId) {

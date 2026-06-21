@@ -845,7 +845,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
         async addExercise(sessionId: SessionId, exerciseId: ExerciseId) {
           const currentState = stateRef.current;
           const current = ensureOwned(currentState.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
-          if (!isOwned(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
+          if (!isAvailableExercise(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           if (current.exercises.some((exercise) => exercise.exerciseId === exerciseId)) return cloneSession(current);
 
           const session = cloneSession({
