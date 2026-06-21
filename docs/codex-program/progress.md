@@ -12,7 +12,7 @@ Threads:
 | `00-orchestrator` | `codex/integration` | active in current workspace | `2e31559` baseline | `npm run check` passed |
 | `01-baseline-decisions` | `codex/integration` | documented, no product-code edits | `2e31559` baseline | `npm run check` passed |
 | `02-owner-scope` | `codex/02-owner-scope` | merged into `codex/integration` | `9070b48` merge | `npm run check` passed; `npm run check:task-workflow` passed |
-| `03-persistence-v2` | `codex/03-persistence-v2` | implementation reviewed, not merged | pending | `npm run check` passed; `npm run check:task-workflow` passed |
+| `03-persistence-v2` | `codex/03-persistence-v2` | merged into `codex/integration` | `9cc3ff2` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -28,7 +28,6 @@ Completed:
 
 Open findings:
 
-- Persistence v2 implementation is reviewed on `codex/03-persistence-v2` and ready to commit/merge.
 - Workout/session route semantics ambiguous: session and summary screens live under `app/workouts/[workoutId]` and fall back from `sessionId` to `workoutId`.
 - Async loading/error contracts are placeholders: app hooks return `isLoading: false` and `error: null`.
 - Result model is still weight/repetitions-oriented; quick values are `weight | reps`.
@@ -43,8 +42,8 @@ Blocked:
 
 Next:
 
-- Commit reviewed Wave 2 implementation.
-- Merge Wave 2 into `codex/integration`.
+- Run post-merge Wave 2 checks on `codex/integration`.
+- Start Wave 3 session routing on `codex/04-session-routing`.
 
 ## Wave 1
 
@@ -76,6 +75,7 @@ Checks:
 
 - `npm run check`: passed on 2026-06-20.
 - `npm run check:task-workflow`: passed on 2026-06-20.
+- Post-merge integration checks on `codex/integration`: `npm run check` passed; `npm run check:task-workflow` passed.
 - Post-review targeted checks: `npm run typecheck` passed; `npm run test` passed.
 - Post-review full checks: `npm run check` passed; `npm run check:task-workflow` passed.
 - Post-merge integration checks on `codex/integration`: `npm run check` passed; `npm run check:task-workflow` passed.
@@ -88,10 +88,13 @@ Remaining:
 
 Status:
 - implementation_reviewed
-- not_merged
+- merged
 
 Branch:
 - `codex/03-persistence-v2`
+
+Integration:
+- Merged into `codex/integration` as `9cc3ff2`.
 
 Completed:
 
@@ -118,6 +121,4 @@ Checks:
 
 Remaining:
 
-- Commit reviewed Wave 2 implementation.
-- Merge `codex/03-persistence-v2` into `codex/integration`.
 - P2 follow-ups: add AsyncStorage adapter regression coverage, add provider-level delayed hydration coverage, and tighten `meta` referential validation before those pointers become operational.

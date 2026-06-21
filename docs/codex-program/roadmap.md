@@ -29,7 +29,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 0 | `00-orchestrator` / `01-baseline-decisions` | `codex/integration` | gate_0_ready | none | `npm run check` |
 | 1 | `02-owner-scope` | `codex/02-owner-scope` | merged | Gate 0 | `npm run check`, `npm run check:task-workflow` |
-| 2 | `03-persistence-v2` | `codex/03-persistence-v2` | implementation_reviewed | owner scope merged | `npm run check`, `npm run check:task-workflow` |
+| 2 | `03-persistence-v2` | `codex/03-persistence-v2` | merged | owner scope merged | `npm run check`, `npm run check:task-workflow` |
 | 3 | `04-session-routing` | `codex/04-session-routing` | not_started | ownership map fixed | route tests, architecture lint |
 | 4 | `05-result-types` | `codex/05-result-types` | not_started | ownership map fixed | result tests, summary tests |
 | 5 | `06-active-session` | `codex/06-active-session` | not_started | owner scope, routing/result decisions | session invariant tests |
@@ -51,7 +51,7 @@
 ## Confirmed Baseline Problems
 
 - Owner scope has landed for domain types, repositories, selectors, hooks, and legacy snapshot hydration.
-- Persistence v2 implementation is reviewed on `codex/03-persistence-v2`: schema version `2`, v1-to-v2 migration, and owner-scoped storage key.
+- Persistence v2 has landed: schema version `2`, v1-to-v2 migration, and owner-scoped storage key.
 - Session and summary routes are currently under `/workouts/[workoutId]` while resolving session IDs via fallback.
 - Hooks expose placeholder `isLoading: false` and `error: null`.
 - Result model supports only weight/repetitions-oriented values.
@@ -71,3 +71,5 @@
 Gate 0 status: ready for review on 2026-06-20 after `npm run check` passed.
 
 Wave 1 status: merged into `codex/integration` on 2026-06-20 as `9070b48` after `npm run check` and `npm run check:task-workflow` passed on the implementation branch.
+
+Wave 2 status: merged into `codex/integration` as `9cc3ff2` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed on the implementation branch.
