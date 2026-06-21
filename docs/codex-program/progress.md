@@ -434,7 +434,7 @@ Remaining:
 
 - Real backend provider/base URL/credentials and server ownership rules remain external blockers.
 - P2 follow-up before real backend providers: tighten runtime schema validation for enum-like DTO fields that currently parse as strings and rely on TypeScript casts.
-- Wave 11 database contract may start in a separate thread/worktree, limited to `docs/backend/**`.
+- Wave 11 database contract is merged. Wave 12 backend rollout remains blocked until backend provider/base URL/credentials and server ownership decisions exist.
 
 ## Wave 10
 
@@ -467,4 +467,35 @@ Checks:
 Remaining:
 
 - Production auth provider, persistent secure credential policy, account/workspace mapping, and local-data migration UX remain external blockers.
-- Wave 11 database contract may start; keep it limited to `docs/backend/**`.
+- Wave 11 database contract is merged; production backend rollout remains blocked by the decisions tracked below.
+
+## Wave 11
+
+Status:
+- merged
+
+Branch:
+- `codex/13-database-contract`
+
+Merge:
+- `174ea01 Merge database contract wave`
+
+Completed:
+
+- Added `docs/backend/README.md` as the backend contract entrypoint for future workers.
+- Added `docs/backend/database-contract.md` with provider-neutral database model, ownership rules, entity/table shape, lifecycle/status fields, result type shape, active-session invariant, idempotency/conflict behavior, index/query needs, migration questions, and privacy/security notes.
+- Added `docs/backend/blockers.md` with unresolved production backend provider, auth provider, account/workspace, credential policy, server ownership, API URL/credential, conflict-resolution, and privacy/retention decisions.
+- Kept the diff documentation-only under `docs/backend/**`; no runtime backend provider, SDK, API client, app route, persistence migration, auth provider, token storage, or production config was added.
+
+Checks:
+
+- Worker branch scope check: committed only `docs/backend/**`.
+- Orchestrator `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 after recreating empty local harness runtime directories in the Wave 11 worktree.
+- Orchestrator `npm run check`: passed on 2026-06-21 in the Wave 11 worktree after installing dependencies with `npm ci`.
+- Post-merge `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration`.
+- Post-merge `npm run check`: passed on 2026-06-21 on `codex/integration`.
+
+Remaining:
+
+- Wave 12 production backend rollout remains blocked until backend provider/stack, API base URLs, credentials/secret policy, server ownership rules, production auth provider, account/workspace model, and credential policy are accepted.
+- Contract-only backend client planning/tests may be split into separate worktrees only if explicitly scoped to avoid provider-specific runtime rollout.

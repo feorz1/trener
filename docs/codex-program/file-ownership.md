@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Waves 4, 5, 6, 7, 8, 9, and 10 are merged into `codex/integration`. The next implementation writer is Wave 11 (`13-database-contract`) in a separate thread/worktree. Keep its scope limited to `docs/backend/**` database contracts and reviewable backend documentation. Runtime backend providers, API clients, auth provider SDKs, app route changes, and production hardening remain forbidden until their later waves.
+Waves 4, 5, 6, 7, 8, 9, 10, and 11 are merged into `codex/integration`. Wave 12 backend domain rollout remains blocked until backend provider/base URL/credentials, server ownership rules, production auth provider, account/workspace model, and credential policy decisions exist. Contract-only backend client planning/tests may start only in separate thread/worktree scopes that do not add provider-specific SDKs, runtime network rollout, app route changes, persistence migrations, auth provider SDKs, or production hardening.
