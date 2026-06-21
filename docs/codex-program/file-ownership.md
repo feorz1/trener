@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Waves 4, 5, 6, and 7 are merged into `codex/integration`. The next implementation writer is Wave 8 (`09-tests-ci`) in a separate thread/worktree. Before starting it, keep the scope to `scripts/**`, CI configuration, architecture/test fixtures, and generated-output policy unless a failing test proves a narrow product-code fix is required.
+Waves 4, 5, 6, 7, and 8 are merged into `codex/integration`. The next writer is the pre-backend review gate (`10-pre-backend-review`) in a separate thread/worktree. It should be read-only unless review evidence requires docs-only notes; API boundary, auth shell, database contract, backend, and production hardening remain forbidden until this gate is reviewed.

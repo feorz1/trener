@@ -44,9 +44,9 @@ Blocked:
 
 Next:
 
-- Start Wave 8 tests/CI in a separate thread/worktree after preparing a narrow handoff.
-- Keep `.expo-export-check/` generated-output policy visible for Wave 8.
-- Do not implement Wave 8+ in the orchestrator chat.
+- Start the pre-backend review gate in a separate thread/worktree after preparing a read-only handoff.
+- Keep API boundary, auth shell, and database contract blocked until the pre-backend gate is reviewed.
+- Do not implement backend/auth/API work in the orchestrator chat.
 
 ## Wave 1
 
@@ -335,10 +335,14 @@ Remaining:
 ## Wave 8
 
 Status:
-- implementation_verified
+- implementation_reviewed
+- merged
 
 Branch:
 - `codex/09-tests-ci`
+
+Integration:
+- Merged into `codex/integration` as `5b42e36`.
 
 Completed:
 
@@ -355,6 +359,8 @@ Checks:
 - Final `npm run check`: passed on 2026-06-21.
 - Initial `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees` were absent in this worktree.
 - After recreating those empty local harness runtime directories, `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+- Post-merge `npm run check`: passed on 2026-06-21 on `codex/integration`.
+- Post-merge `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration`.
 
 Remaining:
 
