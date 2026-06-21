@@ -5,7 +5,7 @@ import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } 
 import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Button, Card, Header, Icon } from "@/components/ui";
-import { useClients, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
+import { isActiveSessionConflictError, useClients, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { Client, Workout, WorkoutResult, WorkoutSession, WorkoutStatus } from "@/types";
@@ -366,19 +366,30 @@ export default function IndexScreen() {
   );
 
   const openWorkoutSession = async (workoutId: string) => {
-    const session = await sessions.start(workoutId);
+    try {
+      const session = await sessions.start(workoutId);
 
-    router.push({
-      pathname: "/sessions/[sessionId]",
-      params: {
-        sessionId: session.id
-      }
-    });
+      router.push({
+        pathname: "/sessions/[sessionId]",
+        params: {
+          sessionId: session.id
+        }
+      });
+    } catch (error) {
+      if (!isActiveSessionConflictError(error)) throw error;
+
+      router.push({
+        pathname: "/sessions/[sessionId]",
+        params: {
+          sessionId: error.activeSession.id
+        }
+      });
+    }
   };
 
   const openExistingWorkoutSession = (workoutId?: string) => {
     if (!workoutId) return;
-    openWorkoutSession(workoutId);
+    void openWorkoutSession(workoutId);
   };
 
   const openWorkoutCard = (workout: TodayWorkout) => {

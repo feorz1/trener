@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { AppState, Pressable, StyleSheet, Text, View } from "react-native";
 import type { DataLayer } from "./contracts";
-import { DataNotFoundError } from "./contracts";
+import { ActiveSessionConflictError, DataNotFoundError } from "./contracts";
 import { createId } from "./createId";
 import { LOCAL_OWNER_ID } from "./types";
 import type {
@@ -26,7 +26,7 @@ import { localReducer, type LocalDataAction } from "./local/localReducer";
 import type { LocalDataState } from "./local/localState";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "./local/localState";
 import { buildWorkoutResultFromSet, buildWorkoutResultFromUpsertInput } from "./local/resultBuilders";
-import { selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
+import { selectActiveSessionConflict, selectActiveSessionForWorkout, selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
 import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetConnectionsAfterReorder, sortWorkoutExercisesByOrder, syncSupersetConnectionsForScope } from "./local/supersetConnections";
 import { createInitialState } from "./seeds/mockSeed";
 import { CURRENT_SCHEMA_VERSION, localPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
@@ -92,7 +92,7 @@ function getSessionsForWorkout(state: LocalDataState, ownerId: OwnerId, workoutI
 }
 
 function hasActiveSession(state: LocalDataState, ownerId: OwnerId, workoutId: string) {
-  return getSessionsForWorkout(state, ownerId, workoutId).some((session) => session.status === "active");
+  return Boolean(selectActiveSessionForWorkout(state, ownerId, workoutId));
 }
 
 function hasCompletedSession(state: LocalDataState, ownerId: OwnerId, workoutId: string) {
@@ -696,8 +696,11 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const workout = ensureOwned(currentState.workoutsById[workoutId], "Workout", workoutId, currentOwnerId);
           if (workout.status === "cancelled") throw new Error("Cancelled workout cannot be started");
 
-          const existingSession = currentState.sessionIds.map((id) => currentState.sessionsById[id]).find((session) => session.ownerId === currentOwnerId && session.workoutId === workoutId && session.status === "active");
-          if (existingSession) return cloneSession(existingSession);
+          const existingWorkoutSession = selectActiveSessionForWorkout(currentState, currentOwnerId, workoutId);
+          if (existingWorkoutSession) return existingWorkoutSession;
+
+          const conflictingSession = selectActiveSessionConflict(currentState, currentOwnerId, workoutId);
+          if (conflictingSession) throw new ActiveSessionConflictError(conflictingSession);
 
           const now = new Date().toISOString();
           const sessionExercises = workout.exercises.map((exercise, index) => ({

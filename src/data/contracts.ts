@@ -35,6 +35,17 @@ export class DataNotFoundError extends Error {
   }
 }
 
+export class ActiveSessionConflictError extends Error {
+  constructor(public readonly activeSession: WorkoutSession) {
+    super(`Active session already exists: ${activeSession.id}`);
+    this.name = "ActiveSessionConflictError";
+  }
+}
+
+export function isActiveSessionConflictError(error: unknown): error is ActiveSessionConflictError {
+  return error instanceof ActiveSessionConflictError;
+}
+
 export interface ClientRepository {
   list(): Promise<Client[]>;
   getById(id: ClientId): Promise<Client | null>;
