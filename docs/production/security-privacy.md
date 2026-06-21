@@ -52,5 +52,5 @@ These must be resolved before backend rollout; they are blockers for “producti
 
 ## Rollback implications (docs-only scope)
 
-No runtime setting can be rolled back in this wave because no runtime runtime is changed.
+No runtime setting can be rolled back in this wave because no runtime behavior is changed.
 Operational fallback at this stage is to keep this branch docs-only and continue current local-only behavior until the blockers are unblocked.
