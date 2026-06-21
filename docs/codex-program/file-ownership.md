@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Current implementation writers are `05-result-types`, `06-active-session`, and `07-async-states` in separate worktrees. The orchestrator should collect their handoffs, run review gates, and merge into `codex/integration` in roadmap order.
+Current active implementation writer is `05-result-types`. `06-active-session` and `07-async-states` have paused draft worktrees with overlapping hot-file edits; resume them only after earlier waves are merged and their branches are reconciled. The orchestrator should collect handoffs, run review gates, and merge into `codex/integration` in roadmap order.
