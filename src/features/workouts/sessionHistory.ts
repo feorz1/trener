@@ -1,4 +1,5 @@
 import type { WorkoutResult, WorkoutSession } from "@/types";
+import { defaultWorkoutResultType, formatResultDuration } from "./sessionResult";
 
 export function getSessionCompletedResults(session: WorkoutSession, results: WorkoutResult[]) {
   return results.filter((result) => result.sessionId === session.id && result.completed);
@@ -10,6 +11,7 @@ export function getSessionCompletedSetCount(session: WorkoutSession, results: Wo
 
 export function getSessionTotalVolume(results: WorkoutResult[]) {
   const total = results.reduce((sum, result) => {
+    if ((result.resultType ?? defaultWorkoutResultType) !== "weight_reps") return sum;
     if (!result.completed || !Number.isFinite(result.weight) || !Number.isFinite(result.repetitions)) return sum;
     return sum + (result.weight ?? 0) * (result.repetitions ?? 0);
   }, 0);
@@ -41,7 +43,17 @@ export function formatDurationCompact(totalSeconds?: number) {
   return `${Math.max(1, minutes)} мин`;
 }
 
-export function formatResultSet(result: Pick<WorkoutResult, "weight" | "repetitions" | "unit">) {
+export function formatResultSet(result: Pick<WorkoutResult, "resultType" | "weight" | "repetitions" | "durationSeconds" | "distanceMeters" | "unit">) {
+  const resultType = result.resultType ?? defaultWorkoutResultType;
+  if (resultType === "reps") return Number.isFinite(result.repetitions) ? `${result.repetitions} повт.` : "без данных";
+  if (resultType === "duration") return Number.isFinite(result.durationSeconds) ? formatResultDuration(result.durationSeconds ?? 0) : "без данных";
+  if (resultType === "distance_duration") {
+    const parts: string[] = [];
+    if (Number.isFinite(result.distanceMeters)) parts.push(`${result.distanceMeters} м`);
+    if (Number.isFinite(result.durationSeconds)) parts.push(formatResultDuration(result.durationSeconds ?? 0));
+    return parts.join(" × ") || "без данных";
+  }
+
   const parts: string[] = [];
   if (Number.isFinite(result.weight)) parts.push(`${result.weight} ${result.unit ?? "кг"}`);
   if (Number.isFinite(result.repetitions)) parts.push(`${result.repetitions} повт.`);

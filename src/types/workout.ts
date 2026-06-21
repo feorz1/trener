@@ -5,8 +5,12 @@ export type WorkoutSet = {
   order: number;
   targetWeightKg?: number;
   targetReps?: number;
+  targetDurationSeconds?: number;
+  targetDistanceMeters?: number;
   actualWeightKg?: number;
   actualReps?: number;
+  actualDurationSeconds?: number;
+  actualDistanceMeters?: number;
   completed: boolean;
 };
 
@@ -16,6 +20,7 @@ export type WorkoutExercise = {
   id: string;
   exerciseId: string;
   exerciseName: string;
+  resultType?: WorkoutResultType;
   order?: number;
   day?: RepeatDay;
   muscleGroup?: string;
@@ -50,11 +55,14 @@ export type Workout = {
 
 export type WorkoutSessionStatus = "active" | "completed" | "cancelled";
 
+export type WorkoutResultType = "weight_reps" | "reps" | "duration" | "distance_duration";
+
 export type WorkoutSessionExercise = {
   id: string;
   exerciseId: string;
   exerciseName: string;
   exerciseNameSnapshot?: string;
+  resultTypeSnapshot?: WorkoutResultType;
   order: number;
   comment?: string;
   plannedSets?: number;
@@ -83,15 +91,19 @@ export type WorkoutResult = {
   sessionId: string;
   sessionExerciseItemId?: string;
   exerciseId: string;
+  exerciseNameSnapshot?: string;
+  resultType?: WorkoutResultType;
   setIndex: number;
   setId?: string;
   weight?: number;
   repetitions?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
   unit?: string;
   completed: boolean;
 };
 
-export type QuickValueMetric = "weight" | "reps";
+export type QuickValueMetric = "weight" | "reps" | "duration" | "distance";
 
 export type QuickValue = {
   id: string;
@@ -111,8 +123,10 @@ export type ResultHistoryItem = {
   exerciseName: string;
   date: string;
   bestSet: {
-    weightKg: number;
-    reps: number;
+    weightKg?: number;
+    reps?: number;
+    durationSeconds?: number;
+    distanceMeters?: number;
   };
   volumeKg: number;
   deltaLabel?: string;

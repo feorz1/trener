@@ -1,8 +1,26 @@
-import type { ClientId, ExerciseId, OwnerId, PreviousExercisePerformance, QuickValueMetric, SessionId, WorkoutId } from "../types";
+import type { ClientId, ExerciseId, OwnerId, PreviousExercisePerformance, QuickValueMetric, SessionId, WorkoutId, WorkoutResult, WorkoutResultType, WorkoutSession } from "../types";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout, type LocalDataState } from "./localState";
 
 function isOwned<T extends { ownerId: OwnerId }>(item: T | undefined, ownerId: OwnerId): item is T {
   return Boolean(item && item.ownerId === ownerId);
+}
+
+const defaultResultType: WorkoutResultType = "weight_reps";
+
+function getResultSessionExercise(session: WorkoutSession | undefined, result: WorkoutResult) {
+  return session?.exercises.find((exercise) => {
+    if (result.sessionExerciseItemId) return exercise.id === result.sessionExerciseItemId;
+    return exercise.exerciseId === result.exerciseId;
+  });
+}
+
+function getResultType(session: WorkoutSession | undefined, result: WorkoutResult): WorkoutResultType {
+  return result.resultType ?? getResultSessionExercise(session, result)?.resultTypeSnapshot ?? defaultResultType;
+}
+
+function getResultExerciseName(session: WorkoutSession | undefined, result: WorkoutResult) {
+  const sessionExercise = getResultSessionExercise(session, result);
+  return result.exerciseNameSnapshot ?? sessionExercise?.exerciseNameSnapshot ?? sessionExercise?.exerciseName ?? "";
 }
 
 export function selectClients(state: LocalDataState, ownerId: OwnerId) {
@@ -65,7 +83,7 @@ export function selectCompletedSessionsByClient(state: LocalDataState, clientId:
 
 export function selectPreviousExercisePerformance(
   state: LocalDataState,
-  input: { ownerId: OwnerId; clientId?: ClientId; exerciseId?: ExerciseId; before?: string; excludeSessionId?: SessionId }
+  input: { ownerId: OwnerId; clientId?: ClientId; exerciseId?: ExerciseId; resultType?: WorkoutResultType; before?: string; excludeSessionId?: SessionId }
 ): PreviousExercisePerformance | null {
   if (!input.clientId || !input.exerciseId) return null;
   const client = state.clientsById[input.clientId];
@@ -85,19 +103,29 @@ export function selectPreviousExercisePerformance(
   for (const session of sessions) {
     const sets = state.resultIds
       .map((id) => state.resultsById[id])
-      .filter((result) => result.ownerId === input.ownerId && result.sessionId === session.id && result.exerciseId === input.exerciseId && result.completed)
+      .filter((result) => {
+        if (result.ownerId !== input.ownerId || result.sessionId !== session.id || result.exerciseId !== input.exerciseId || !result.completed) return false;
+        return input.resultType ? getResultType(session, result) === input.resultType : true;
+      })
       .sort((left, right) => left.setIndex - right.setIndex)
       .map((result) => ({
         setIndex: result.setIndex,
+        resultType: getResultType(session, result),
         weight: result.weight,
         repetitions: result.repetitions,
+        durationSeconds: result.durationSeconds,
+        distanceMeters: result.distanceMeters,
         unit: result.unit
       }));
 
     if (sets.length > 0 && session.completedAt) {
+      const firstResult = state.resultIds.map((id) => state.resultsById[id]).find((result) => result.sessionId === session.id && result.exerciseId === input.exerciseId);
+
       return {
         sessionId: session.id,
         completedAt: session.completedAt,
+        resultType: sets[0]?.resultType ?? input.resultType ?? defaultResultType,
+        exerciseName: firstResult ? getResultExerciseName(session, firstResult) : "",
         sets
       };
     }

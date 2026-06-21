@@ -1,4 +1,4 @@
-import type { Client, Exercise, OwnerId, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutSession } from "@/types";
+import type { Client, Exercise, OwnerId, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise } from "@/types";
 export { LOCAL_OWNER_ID } from "@/types";
 
 export type EntityId = string;
@@ -10,7 +10,7 @@ export type SessionId = EntityId;
 export type ResultId = EntityId;
 export type QuickValueId = EntityId;
 
-export type { Client, Exercise, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutSession };
+export type { Client, Exercise, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise };
 
 export type CreateClientInput = {
   name: string;
@@ -72,10 +72,14 @@ export type UpsertWorkoutResultInput = {
   sessionId: SessionId;
   sessionExerciseItemId?: string;
   exerciseId: ExerciseId;
+  exerciseNameSnapshot?: string;
+  resultType?: WorkoutResultType;
   setIndex: number;
   setId?: string;
   weight?: number;
   repetitions?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
   unit?: string;
   completed?: boolean;
 };
@@ -93,10 +97,15 @@ export type UpsertQuickValueInput = GetQuickValueInput & {
 export type PreviousExercisePerformance = {
   sessionId: SessionId;
   completedAt: string;
+  resultType: WorkoutResultType;
+  exerciseName: string;
   sets: Array<{
     setIndex: number;
+    resultType: WorkoutResultType;
     weight?: number;
     repetitions?: number;
+    durationSeconds?: number;
+    distanceMeters?: number;
     unit?: string;
   }>;
 };

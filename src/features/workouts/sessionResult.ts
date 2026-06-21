@@ -1,6 +1,10 @@
 import type { ApproachSet } from "@/components/ui";
+import type { WorkoutResultType } from "@/types";
 
 export type SessionResultSet = ApproachSet & {
+  resultType?: WorkoutResultType;
+  durationSeconds?: number;
+  distanceMeters?: number;
   logged?: boolean;
 };
 
@@ -27,6 +31,8 @@ export type WorkoutResultSummary = {
   calories: number | null;
 };
 
+export const defaultWorkoutResultType: WorkoutResultType = "weight_reps";
+
 const secondsPerMinute = 60;
 const minimumCalorieDurationSeconds = secondsPerMinute;
 const kcalPerActiveMinute = 2.1;
@@ -43,12 +49,22 @@ export function isCompletedSet(set: SessionResultSet) {
   return set.state === "selected";
 }
 
+export function getSetResultType(set: Pick<SessionResultSet, "resultType">): WorkoutResultType {
+  return set.resultType ?? defaultWorkoutResultType;
+}
+
 export function getCompletedSets(exercise: SessionResultExercise) {
   return exercise.sets.filter(isCompletedSet);
 }
 
 export function isLoggedCompletedSet(set: SessionResultSet) {
-  return isCompletedSet(set) && isPositiveNumber(set.weight) && isPositiveNumber(set.reps);
+  if (!isCompletedSet(set)) return false;
+
+  const resultType = getSetResultType(set);
+  if (resultType === "weight_reps") return isPositiveNumber(set.weight) && isPositiveNumber(set.reps);
+  if (resultType === "reps") return isPositiveNumber(set.reps);
+  if (resultType === "duration") return isPositiveNumber(set.durationSeconds);
+  return isPositiveNumber(set.distanceMeters) && isPositiveNumber(set.durationSeconds);
 }
 
 export function getLoggedSets(exercise: SessionResultExercise) {
@@ -61,7 +77,10 @@ export function summarizeWorkoutResult(snapshot: WorkoutResultSnapshot): Workout
   ).length;
   const loggedExercises = snapshot.exercises.filter((exercise) => getLoggedSets(exercise).length > 0).length;
   const loggedSets = snapshot.exercises.flatMap(getLoggedSets);
-  const totalVolumeKg = loggedSets.reduce((total, set) => total + (set.weight ?? 0) * (set.reps ?? 0), 0);
+  const totalVolumeKg = loggedSets.reduce((total, set) => {
+    if (getSetResultType(set) !== "weight_reps") return total;
+    return total + (set.weight ?? 0) * (set.reps ?? 0);
+  }, 0);
 
   if (loggedSets.length === 0 || loggedExercises === 0) {
     return {

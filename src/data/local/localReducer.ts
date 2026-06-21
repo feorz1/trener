@@ -1,4 +1,4 @@
-import type { Client, ClientId, Exercise, ExerciseId, QuickValue, QuickValueId, ResultId, SessionId, Workout, WorkoutId, WorkoutResult, WorkoutSession } from "../types";
+import type { Client, ClientId, Exercise, ExerciseId, QuickValue, QuickValueId, ResultId, SessionId, Workout, WorkoutId, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise } from "../types";
 import type { LocalDataState } from "./localState";
 
 export type LocalDataAction =
@@ -19,6 +19,66 @@ function appendUnique<T extends string>(ids: T[], id: T) {
 
 function isSameQuickValueScope(left: QuickValue, right: QuickValue) {
   return left.ownerId === right.ownerId && left.exerciseId === right.exerciseId && left.metric === right.metric && left.clientId === right.clientId;
+}
+
+const defaultResultType: WorkoutResultType = "weight_reps";
+
+function getWorkoutExercise(state: LocalDataState, session: WorkoutSession | undefined, exercise: Pick<WorkoutSessionExercise, "exerciseId">) {
+  const workout = session ? state.workoutsById[session.workoutId] : undefined;
+  return workout?.exercises.find((item) => item.exerciseId === exercise.exerciseId);
+}
+
+function getSessionExercise(state: LocalDataState, result: WorkoutResult) {
+  const session = state.sessionsById[result.sessionId];
+  const sessionExercise = session?.exercises.find((exercise) => {
+    if (result.sessionExerciseItemId || exercise.id === result.sessionExerciseItemId) return exercise.id === result.sessionExerciseItemId;
+    return exercise.exerciseId === result.exerciseId;
+  });
+
+  return { session, sessionExercise };
+}
+
+function enrichSession(state: LocalDataState, session: WorkoutSession): WorkoutSession {
+  const existingSession = state.sessionsById[session.id];
+
+  return {
+    ...session,
+    exercises: session.exercises.map((exercise) => {
+      const existingExercise = existingSession?.exercises.find((item) => item.id === exercise.id || item.exerciseId === exercise.exerciseId);
+      const workoutExercise = getWorkoutExercise(state, session, exercise);
+      const exerciseRecord = state.exercisesById[exercise.exerciseId];
+
+      return {
+        ...exercise,
+        exerciseNameSnapshot:
+          exercise.exerciseNameSnapshot ??
+          existingExercise?.exerciseNameSnapshot ??
+          exercise.exerciseName ??
+          workoutExercise?.exerciseName ??
+          exerciseRecord?.name,
+        resultTypeSnapshot: exercise.resultTypeSnapshot ?? existingExercise?.resultTypeSnapshot ?? workoutExercise?.resultType ?? defaultResultType
+      };
+    })
+  };
+}
+
+function enrichResult(state: LocalDataState, result: WorkoutResult): WorkoutResult {
+  const existingResult = state.resultsById[result.id];
+  const { session, sessionExercise } = getSessionExercise(state, result);
+  const workoutExercise = sessionExercise ? getWorkoutExercise(state, session, sessionExercise) : undefined;
+  const exerciseRecord = state.exercisesById[result.exerciseId];
+
+  return {
+    ...result,
+    exerciseNameSnapshot:
+      result.exerciseNameSnapshot ??
+      existingResult?.exerciseNameSnapshot ??
+      sessionExercise?.exerciseNameSnapshot ??
+      sessionExercise?.exerciseName ??
+      workoutExercise?.exerciseName ??
+      exerciseRecord?.name,
+    resultType: result.resultType ?? existingResult?.resultType ?? sessionExercise?.resultTypeSnapshot ?? workoutExercise?.resultType ?? defaultResultType
+  };
 }
 
 export function localReducer(state: LocalDataState, action: LocalDataAction): LocalDataState {
@@ -60,18 +120,22 @@ export function localReducer(state: LocalDataState, action: LocalDataAction): Lo
   }
 
   if (action.type === "session/upsert") {
+    const session = enrichSession(state, action.session);
+
     return {
       ...state,
-      sessionsById: { ...state.sessionsById, [action.session.id]: action.session },
-      sessionIds: appendUnique<SessionId>(state.sessionIds, action.session.id)
+      sessionsById: { ...state.sessionsById, [session.id]: session },
+      sessionIds: appendUnique<SessionId>(state.sessionIds, session.id)
     };
   }
 
   if (action.type === "result/upsert") {
+    const result = enrichResult(state, action.result);
+
     return {
       ...state,
-      resultsById: { ...state.resultsById, [action.result.id]: action.result },
-      resultIds: appendUnique<ResultId>(state.resultIds, action.result.id)
+      resultsById: { ...state.resultsById, [result.id]: result },
+      resultIds: appendUnique<ResultId>(state.resultIds, result.id)
     };
   }
 

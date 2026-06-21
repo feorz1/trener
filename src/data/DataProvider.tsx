@@ -19,11 +19,13 @@ import type {
   UpdateSessionInput,
   UpdateWorkoutDraftInput,
   UpsertWorkoutResultInput,
-  Workout
+  Workout,
+  WorkoutResultType
 } from "./types";
 import { localReducer, type LocalDataAction } from "./local/localReducer";
 import type { LocalDataState } from "./local/localState";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "./local/localState";
+import { buildWorkoutResultFromSet, buildWorkoutResultFromUpsertInput } from "./local/resultBuilders";
 import { selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
 import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetConnectionsAfterReorder, sortWorkoutExercisesByOrder, syncSupersetConnectionsForScope } from "./local/supersetConnections";
 import { createInitialState } from "./seeds/mockSeed";
@@ -151,6 +153,8 @@ function getQuickValueId(ownerId: OwnerId, exerciseId: ExerciseId, metric: Quick
 function normalizeQuickValues(values: number[]) {
   return Array.from(new Set(values.filter((value) => Number.isFinite(value)))).slice(0, 5);
 }
+
+const defaultResultType: WorkoutResultType = "weight_reps";
 
 function getSnapshotSchemaVersion(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
@@ -701,6 +705,7 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
             exerciseId: exercise.exerciseId,
             exerciseName: exercise.exerciseName,
             exerciseNameSnapshot: exercise.exerciseName,
+            resultTypeSnapshot: exercise.resultType ?? defaultResultType,
             order: index + 1,
             comment: exercise.comment,
             plannedSets: exercise.sets.length,
@@ -722,19 +727,14 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
           const resultActions: LocalDataAction[] = workout.exercises.flatMap((exercise, exerciseIndex) =>
             exercise.sets.map((set) => ({
               type: "result/upsert" as const,
-              result: {
+              result: buildWorkoutResultFromSet({
                 id: createId("result"),
                 ownerId: currentOwnerId,
                 sessionId: session.id,
                 sessionExerciseItemId: sessionExercises[exerciseIndex]?.id,
-                exerciseId: exercise.exerciseId,
-                setIndex: set.order,
-                setId: set.id,
-                weight: set.actualWeightKg ?? set.targetWeightKg,
-                repetitions: set.actualReps ?? set.targetReps,
-                unit: "кг",
-                completed: set.completed
-              }
+                exercise,
+                set
+              })
             }))
           );
           await commitActions(
@@ -822,19 +822,12 @@ export function DataProvider({ children, persistenceAdapter = localPersistenceAd
               if (input.sessionExerciseItemId || result.sessionExerciseItemId) return result.sessionExerciseItemId === input.sessionExerciseItemId;
               return result.exerciseId === input.exerciseId;
             });
-          const result = {
+          const result = buildWorkoutResultFromUpsertInput({
             id: existing?.id ?? createId("result"),
             ownerId: currentOwnerId,
-            sessionId: input.sessionId,
-            sessionExerciseItemId: input.sessionExerciseItemId ?? existing?.sessionExerciseItemId,
-            exerciseId: input.exerciseId,
-            setIndex: input.setIndex,
-            setId: input.setId ?? existing?.setId,
-            weight: input.weight,
-            repetitions: input.repetitions,
-            unit: input.unit ?? existing?.unit ?? "кг",
-            completed: input.completed ?? existing?.completed ?? false
-          };
+            upsert: input,
+            existing
+          });
           await commitActions([{ type: "result/upsert", result }], result.completed ? "immediate" : "debounced");
           return cloneResult(result);
         },

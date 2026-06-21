@@ -81,6 +81,7 @@ export interface SessionRepository {
   getPreviousExercisePerformance(input: {
     clientId?: ClientId;
     exerciseId: ExerciseId;
+    resultType?: WorkoutResult["resultType"];
     before?: string;
     excludeSessionId?: SessionId;
   }): Promise<PreviousExercisePerformance | null>;
