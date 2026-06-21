@@ -14,7 +14,6 @@ import type { Workout } from "@/types";
 const kgUnit = "кг";
 
 type RouteParams = {
-  workoutId?: string | string[];
   sessionId?: string | string[];
 };
 
@@ -55,8 +54,8 @@ function buildSessionWorkout(workout?: Workout) {
 }
 
 export default function WorkoutSessionScreen() {
-  const { workoutId: rawWorkoutId, sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
-  const sessionId = firstParam(rawSessionId) ?? firstParam(rawWorkoutId);
+  const { sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
+  const sessionId = firstParam(rawSessionId);
   const { session } = useSession(sessionId);
   const { workout } = useWorkout(session?.workoutId);
   const { client } = useClient(session?.clientId ?? workout?.clientId);
@@ -234,9 +233,8 @@ export default function WorkoutSessionScreen() {
     await sessionActions.complete(sessionId);
 
     router.replace({
-      pathname: "/workouts/[workoutId]/summary",
+      pathname: "/sessions/[sessionId]/summary",
       params: {
-        workoutId: sessionId,
         sessionId
       }
     });

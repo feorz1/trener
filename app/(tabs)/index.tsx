@@ -369,9 +369,8 @@ export default function IndexScreen() {
     const session = await sessions.start(workoutId);
 
     router.push({
-      pathname: "/workouts/[workoutId]/session",
+      pathname: "/sessions/[sessionId]",
       params: {
-        workoutId: session.id,
         sessionId: session.id
       }
     });
@@ -385,9 +384,8 @@ export default function IndexScreen() {
   const openWorkoutCard = (workout: TodayWorkout) => {
     if (workout.status === "completed" && workout.sessionId) {
       router.push({
-        pathname: "/workouts/[workoutId]/summary",
+        pathname: "/sessions/[sessionId]/summary",
         params: {
-          workoutId: workout.sessionId,
           sessionId: workout.sessionId,
           from: "home"
         }

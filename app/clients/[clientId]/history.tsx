@@ -86,7 +86,7 @@ export default function ClientWorkoutHistoryScreen() {
                   trailingIconName="chevron right"
                   surface="canvasSoft"
                   groupPosition={getListItemCellGroupPosition(index, sessions.length)}
-                  onPress={() => router.push({ pathname: "/workouts/[workoutId]/summary", params: { workoutId: session.id, sessionId: session.id, from: "client" } })}
+                  onPress={() => router.push({ pathname: "/sessions/[sessionId]/summary", params: { sessionId: session.id, from: "client" } })}
                 />
               );
             })}

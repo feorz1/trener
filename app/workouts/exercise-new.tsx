@@ -74,7 +74,7 @@ export default function NewExerciseScreen() {
 
       if (sessionId && session) {
         await sessions.addExercise(sessionId, exercise.id);
-        router.dismissTo({ pathname: "/workouts/[workoutId]/session", params: { workoutId: session.id, sessionId: session.id } });
+        router.dismissTo({ pathname: "/sessions/[sessionId]", params: { sessionId: session.id } });
         return;
       }
 

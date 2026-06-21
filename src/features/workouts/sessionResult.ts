@@ -27,8 +27,6 @@ export type WorkoutResultSummary = {
   calories: number | null;
 };
 
-export type WorkoutSessionSnapshotMap = Record<string, string>;
-
 const secondsPerMinute = 60;
 const minimumCalorieDurationSeconds = secondsPerMinute;
 const kcalPerActiveMinute = 2.1;
@@ -101,103 +99,6 @@ export function summarizeWorkoutResult(snapshot: WorkoutResultSnapshot): Workout
     loggedSets: loggedSets.length,
     totalVolumeKg,
     calories: Math.max(calorieRoundStep, Math.round(rawCalories / calorieRoundStep) * calorieRoundStep)
-  };
-}
-
-export function serializeWorkoutResult(snapshot: WorkoutResultSnapshot) {
-  return encodeURIComponent(JSON.stringify(snapshot));
-}
-
-export function parseWorkoutResult(value?: string | string[]) {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw) return null;
-
-  for (const candidate of getDecodeCandidates(raw)) {
-    try {
-      return normalizeWorkoutResult(JSON.parse(candidate));
-    } catch {
-      // Try the next decoding level.
-    }
-  }
-
-  return null;
-}
-
-export function serializeWorkoutSessionSnapshots(data: WorkoutSessionSnapshotMap) {
-  const entries = Object.entries(data).filter((entry): entry is [string, string] => Boolean(entry[0]) && Boolean(entry[1]));
-  if (entries.length === 0) return undefined;
-
-  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
-}
-
-export function parseWorkoutSessionSnapshots(value?: string | string[]) {
-  const raw = Array.isArray(value) ? value[0] : value;
-  if (!raw) return {};
-
-  for (const candidate of getDecodeCandidates(raw)) {
-    try {
-      const parsed = JSON.parse(candidate) as Record<string, unknown>;
-      return Object.fromEntries(
-        Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[0] === "string" && typeof entry[1] === "string")
-      );
-    } catch {
-      // Try the next decoding level.
-    }
-  }
-
-  return {};
-}
-
-function getDecodeCandidates(raw: string) {
-  const candidates = [raw];
-  let current = raw;
-
-  for (let index = 0; index < 3; index += 1) {
-    try {
-      const decoded = decodeURIComponent(current);
-      if (decoded === current) break;
-      candidates.push(decoded);
-      current = decoded;
-    } catch {
-      break;
-    }
-  }
-
-  return candidates;
-}
-
-function normalizeWorkoutResult(value: unknown): WorkoutResultSnapshot | null {
-  if (!value || typeof value !== "object") return null;
-
-  const snapshot = value as Partial<WorkoutResultSnapshot>;
-  if (typeof snapshot.workoutId !== "string") return null;
-  if (typeof snapshot.clientName !== "string") return null;
-  if (typeof snapshot.durationSeconds !== "number" || !Number.isFinite(snapshot.durationSeconds)) return null;
-  if (!Array.isArray(snapshot.exercises)) return null;
-
-  const exercises = snapshot.exercises.flatMap((exercise) => {
-    if (!exercise || typeof exercise !== "object") return [];
-    const candidate = exercise as Partial<SessionResultExercise>;
-    if (typeof candidate.id !== "string") return [];
-    if (typeof candidate.exerciseId !== "string") return [];
-    if (typeof candidate.exerciseName !== "string") return [];
-    if (!Array.isArray(candidate.sets)) return [];
-
-    const sets = candidate.sets.flatMap((set) => {
-      if (!set || typeof set !== "object") return [];
-      const candidateSet = set as SessionResultSet;
-      if (typeof candidateSet.id !== "string") return [];
-      return [candidateSet];
-    });
-
-    return [{ id: candidate.id, exerciseId: candidate.exerciseId, exerciseName: candidate.exerciseName, sets }];
-  });
-
-  return {
-    workoutId: snapshot.workoutId,
-    clientName: snapshot.clientName,
-    durationSeconds: snapshot.durationSeconds,
-    exercises
   };
 }
 

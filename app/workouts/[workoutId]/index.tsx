@@ -42,7 +42,7 @@ export default function WorkoutDetailsScreen() {
   const startSession = async () => {
     if (!workoutId || !workout || workout.status === "cancelled") return;
     const session = relatedSessions.find((item) => item.status === "active") ?? await sessionActions.start(workoutId);
-    router.push({ pathname: "/workouts/[workoutId]/session", params: { workoutId: session.id, sessionId: session.id } });
+    router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: session.id } });
   };
 
   const editWorkout = async () => {
