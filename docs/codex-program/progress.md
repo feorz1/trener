@@ -499,3 +499,34 @@ Remaining:
 
 - Wave 12 production backend rollout remains blocked until backend provider/stack, API base URLs, credentials/secret policy, server ownership rules, production auth provider, account/workspace model, and credential policy are accepted.
 - Contract-only backend client planning/tests may be split into separate worktrees only if explicitly scoped to avoid provider-specific runtime rollout.
+
+## Wave 12A Backend Clients Preflight
+
+Status:
+- preflight_merged
+- runtime_blocked
+
+Branch:
+- `codex/14-backend-clients`
+
+Merge:
+- `3ae20aa Record backend clients preflight`
+
+Completed:
+
+- Added `docs/backend/clients-preflight.md` as the backend clients preflight record.
+- Reconfirmed that the repository still has only contract-only API boundaries and provider-neutral backend docs.
+- Captured blocker evidence for provider/stack, base URLs, credentials, auth provider, server ownership rules, account/workspace model, conflict policy, and privacy/retention.
+- Listed contract-only tests/adapters that may be prepared without a real provider.
+- Explicitly forbade runtime backend transport, SDK, repository adapter rollout, production auth, persistence migration, route changes, and production config until the blocker decisions exist.
+
+Checks:
+
+- Worker `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 after recreating empty local harness runtime directories in the Wave 12A worktree.
+- Orchestrator `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration` after recreating empty local harness runtime directories.
+- Orchestrator `npm run check`: passed on 2026-06-21 on `codex/integration` after installing dependencies with `npm ci`. The first retry hit transient `spawnSync rg EAGAIN`; the sequential rerun passed.
+
+Remaining:
+
+- Runtime client rollout remains blocked until backend provider/stack, API base URLs, credentials/secret policy, server ownership rules, production auth provider, account/workspace model, conflict policy, and privacy/retention decisions are accepted.
+- Wave 12B+ backend domain work must remain in separate thread/worktree scopes and must not implement real provider/network behavior until those decisions exist.

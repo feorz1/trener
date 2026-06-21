@@ -14,8 +14,9 @@ Planned local work before unblock:
 - Define DTO schemas and mappers. Completed locally in Wave 9 as contract-only DTO schemas/mappers.
 - Define error normalization. Completed locally in Wave 9 as typed API error normalization.
 - Document database model and ownership rules. Completed in Wave 11 as provider-neutral `docs/backend/**` contracts.
+- Document backend clients preflight blockers and future gates. Completed in Wave 12A as `docs/backend/clients-preflight.md`; runtime clients remain blocked.
 
-Wave 11 remaining blockers:
+Backend runtime remaining blockers:
 
 - A real backend provider, base URL, credential policy, and server ownership model are still required before backend repository implementations can begin.
 - API credentials/secret management, conflict-resolution policy, privacy/retention policy, production auth provider, and account/workspace model are still required before production backend rollout.

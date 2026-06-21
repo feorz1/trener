@@ -40,7 +40,7 @@
 | 9 | `11-api-boundary` | `codex/11-api-boundary` | merged | pre-backend gate clear | contract tests |
 | 10 | `12-auth-shell` | `codex/12-auth-shell` | merged | API boundary | auth state tests |
 | 11 | `13-database-contract` | `codex/13-database-contract` | merged | API/auth decisions | docs review |
-| 12A | `14-backend-clients` | `codex/14-backend-clients` | blocked | backend provider/API | contract tests |
+| 12A | `14-backend-clients` | `codex/14-backend-clients` | preflight_merged_runtime_blocked | backend provider/API | contract tests |
 | 12B | `15-backend-exercises` | `codex/15-backend-exercises` | blocked | backend provider/API | contract tests |
 | 12C | `16-backend-workouts` | `codex/16-backend-workouts` | blocked | backend provider/API | contract tests |
 | 12D | `17-backend-sessions` | `codex/17-backend-sessions` | blocked | backend provider/API | idempotency tests |
@@ -94,3 +94,5 @@ Wave 9 status: merged into `codex/integration` as `9f0ade1` after `npm run check
 Wave 10 status: merged into `codex/integration` as `f257f00` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added a development-only auth shell, signed-in/signed-out route guards, current-owner integration, logout cleanup semantics, expired-session handling, focused auth tests, and blocker notes. No production auth SDK, backend provider, database contract, storage key migration, or production hardening was added.
 
 Wave 11 status: merged into `codex/integration` as `174ea01` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added provider-neutral `docs/backend/**` database contract docs covering ownership, entity/table shape, lifecycle fields, result shape, active-session invariant, idempotency/conflict behavior, indexes, migration questions, and privacy/security notes. No backend provider, SDK, runtime API client, route change, persistence migration, auth provider, or production config was added.
+
+Wave 12A preflight status: merged into `codex/integration` as `3ae20aa` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added `docs/backend/clients-preflight.md` with blocker evidence, decisions required before client rollout, contract-only test prerequisites, forbidden runtime work, and future verification gates. Runtime backend clients remain blocked; no provider, SDK, network transport, repository adapter, route, persistence, auth, or production config was added.
