@@ -2,7 +2,7 @@
 
 Status: current readiness report, final audit blocked.
 
-Last updated: 2026-06-21 on `codex/integration` at `c138f6c`.
+Last updated: 2026-06-21 on `codex/integration`.
 
 ## 1. Executive Summary
 
@@ -335,12 +335,13 @@ Known lower-priority or blocked follow-ups:
 
 ## 21. Branches And Commits
 
-Current integration head:
+Current integration branch:
 
-- `c138f6c Record production hardening baseline gate`
+- `codex/integration`
 
 Recent integration milestones:
 
+- `8b36998 Record current final readiness report`
 - `c92e86f Merge production hardening baseline`
 - `0560acb Record backend clients preflight gate`
 - `3ae20aa Record backend clients preflight`

@@ -6,13 +6,15 @@ This directory tracks the multi-wave hardening program for the trainer mobile ap
 
 Prepare the current Expo React Native trainer app for safe owner-scoped local data, versioned persistence, unambiguous navigation, stable workout/session/result models, real async states, API boundaries, auth shell integration, database contracts, and production checks.
 
-## Current Baseline
+## Current State
 
 - App stack: Expo `~54.0.35`, Expo Router `~6.0.24`, React `19.1.0`, React Native `0.81.5`, TypeScript `~5.9.2`.
-- Data layer: app-facing repository contracts in `src/data/contracts.ts`, currently implemented locally inside `src/data/DataProvider.tsx`.
-- Persistence: AsyncStorage adapter under `src/data/persistence`, global key `trainer-app:data:v1`, schema version `1`.
-- Backend/auth: not present. Current product phase is local-first mock/local data.
+- Data layer: app-facing repository contracts in `src/data/contracts.ts`, implemented locally inside `src/data/DataProvider.tsx`.
+- Persistence: AsyncStorage adapter under `src/data/persistence`, schema version `2`, owner-scoped storage key after Wave 2.
+- Backend/auth: contract-only API boundary and development auth shell exist; real backend provider and production auth provider are not selected.
 - Integration branch: `codex/integration`.
+- Current integration branch: `codex/integration`.
+- Current program status: local hardening and documentation baseline merged; backend/auth/production runtime rollout and final release-ready audit remain externally blocked.
 
 ## Rules
 
@@ -56,14 +58,17 @@ Gate 0 is documentation and orchestration only. The current audit was reconfirme
 - `app/**` and `scripts/lint-architecture.ts` for route contracts and route-param guard coverage.
 - `scripts/test-*.ts` for current regression coverage.
 
-Wave 1 owner-scope implementation has been verified on `codex/02-owner-scope` and is waiting for integration into `codex/integration`.
+Latest orchestration gates on 2026-06-21:
+
+- `npm run check`: passed for the current README/final-readiness report update.
+- `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed for the current README/final-readiness report update.
 
 ## Program Documents
 
-- `roadmap.md`: waves, dependencies, owners, branches, checks.
-- `progress.md`: current status by wave.
+- `roadmap.md`: waves, dependencies, owners, branches, checks, and blocked final audit status.
+- `progress.md`: current status by wave through Wave 13 production hardening baseline.
 - `decisions.md`: Gate 0 decisions and later ADR-style records.
 - `risks.md`: confirmed risks and mitigations.
 - `file-ownership.md`: write ownership map and merge order.
 - `external-blockers.md`: decisions or credentials not available locally.
-- `final-report.md`: skeleton for the final program report.
+- `final-report.md`: current readiness report with final audit blocked by external backend/auth/production decisions.
