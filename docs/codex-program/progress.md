@@ -16,7 +16,7 @@ Threads:
 | `04-session-routing` | `codex/04-session-routing` | merged into `codex/integration` | `d438d20` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `05-result-types` | `codex/05-result-types` | merged into `codex/integration` | `7672087` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `06-active-session` | `codex/06-active-session` | merged into `codex/integration` | `310b024` merge | `npm run check` passed; `npm run check:task-workflow` passed |
-| `07-async-states` | `codex/07-async-states` | paused worktree thread `019ee94a-389c-7a13-9dda-e0dec1de3373` pending resume/rebase after Wave 4/5 merge | pending | pending |
+| `07-async-states` | `codex/07-async-states-rescue` | merged into `codex/integration` | `37b2c0e` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -32,8 +32,6 @@ Completed:
 
 Open findings:
 
-- Async loading/error contracts are placeholders: app hooks return `isLoading: false` and `error: null`.
-- Result model is still weight/repetitions-oriented; quick values are `weight | reps`.
 - Architecture lint now blocks app route JSON serialization, old workout-based session paths, and non-primitive router params.
 - Backend/auth/provider decisions are external blockers.
 - `.expo-export-check/` generated output policy needs cleanup in tests/CI wave.
@@ -45,9 +43,8 @@ Blocked:
 
 Next:
 
-- Collect handoff from Wave 6 async states.
-- Run independent read-only review and merge gates before integrating any completed wave.
-- Resume Wave 6 now that Wave 4 and Wave 5 have landed, and reconcile its draft worktree against `codex/integration`.
+- Start Wave 7 MVP hardening in a separate thread/worktree after preparing a narrow handoff.
+- Keep Wave 6 P1 follow-ups visible for Wave 7 or tests/CI planning: home tab start/create guards and session summary async-state review.
 - Do not implement Wave 4+ in the orchestrator chat.
 
 ## Wave 1
@@ -258,4 +255,39 @@ Review gate:
 
 Remaining:
 
-- Wave 6 must reconcile its paused async-state draft against the latest `codex/integration` before implementation continues.
+- No P0/P1 product risks known in Wave 5 scope after Wave 6 merge.
+
+## Wave 6
+
+Status:
+- implementation_reviewed
+- merged
+
+Branch:
+- `codex/07-async-states-rescue`
+
+Integration:
+- Merged into `codex/integration` as `37b2c0e`.
+
+Completed:
+
+- Added typed `DataError`, retryable query-state helpers, and a single-flight mutation guard.
+- Exposed hydration error/retry through `DataProvider` without changing persistence schema or migrations.
+- Replaced fake always-ready data hook states with hydration-aware `isLoading`, `error`, retry/refetch, and guarded `notFound`.
+- Added guarded mutations and visible loading/error states to client create/detail/history flows.
+- Added guarded submit/loading/error states to workout draft, schedule, workout detail, and active session finish flows.
+- Preserved Wave 4 result-type behavior and Wave 5 owner-wide active-session conflict routing.
+- Added focused integration coverage for query-state and mutation-guard primitives.
+
+Checks:
+
+- `npm run check`: passed on 2026-06-21 in the rescue worktree.
+- `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked in the rescue worktree because `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees` were absent there.
+- Fallback local read-only review checked `codex/integration..codex/07-async-states-rescue` and found no merge blockers. Independent subagent review was not run because this turn did not have explicit sub-agent authorization.
+- Post-merge `npm run check`: passed on 2026-06-21 on `codex/integration`.
+- Post-merge `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration`.
+
+Remaining:
+
+- P1 follow-up: `app/(tabs)/index.tsx` home start/create actions still need the same async mutation guard treatment.
+- P1 follow-up: `app/sessions/[sessionId]/summary.tsx` should be reviewed for async loading/error handling, even though it has no explicit submit action.

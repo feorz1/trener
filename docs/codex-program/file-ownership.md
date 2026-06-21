@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Current active implementation writer is `05-result-types`. `06-active-session` and `07-async-states` have paused draft worktrees with overlapping hot-file edits; resume them only after earlier waves are merged and their branches are reconciled. The orchestrator should collect handoffs, run review gates, and merge into `codex/integration` in roadmap order.
+Waves 4, 5, and 6 are merged into `codex/integration`. The next implementation writer is Wave 7 (`08-mvp-hardening`) in a separate thread/worktree. Before starting it, subdivide any shared hot files explicitly and forbid writes outside the Wave 7 handoff scope.

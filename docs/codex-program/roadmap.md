@@ -33,7 +33,7 @@
 | 3 | `04-session-routing` | `codex/04-session-routing` | merged | ownership map fixed | `npm run check`, route architecture lint |
 | 4 | `05-result-types` | `codex/05-result-types` | merged | ownership map fixed | result tests, summary tests |
 | 5 | `06-active-session` | `codex/06-active-session` | merged | owner scope, routing/result decisions | session invariant tests |
-| 6 | `07-async-states` | `codex/07-async-states` | paused_pending_resume_rebase | stable repository errors | UI state and mutation tests |
+| 6 | `07-async-states` | `codex/07-async-states-rescue` | merged | stable repository errors | UI state and mutation tests |
 | 7 | `08-mvp-hardening` | `codex/08-mvp-hardening` | not_started | async contracts | flow tests |
 | 8 | `09-tests-ci` | `codex/09-tests-ci` | not_started | MVP hardening | `npm run check`, CI |
 | Gate | `10-pre-backend-review` | `codex/10-pre-backend-review` | not_started | waves 1-8 merged | read-only review |
@@ -53,7 +53,7 @@
 - Owner scope has landed for domain types, repositories, selectors, hooks, and legacy snapshot hydration.
 - Persistence v2 has landed: schema version `2`, v1-to-v2 migration, and owner-scoped storage key.
 - Session and summary route split is implemented on `codex/04-session-routing`: `/sessions/[sessionId]` and `/sessions/[sessionId]/summary`.
-- Hooks expose placeholder `isLoading: false` and `error: null`.
+- Hooks expose hydration-aware loading/error/retry state after Wave 6.
 - Result model supports `weight_reps`, `reps`, `duration`, and `distance_duration`.
 - Active session enforcement is owner-wide and routes conflicts back into the existing active session.
 - Architecture lint now bans app route JSON serialization, old workout-based session paths, and non-primitive router params.
@@ -79,3 +79,5 @@ Wave 3 status: merged into `codex/integration` as `d438d20` after `npm run check
 Wave 4 status: merged into `codex/integration` as `7672087` after `npm run check`, `npm run check:task-workflow`, and independent read-only review passed after fixing the runtime/editor result-type blockers.
 
 Wave 5 status: merged into `codex/integration` as `310b024` after `npm run check`, `npm run check:task-workflow`, and fallback local read-only review passed. Independent subagent review was unavailable because the session hit the active thread limit.
+
+Wave 6 status: merged into `codex/integration` as `37b2c0e` after `npm run check`, `npm run check:task-workflow`, and fallback local read-only review passed. The original `codex/07-async-states` worktree remains reference-only; the merged implementation came from `codex/07-async-states-rescue` commit `8459948`.
