@@ -563,3 +563,32 @@ Remaining:
 
 - Final audit cannot start as release-ready until backend provider/stack, API URLs/secrets, production auth provider, credential policy, monitoring/crash provider, production signing/release pipeline, privacy/retention/delete/export policy, and accessibility acceptance criteria are accepted.
 - Backend domain runtime waves remain blocked by backend/auth decisions and must not be implemented in the orchestrator chat.
+
+## Wave 20 Final Read-Only Audit
+
+Status:
+- read_only_audit_complete
+- blocked
+
+Branch:
+- `codex/20-final-audit`
+
+Completed:
+
+- Ran a separate read-only final/blocker audit in `/Users/gpbu7557/.codex/worktrees/48a7/New project`.
+- Verified `HEAD == codex/integration == e37f7e3` and the audit worktree diff was empty.
+- Inspected `docs/codex-program/**`, `docs/backend/**`, `docs/production/**`, `package.json`, `src/api/**`, `src/auth/**`, selected data persistence/provider/hook files, session routes, architecture lint, and auth shell tests.
+- Confirmed local hardening claims for persistence v2, owner-scoped storage, session routing, route-param lint, contract-only API boundary, and development auth shell.
+- Confirmed `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow` passed in the audit worktree after creating only empty local harness runtime directories.
+
+Findings:
+
+- Final audit is blocked, not passed.
+- `src/api/**` remains contract-only with no backend transport/provider/runtime adapter.
+- `src/auth/**` remains development-provider-only; production auth provider and credential policy are not implemented.
+- Backend/auth/production external blockers remain open in `docs/codex-program/external-blockers.md`, `docs/backend/blockers.md`, and `docs/production/release-readiness.md`.
+- `npm run check` did not run in the audit worktree because `node_modules` were absent there; orchestrator aggregate checks passed on `codex/integration` before this audit record.
+
+Remaining:
+
+- The overall goal cannot be marked complete until backend runtime, production auth, production signing/release, monitoring/crash reporting, privacy/retention/delete/export, accessibility acceptance criteria, and final release-ready audit are unblocked and implemented in separate scoped waves.

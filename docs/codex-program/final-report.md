@@ -1,6 +1,6 @@
 # Final Report
 
-Status: current readiness report, final audit blocked.
+Status: current readiness report, final read-only audit blocked.
 
 Last updated: 2026-06-21 on `codex/integration`.
 
@@ -69,7 +69,7 @@ Gate 0 confirmed these baseline risks:
 | 12A | `codex/14-backend-clients` | preflight merged | `3ae20aa`, gate `0560acb` |
 | 13 | `codex/19-production-hardening` | baseline merged | `c92e86f`, gate `c138f6c` |
 
-Wave 12B-12E runtime backend domains and Wave 20 final audit remain blocked.
+Wave 12B-12E runtime backend domains remain blocked. Wave 20 read-only audit was run and reported `BLOCKED`.
 
 ## 4. Created Threads
 
@@ -91,6 +91,7 @@ Notable created or used worker scopes:
 - `codex/13-database-contract`
 - `codex/14-backend-clients`
 - `codex/19-production-hardening`
+- `codex/20-final-audit`
 
 ## 5. Subagents Used
 
@@ -98,8 +99,9 @@ Subagents were used only for bounded, isolated work when thread tooling was unav
 
 - `Hume` for Wave 12A backend clients preflight in `/Users/gpbu7557/.codex/worktrees/4857/New project`
 - `Boole` for Wave 13 production hardening baseline in `/Users/gpbu7557/.codex/worktrees/edd4/New project`
+- `Gibbs` for Wave 20 read-only final/blocker audit in `/Users/gpbu7557/.codex/worktrees/48a7/New project`
 
-Both wrote only their assigned documentation scopes and returned handoffs before orchestrator merge gates.
+Documentation workers wrote only their assigned documentation scopes and returned handoffs before orchestrator merge gates. The final audit worker was read-only and reported blocker evidence without source or docs edits.
 
 ## 6. Architecture Decisions
 
@@ -285,6 +287,7 @@ Latest verified gates on `codex/integration`:
 
 - `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed for this report update on 2026-06-21
 - `npm run check`: passed for this report update on 2026-06-21
+- `codex/20-final-audit` read-only worker: `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow` passed in the audit worktree; `npm run check` was not reproducible there because `node_modules` were absent.
 
 Known environment notes:
 
@@ -341,6 +344,7 @@ Current integration branch:
 
 Recent integration milestones:
 
+- `e37f7e3 Refresh program readiness report`
 - `8b36998 Record current final readiness report`
 - `c92e86f Merge production hardening baseline`
 - `0560acb Record backend clients preflight gate`
@@ -398,4 +402,4 @@ Current scores are readiness indicators, not release approval:
 | Backend readiness | 4/10 | Contracts documented; runtime rollout blocked |
 | Production readiness | 3/10 | Baseline documented; signing, monitoring, policy, and release gates blocked |
 
-Final audit status: blocked until backend/auth/production external decisions are accepted and implemented in separate scoped waves.
+Final audit status: read-only audit complete and blocked until backend/auth/production external decisions are accepted and implemented in separate scoped waves.

@@ -46,7 +46,7 @@
 | 12D | `17-backend-sessions` | `codex/17-backend-sessions` | blocked | backend provider/API | idempotency tests |
 | 12E | `18-backend-results` | `codex/18-backend-results` | blocked | backend provider/API | history/result tests |
 | 13 | `19-production-hardening` | `codex/19-production-hardening` | baseline_merged_runtime_blocked | backend/auth readiness | production checks |
-| Final | `20-final-audit` | `codex/20-final-audit` | blocked | all waves complete | read-only independent audit |
+| Final | `20-final-audit` | `codex/20-final-audit` | read_only_audit_blocked | all waves complete | read-only independent audit |
 
 ## Confirmed Baseline Problems
 
@@ -98,3 +98,5 @@ Wave 11 status: merged into `codex/integration` as `174ea01` after `npm run chec
 Wave 12A preflight status: merged into `codex/integration` as `3ae20aa` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added `docs/backend/clients-preflight.md` with blocker evidence, decisions required before client rollout, contract-only test prerequisites, forbidden runtime work, and future verification gates. Runtime backend clients remain blocked; no provider, SDK, network transport, repository adapter, route, persistence, auth, or production config was added.
 
 Wave 13 baseline status: merged into `codex/integration` as `c92e86f` after `npm run check`, `npm run check:task-workflow`, and orchestrator review passed. It added `docs/production/**` production hardening baseline docs for security/privacy, monitoring/crash reporting, build/release config, performance, accessibility, release gates, rollback posture, and explicit blockers. No signing config, monitoring SDK, secrets, production auth, backend provider, network transport, route, persistence, UI, or runtime config was added.
+
+Final audit status: read-only audit on `codex/20-final-audit` reported `BLOCKED` after verifying current docs, code boundaries, and task workflow. Completion is blocked by missing backend provider/base URLs/credentials/server ownership, production auth provider/credential policy/account model, monitoring/crash reporting, signing/release pipeline, privacy/retention/delete/export policy, and accessibility acceptance criteria. No source files or docs were changed by the audit worker.

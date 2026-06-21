@@ -14,7 +14,7 @@ Prepare the current Expo React Native trainer app for safe owner-scoped local da
 - Backend/auth: contract-only API boundary and development auth shell exist; real backend provider and production auth provider are not selected.
 - Integration branch: `codex/integration`.
 - Current integration branch: `codex/integration`.
-- Current program status: local hardening and documentation baseline merged; backend/auth/production runtime rollout and final release-ready audit remain externally blocked.
+- Current program status: local hardening and documentation baseline merged; backend/auth/production runtime rollout remains externally blocked; final read-only audit reported blocked.
 
 ## Rules
 
@@ -71,4 +71,4 @@ Latest orchestration gates on 2026-06-21:
 - `risks.md`: confirmed risks and mitigations.
 - `file-ownership.md`: write ownership map and merge order.
 - `external-blockers.md`: decisions or credentials not available locally.
-- `final-report.md`: current readiness report with final audit blocked by external backend/auth/production decisions.
+- `final-report.md`: current readiness report with read-only final audit blocked by external backend/auth/production decisions.
