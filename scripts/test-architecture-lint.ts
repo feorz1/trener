@@ -98,4 +98,14 @@ assertFails(
   "route params must be an object of IDs/primitives"
 );
 
+assertFails(
+  "non-push router methods reject unsafe params",
+  `
+    const route = { pathname: "/sessions/[sessionId]", params: { session: { id: "session-1" } } };
+    router.replace(route);
+    router.dismissTo({ pathname: "/workouts/new", params: { onDone: () => undefined } });
+  `,
+  "route params must be an object of IDs/primitives"
+);
+
 console.log("Architecture lint regression tests passed.");
