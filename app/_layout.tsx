@@ -5,10 +5,24 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Sortable from "react-native-sortables";
+import { AuthProvider, AuthRouteBoundary, useAuth } from "@/auth";
 import { DataProvider } from "@/data";
 import { theme } from "@/theme";
 
 export default function RootLayout() {
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <AuthProvider>
+          <RootAppShell />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
+function RootAppShell() {
+  const { state } = useAuth();
   const appStack = (
     <>
       <StatusBar style="dark" />
@@ -112,13 +126,11 @@ export default function RootLayout() {
   );
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
-        <DataProvider>
-          <KeyboardProvider>{Platform.OS === "web" ? appStack : <Sortable.PortalProvider>{appStack}</Sortable.PortalProvider>}</KeyboardProvider>
-        </DataProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <DataProvider currentOwnerId={state.session?.ownerId}>
+      <KeyboardProvider>
+        <AuthRouteBoundary>{Platform.OS === "web" ? appStack : <Sortable.PortalProvider>{appStack}</Sortable.PortalProvider>}</AuthRouteBoundary>
+      </KeyboardProvider>
+    </DataProvider>
   );
 }
 

@@ -28,9 +28,14 @@ Wave 9 remaining blocker:
 
 Planned local work before unblock:
 
-- Build auth shell states and guards.
-- Add current owner context.
-- Keep development implementation separate from production provider.
+- Build auth shell states and guards. Completed locally in Wave 10 with development-only auth shell.
+- Add current owner context. Completed locally in Wave 10 by mapping development sign-in to `local-trainer`.
+- Keep development implementation separate from production provider. Completed locally in Wave 10 under `src/auth`.
+
+Wave 10 remaining blockers:
+
+- A production auth provider, secure persistent credential store policy, account/workspace model, and local-data migration UX are still required before real auth rollout.
+- Normal logout currently preserves local data by design; destructive clear or account migration needs product approval.
 
 ## Production
 
