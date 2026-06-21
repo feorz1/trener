@@ -48,4 +48,4 @@ These files need explicit coordination before any parallel writes:
 
 ## Next Writer
 
-Waves 4, 5, and 6 are merged into `codex/integration`. The next implementation writer is Wave 7 (`08-mvp-hardening`) in a separate thread/worktree. Before starting it, subdivide any shared hot files explicitly and forbid writes outside the Wave 7 handoff scope.
+Waves 4, 5, 6, and 7 are merged into `codex/integration`. The next implementation writer is Wave 8 (`09-tests-ci`) in a separate thread/worktree. Before starting it, keep the scope to `scripts/**`, CI configuration, architecture/test fixtures, and generated-output policy unless a failing test proves a narrow product-code fix is required.

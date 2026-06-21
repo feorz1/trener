@@ -17,6 +17,7 @@ Threads:
 | `05-result-types` | `codex/05-result-types` | merged into `codex/integration` | `7672087` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `06-active-session` | `codex/06-active-session` | merged into `codex/integration` | `310b024` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 | `07-async-states` | `codex/07-async-states-rescue` | merged into `codex/integration` | `37b2c0e` merge | `npm run check` passed; `npm run check:task-workflow` passed |
+| `08-mvp-hardening` | `codex/08-mvp-hardening` | merged into `codex/integration` | `eb00fc5` merge | `npm run check` passed; `npm run check:task-workflow` passed |
 
 Completed:
 
@@ -43,9 +44,9 @@ Blocked:
 
 Next:
 
-- Start Wave 7 MVP hardening in a separate thread/worktree after preparing a narrow handoff.
-- Keep Wave 6 P1 follow-ups visible for Wave 7 or tests/CI planning: home tab start/create guards and session summary async-state review.
-- Do not implement Wave 4+ in the orchestrator chat.
+- Start Wave 8 tests/CI in a separate thread/worktree after preparing a narrow handoff.
+- Keep `.expo-export-check/` generated-output policy visible for Wave 8.
+- Do not implement Wave 8+ in the orchestrator chat.
 
 ## Wave 1
 
@@ -291,3 +292,42 @@ Remaining:
 
 - P1 follow-up: `app/(tabs)/index.tsx` home start/create actions still need the same async mutation guard treatment.
 - P1 follow-up: `app/sessions/[sessionId]/summary.tsx` should be reviewed for async loading/error handling, even though it has no explicit submit action.
+
+## Wave 7
+
+Status:
+- implementation_reviewed
+- merged
+
+Branch:
+- `codex/08-mvp-hardening`
+
+Integration:
+- Merged into `codex/integration` as `eb00fc5`.
+
+Completed:
+
+- Added latest-draft selector and hook so home/planning can resume an existing draft instead of silently creating another one.
+- Added explicit planning-sheet controls to resume or delete the latest draft.
+- Hardened draft creation/update/publish paths with UTC ISO normalization, timezone validation, available-exercise validation, and atomic publish/apply validation before state commits.
+- Added custom exercise update support plus shared duplicate-name validation for active exercises, scoped by owner and normalized by trimmed/case-folded name.
+- Added custom exercise edit/archive UI using existing workout exercise surfaces.
+- Hid or disabled unfinished settings controls instead of keeping non-persistent toggles.
+- Added optional session `startedTimezone` and `completedTimezone` metadata while keeping schema version `2` compatible with older snapshots.
+- Added home start/create mutation guards with compact error feedback.
+- Added session summary loading, error, retry, and true not-found states.
+- Added focused integration coverage for latest draft selection, duplicate exercise validation, archived exercise visibility, and timezone persistence compatibility.
+
+Checks:
+
+- Wave worktree `npm run check`: passed on 2026-06-21.
+- Wave worktree `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees` were absent in that worktree.
+- Orchestrator review found a P1 merge blocker: archived custom exercises were still visible through `useExercises()` and could still be added to active sessions by id.
+- Follow-up fix `a2215c9` hid archived exercises from selectable flows, rejected archived session-add ids, and added focused regression coverage.
+- Post-fix worktree `npm run check`: passed on 2026-06-21.
+- Post-merge `npm run check`: passed on 2026-06-21 on `codex/integration`.
+- Post-merge `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21 on `codex/integration`.
+
+Remaining:
+
+- Wave 8 should harden CI/test surfaces and generated-output policy, including `.expo-export-check/`.
