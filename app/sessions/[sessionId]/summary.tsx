@@ -6,6 +6,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Badge, Button, Divider, ListItemGym, Navigation, ProgressBar, type WorkoutSetValue } from "@/components/ui";
 import { useClient, useSession, useSessionResults, useWorkout } from "@/data";
 import {
+  defaultWorkoutResultType,
+  formatResultDuration,
   getCompletedSets,
   summarizeWorkoutResult,
   type WorkoutResultSnapshot
@@ -44,17 +46,29 @@ function buildSnapshot(session: WorkoutSession, clientName: string, results: Ret
         .map((set) => ({
           id: set.setId ?? set.id,
           index: set.setIndex,
+          resultType: set.resultType ?? exercise.resultTypeSnapshot ?? defaultWorkoutResultType,
           reps: set.repetitions,
           weight: set.weight,
+          durationSeconds: set.durationSeconds,
+          distanceMeters: set.distanceMeters,
           unit: set.unit ?? "кг",
           state: set.completed ? "selected" as const : "default" as const,
-          logged: Boolean(set.repetitions || set.weight)
+          logged: Boolean(set.repetitions || set.weight || set.durationSeconds || set.distanceMeters)
         }))
     }))
   };
 }
 
-function formatSetLabel(set: { reps?: number; weight?: number; unit?: string }) {
+function formatSetLabel(set: { resultType?: string; reps?: number; weight?: number; durationSeconds?: number; distanceMeters?: number; unit?: string }) {
+  if (set.resultType === "duration") return Number.isFinite(set.durationSeconds) ? formatResultDuration(set.durationSeconds ?? 0) : "без данных";
+  if (set.resultType === "distance_duration") {
+    const parts: string[] = [];
+    if (Number.isFinite(set.distanceMeters)) parts.push(`${set.distanceMeters} м`);
+    if (Number.isFinite(set.durationSeconds)) parts.push(formatResultDuration(set.durationSeconds ?? 0));
+    return parts.join(" × ") || "без данных";
+  }
+  if (set.resultType === "reps") return Number.isFinite(set.reps) ? `${set.reps} повт.` : "без данных";
+
   const hasReps = Number.isFinite(set.reps);
   const hasWeight = Number.isFinite(set.weight);
 

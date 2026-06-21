@@ -5,7 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Approach, Badge, Button, Divider, Header, Navigation, ProgressBar, type ApproachSet } from "@/components/ui";
 import { useClient, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
 import { formatSessionDate } from "@/features/workouts/sessionHistory";
-import { formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
+import { defaultWorkoutResultType, formatResultDuration, formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -29,18 +29,21 @@ function normalizeSetIndexes<T extends ApproachSet>(sets: T[]) {
   return sets.map((set, index) => ({ ...set, index: index + 1 }));
 }
 
-function buildSessionExerciseSets(workoutSets: Workout["exercises"][number]["sets"]) {
+function buildSessionExerciseSets(workoutSets: Workout["exercises"][number]["sets"], resultType = defaultWorkoutResultType) {
   return normalizeSetIndexes(
     [...workoutSets]
       .sort((left, right) => left.order - right.order)
       .map((set) => ({
         id: set.id,
         index: set.order,
+        resultType,
         reps: set.actualReps ?? set.targetReps,
         weight: set.actualWeightKg ?? set.targetWeightKg,
+        durationSeconds: set.actualDurationSeconds ?? set.targetDurationSeconds,
+        distanceMeters: set.actualDistanceMeters ?? set.targetDistanceMeters,
         unit: kgUnit,
         state: set.completed ? "selected" : "default",
-        logged: Boolean(set.actualReps || set.actualWeightKg)
+        logged: Boolean(set.actualReps || set.actualWeightKg || set.actualDurationSeconds || set.actualDistanceMeters)
       }))
   );
 }
@@ -49,7 +52,7 @@ function buildSessionWorkout(workout?: Workout) {
   if (!workout) return [];
   return workout.exercises.map<SessionExercise>(({ sets, ...exercise }) => ({
     ...exercise,
-    sets: buildSessionExerciseSets(sets)
+    sets: buildSessionExerciseSets(sets, exercise.resultType ?? defaultWorkoutResultType)
   }));
 }
 
@@ -72,24 +75,29 @@ export default function WorkoutSessionScreen() {
           .filter((result) => (result.sessionExerciseItemId ? result.sessionExerciseItemId === exercise.id : result.exerciseId === exercise.exerciseId))
           .sort((left, right) => left.setIndex - right.setIndex);
         const workoutExercise = workout?.exercises.find((item) => item.exerciseId === exercise.exerciseId);
+        const resultType = exercise.resultTypeSnapshot ?? workoutExercise?.resultType ?? defaultWorkoutResultType;
         const sets: SessionResultSet[] = exerciseResults.length > 0
           ? exerciseResults.map((result) => ({
               id: result.setId ?? result.id,
               index: result.setIndex,
+              resultType: result.resultType ?? resultType,
               reps: result.repetitions,
               weight: result.weight,
+              durationSeconds: result.durationSeconds,
+              distanceMeters: result.distanceMeters,
               unit: result.unit ?? kgUnit,
               state: result.completed ? "selected" as const : "default" as const,
-              logged: Boolean(result.repetitions || result.weight)
+              logged: Boolean(result.repetitions || result.weight || result.durationSeconds || result.distanceMeters)
             }))
-          : buildSessionExerciseSets(workoutExercise?.sets ?? []);
+          : buildSessionExerciseSets(workoutExercise?.sets ?? [], resultType);
 
         return {
           id: exercise.id,
           exerciseId: exercise.exerciseId,
-          exerciseName: exercise.exerciseName,
+          exerciseName: exercise.exerciseNameSnapshot ?? exercise.exerciseName,
+          resultType,
           comment: exercise.comment,
-          sets: normalizeSetIndexes(sets.length > 0 ? sets : [{ id: `${exercise.id}-set-1`, index: 1, unit: kgUnit, state: "default", logged: false }])
+          sets: normalizeSetIndexes(sets.length > 0 ? sets : [{ id: `${exercise.id}-set-1`, index: 1, resultType, unit: kgUnit, state: "default", logged: false }])
         };
       });
     },
@@ -123,17 +131,21 @@ export default function WorkoutSessionScreen() {
   }, []);
 
   const persistSet = useCallback(
-    (exercise: SessionExercise, set: ApproachSet) => {
+    (exercise: SessionExercise, set: SessionResultSet) => {
       if (!sessionId) return;
 
       void resultActions.upsertSetResult({
         sessionId,
         sessionExerciseItemId: exercise.id,
         exerciseId: exercise.exerciseId,
+        exerciseNameSnapshot: exercise.exerciseName,
+        resultType: exercise.resultType ?? defaultWorkoutResultType,
         setIndex: set.index,
         setId: set.id,
         weight: set.weight,
         repetitions: set.reps,
+        durationSeconds: set.durationSeconds,
+        distanceMeters: set.distanceMeters,
         unit: set.unit,
         completed: set.state === "selected"
       }).catch(() => undefined);
@@ -208,10 +220,11 @@ export default function WorkoutSessionScreen() {
       current.map((exercise) => {
         if (exercise.id !== exerciseId) return exercise;
         const templateSet = exercise.sets[exercise.sets.length - 1];
-        const nextSet: ApproachSet = {
+        const nextSet: SessionResultSet = {
           id: `${exercise.id}-set-${Date.now()}-${nextSetId.current++}`,
           index: exercise.sets.length + 1,
           state: "default",
+          resultType: exercise.resultType ?? defaultWorkoutResultType,
           unit: kgUnit,
           weight: templateSet?.weight,
           reps: templateSet?.reps
@@ -360,12 +373,14 @@ function SessionExerciseCard({
   onSetValueChange: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
   onSetsReorder: (nextSets: ApproachSet[]) => void;
 }) {
-  const { previousPerformance } = usePreviousExercisePerformance({
+  const previousPerformanceInput = {
     clientId,
     exerciseId: exercise.exerciseId,
+    resultType: exercise.resultType ?? defaultWorkoutResultType,
     before,
     excludeSessionId: currentSessionId
-  });
+  };
+  const { previousPerformance } = usePreviousExercisePerformance(previousPerformanceInput);
 
   return (
     <View style={styles.exerciseWrapper}>
@@ -404,7 +419,15 @@ function SessionExerciseCard({
   );
 }
 
-function formatPreviousSet(set: { weight?: number; repetitions?: number; unit?: string }) {
+function formatPreviousSet(set: { resultType?: string; weight?: number; repetitions?: number; durationSeconds?: number; distanceMeters?: number; unit?: string }) {
+  if (set.resultType === "duration") return Number.isFinite(set.durationSeconds) ? formatResultDuration(set.durationSeconds ?? 0) : "без данных";
+  if (set.resultType === "distance_duration") {
+    const parts: string[] = [];
+    if (Number.isFinite(set.distanceMeters)) parts.push(`${set.distanceMeters} м`);
+    if (Number.isFinite(set.durationSeconds)) parts.push(formatResultDuration(set.durationSeconds ?? 0));
+    return parts.join(" × ") || "без данных";
+  }
+  if (set.resultType === "reps") return Number.isFinite(set.repetitions) ? `${set.repetitions} повт.` : "без данных";
   if (Number.isFinite(set.weight) && Number.isFinite(set.repetitions)) return `${set.weight} ${set.unit ?? "кг"} × ${set.repetitions}`;
   if (Number.isFinite(set.repetitions)) return `${set.repetitions} повт.`;
   if (Number.isFinite(set.weight)) return `${set.weight} ${set.unit ?? "кг"}`;

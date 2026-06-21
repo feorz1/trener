@@ -169,3 +169,34 @@ Checks:
 Remaining:
 
 - Post-merge checks on `codex/integration` passed.
+
+## Wave 4
+
+Status:
+- implementation_verified
+
+Branch:
+- `codex/05-result-types`
+
+Completed:
+
+- Added result type support for `weight_reps`, `reps`, `duration`, and `distance_duration`.
+- Added optional duration and distance fields to workout sets, result upsert inputs, stored workout results, previous-performance records, and result summaries.
+- Added session exercise snapshots for result type and preserved existing exercise-name snapshots through session/result reducer normalization.
+- Added result snapshots for exercise name and result type so completed history can remain stable after exercise rename/archive.
+- Made previous-performance lookup filter by result type when provided and return stored exercise/result snapshots.
+- Made session summary and history calculations treat only `weight_reps` as volume while still counting valid reps, duration, and distance-duration sets as logged work.
+- Updated session and summary screens to carry result type metadata through snapshots and format non-weight result labels.
+- Added focused integration coverage for all four result types plus stable snapshots after exercise rename/archive.
+
+Checks:
+
+- `npm run typecheck`: passed on 2026-06-21.
+- `npm run test:integration`: passed on 2026-06-21.
+- `npm run check`: passed on 2026-06-21.
+- `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked on 2026-06-21 because this worktree is missing harness directories: `plans`, `plans/archive`, `plans/prds`, `plans/sprints`, `tasks/archive`, `tasks/contracts`, `tasks/reviews`, `tasks/notes`, `.ai/harness/checks`, `.ai/harness/failures`, `.ai/harness/worktrees`, and `.ai/harness/runs`.
+
+Remaining:
+
+- No P0/P1 product risks known in Wave 4 scope.
+- Repo-harness directory setup must be restored outside this wave before the strict task-workflow gate can pass in this worktree.
