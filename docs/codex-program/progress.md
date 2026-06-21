@@ -435,3 +435,33 @@ Remaining:
 - Real backend provider/base URL/credentials and server ownership rules remain external blockers.
 - P2 follow-up before real backend providers: tighten runtime schema validation for enum-like DTO fields that currently parse as strings and rely on TypeScript casts.
 - Wave 10 auth shell may start in a separate thread/worktree.
+
+## Wave 10
+
+Status:
+- implementation_verified
+
+Branch:
+- `codex/12-auth-shell`
+
+Completed:
+
+- Added `src/auth/**` contracts for auth state, development provider, credential vault boundary, route decisions, restore/sign-in/sign-out operations, and React provider/hook.
+- Added signed-out/signed-in route guard behavior with `/sign-in` as the signed-out boundary and redirects away from `/sign-in` after local sign-in.
+- Integrated current owner into `DataProvider` while keeping the development auth owner mapped to `local-trainer`.
+- Added local development sign-in UI and settings logout UI using existing canonical components and theme tokens.
+- Documented the local-data migration choice: normal logout preserves local data; account migration/destructive clear remains blocked pending product approval.
+- Added focused auth contract tests for state transitions, route decisions, logout cleanup, expired-session restore, and no token leakage into the domain snapshot.
+
+Checks:
+
+- `npx tsx scripts/test-auth-shell.ts`: passed on 2026-06-21.
+- `npm run typecheck`: passed on 2026-06-21 after installing dependencies with `npm ci` in this worktree.
+- `npm run check`: passed on 2026-06-21.
+- Initial `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: blocked because empty local repo-harness runtime directories were absent in this worktree.
+- After recreating `.ai/harness/runs`, `.ai/harness/checks`, `.ai/harness/failures`, and `.ai/harness/worktrees`, `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed on 2026-06-21.
+
+Remaining:
+
+- Production auth provider, persistent secure credential policy, account/workspace mapping, and local-data migration UX remain external blockers.
+- Wave 11 database contract may start; keep it limited to `docs/backend/**`.

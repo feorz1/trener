@@ -51,3 +51,25 @@ Decision:
 Consequences:
 
 - Backend rollout threads must stop at contracts/mocks until real provider decisions exist.
+
+## 2026-06-21 - Wave 10 Auth Shell
+
+Status: accepted for local development shell.
+
+Context:
+
+- Auth provider, token persistence policy, and user/workspace model are still external blockers.
+- The app must remain usable locally before real auth/backend work starts.
+- Existing local data is already owner-scoped to `local-trainer`.
+
+Decision:
+
+- Use a development-only auth provider that signs in as `local-trainer`.
+- Keep credentials behind `src/auth` credential-vault contracts; do not write auth tokens into the domain snapshot.
+- Preserve existing local data on normal logout.
+- Do not migrate local data to a remote/user account until product approves the sign-in migration UX.
+
+Consequences:
+
+- Signed-in routes can be guarded now without selecting a production auth provider.
+- Real provider SDKs, credential persistence, account/workspace mapping, and destructive local-data migration remain blocked.

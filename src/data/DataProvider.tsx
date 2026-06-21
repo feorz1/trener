@@ -207,8 +207,15 @@ function getSnapshotSchemaVersion(value: unknown) {
   return typeof version === "number" ? version : undefined;
 }
 
-export function DataProvider({ children, persistenceAdapter = localPersistenceAdapter }: { children: ReactNode; persistenceAdapter?: PersistenceAdapter }) {
-  const currentOwnerId = LOCAL_OWNER_ID;
+export function DataProvider({
+  children,
+  persistenceAdapter = localPersistenceAdapter,
+  currentOwnerId = LOCAL_OWNER_ID
+}: {
+  children: ReactNode;
+  persistenceAdapter?: PersistenceAdapter;
+  currentOwnerId?: OwnerId;
+}) {
   const [state, dispatch] = useReducer(localReducer, undefined, createInitialState);
   const stateRef = useRef(state);
   const coordinatorRef = useRef(new PersistenceCoordinator(persistenceAdapter));

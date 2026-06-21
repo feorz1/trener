@@ -1,11 +1,13 @@
 import { StyleSheet, Text, View } from "react-native";
 import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
-import { Header, ListItemCell } from "@/components/ui";
+import { useAuth } from "@/auth";
+import { Button, Header, ListItemCell } from "@/components/ui";
 import { theme } from "@/theme";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
+  const { state, signOut } = useAuth();
 
   return (
     <View style={[styles.safeArea, { paddingTop: topInset }]}>
@@ -57,6 +59,15 @@ export default function SettingsScreen() {
             <ListItemCell title="Тема" subtitle="Будет доступно позже" leading="icon" leadingIconName="settings" trailing="text" trailingText="Системная" disabled groupPosition="last" />
           </View>
         </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Доступ</Text>
+          <View style={styles.authPanel}>
+            <Text style={styles.authTitle}>{state.session?.displayName ?? "Локальный тренер"}</Text>
+            <Text style={styles.authCopy}>Локальные данные сохранятся после выхода.</Text>
+            <Button label="Выйти" type="secondaryNeutral" size="large" width="fill" onPress={() => void signOut({ mode: "preserve_local_data" })} />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -93,5 +104,19 @@ const styles = StyleSheet.create({
   },
   listGroup: {
     gap: theme.spacing.xxs
+  },
+  authPanel: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  authTitle: {
+    ...theme.typography.body.mdStrong,
+    color: theme.colors.content.ink
+  },
+  authCopy: {
+    ...theme.typography.body.sm,
+    color: theme.colors.content.body
   }
 });

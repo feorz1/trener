@@ -20,7 +20,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "tsx scripts/lint-architecture.ts",
-    "test:unit": "tsx scripts/test-persistence-unit.ts && tsx scripts/test-superset-connections.ts && tsx scripts/test-generated-output-policy.ts && tsx scripts/test-architecture-lint.ts && tsx scripts/test-api-boundary-contracts.ts",
+    "test:unit": "tsx scripts/test-persistence-unit.ts && tsx scripts/test-superset-connections.ts && tsx scripts/test-generated-output-policy.ts && tsx scripts/test-architecture-lint.ts && tsx scripts/test-api-boundary-contracts.ts && tsx scripts/test-auth-shell.ts",
     "test:integration": "tsx scripts/test-data-layer-integration.ts",
     "test": "npm run test:unit && npm run test:integration",
     "build:check": "expo export --platform web --output-dir .expo-export-check --clear",
