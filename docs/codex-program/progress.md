@@ -592,3 +592,31 @@ Findings:
 Remaining:
 
 - The overall goal cannot be marked complete until backend runtime, production auth, production signing/release, monitoring/crash reporting, privacy/retention/delete/export, accessibility acceptance criteria, and final release-ready audit are unblocked and implemented in separate scoped waves.
+
+## Closure Run 2026-06-22
+
+Status:
+- local_mvp_hardening_complete
+- release_blocked_external_decisions
+
+Branch:
+- `codex/integration`
+
+Completed:
+
+- Read the current repo-harness `codex-goal.md` and limited the run to closure verification and documentation.
+- Inspected current `codex/integration` status and existing `docs/codex-program/**` closure reports.
+- Reconfirmed that Waves 9-13 are contract-only, documentation-only, development-shell-only, blocked, or awaiting external decisions where runtime provider choices are required.
+- Updated the final report, external blockers, roadmap, progress, and risks to reflect the closure state.
+- Did not add backend runtime, production auth provider, monitoring provider, signing/release pipeline, production secrets, or fake integrations.
+
+Checks:
+
+- `PATH="/Users/gpbu7557/.nvm/versions/node/v22.22.2/bin:$PATH" npm run check`: passed on 2026-06-22.
+- Repo-harness strict workflow check through MCP: passed on 2026-06-22 with `[workflow] OK`.
+
+Remaining:
+
+- Backend runtime is blocked by backend provider/stack, API base URL, credentials/secrets policy, server ownership, account/user model, conflict policy, and privacy/data-retention decisions.
+- Production auth is blocked by auth provider, credential policy, account/user model, and local data migration UX decisions.
+- Production readiness is blocked by signing/release policy, monitoring/crash reporting provider, privacy/retention/delete/export policy, accessibility acceptance level, and release acceptance gates.

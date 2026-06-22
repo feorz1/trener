@@ -1,12 +1,12 @@
 # Final Report
 
-Status: current readiness report, final read-only audit blocked.
+Status: local MVP hardening closure complete; backend/auth/production remain externally blocked.
 
-Last updated: 2026-06-21 on `codex/integration`.
+Last updated: 2026-06-22 on `codex/integration`.
 
 ## 1. Executive Summary
 
-The local trainer app hardening program is implemented through the local-first, pre-backend, and documentation baseline waves that can be completed without external provider decisions.
+The local trainer app hardening program is implemented through the local-first, pre-backend, and documentation baseline waves that can be completed without external provider decisions. The 2026-06-22 closure run verified the current `codex/integration` state and found the local MVP hardening phase complete enough to close.
 
 Completed and merged into `codex/integration`:
 
@@ -25,7 +25,7 @@ Completed and merged into `codex/integration`:
 - backend clients preflight
 - production hardening baseline docs
 
-Not complete:
+Not complete and not safe to continue autonomously:
 
 - real backend runtime rollout
 - production auth provider rollout
@@ -283,6 +283,23 @@ Still blocked:
 
 ## 18. Commands And Results
 
+Closure run on 2026-06-22:
+
+- `PATH="/Users/gpbu7557/.nvm/versions/node/v22.22.2/bin:$PATH" npm run check`: passed.
+  - `npm run lint`: passed, `Architecture lint passed.`
+  - `npm run typecheck`: passed after regenerating Expo Router types.
+  - `npm run design:audit`: passed with 102 files scanned, 0 errors, 0 warnings.
+  - `npm run test`: passed.
+  - `npm run test:unit`: passed persistence, superset connection, generated-output policy, architecture lint, API boundary, and auth shell contract tests.
+  - `npm run test:integration`: passed data layer integration tests.
+  - `npm run build:check`: passed and exported `.expo-export-check`.
+- Repo-harness strict workflow check through MCP: passed with `[workflow] OK`.
+
+Environment notes from the closure run:
+
+- The default shell PATH did not expose `npm`; the check was run with the local nvm Node/npm path.
+- Expo web export emitted non-fatal `NO_COLOR`/`FORCE_COLOR` warnings.
+
 Latest verified gates on `codex/integration`:
 
 - `PATH="$HOME/.bun/bin:$PATH" npm run check:task-workflow`: passed for this report update on 2026-06-21
@@ -303,6 +320,7 @@ Backend blockers:
 - API base URLs unavailable
 - API credentials and secret management policy unavailable
 - server-side ownership rules and authorization model not finalized
+- server ownership and operational responsibility not assigned
 
 Auth blockers:
 
@@ -314,10 +332,11 @@ Auth blockers:
 Production blockers:
 
 - signing credentials unavailable
+- production signing/release policy unavailable
 - monitoring/crash reporting provider not selected
 - privacy/retention/deletion/export requirements not finalized
 - release candidate acceptance gates not finalized
-- accessibility acceptance criteria not defined
+- accessibility acceptance level and criteria not defined
 
 Offline/sync blockers:
 
@@ -333,6 +352,7 @@ Known lower-priority or blocked follow-ups:
 - add AsyncStorage adapter regression coverage beyond current persistence tests
 - add provider-level delayed hydration coverage
 - define production accessibility acceptance checklist
+- decide the accessibility acceptance level required for release
 - define perf budgets, app-size policy, and release smoke tests
 - decide sign-in local-data migration UX
 
@@ -402,4 +422,4 @@ Current scores are readiness indicators, not release approval:
 | Backend readiness | 4/10 | Contracts documented; runtime rollout blocked |
 | Production readiness | 3/10 | Baseline documented; signing, monitoring, policy, and release gates blocked |
 
-Final audit status: read-only audit complete and blocked until backend/auth/production external decisions are accepted and implemented in separate scoped waves.
+Final closure status: local MVP hardening is complete for this phase. Release readiness and backend/auth runtime rollout remain blocked until backend/auth/production external decisions are accepted and implemented in separate scoped waves.

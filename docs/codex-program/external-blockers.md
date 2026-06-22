@@ -7,6 +7,7 @@
 - API base URLs for development, staging, and production are not available.
 - API credentials and secret management policy are not available.
 - Server-side ownership rules and authorization model are not finalized.
+- Server ownership, deployment ownership, and operational support responsibility are not assigned.
 
 Planned local work before unblock:
 
@@ -42,9 +43,11 @@ Wave 10 remaining blockers:
 ## Production
 
 - Signing credentials are not available.
+- Production signing and release policy is not approved.
 - Monitoring/crash reporting provider is not selected.
 - Privacy/retention/deletion requirements are not finalized.
 - Release candidate acceptance gates are not finalized.
+- Accessibility acceptance level is not defined.
 
 Planned local work before unblock:
 
@@ -52,7 +55,7 @@ Planned local work before unblock:
 
 Production runtime remaining blockers:
 
-- Production signing/release pipeline, monitoring/crash reporting provider, alerting policy, privacy/retention/delete/export policy, accessibility acceptance criteria, and release candidate gates must be accepted before final audit can claim release readiness.
+- Production signing/release policy and pipeline, monitoring/crash reporting provider, alerting policy, privacy/retention/delete/export policy, accessibility acceptance level, accessibility acceptance criteria, and release candidate gates must be accepted before final audit can claim release readiness.
 
 ## Offline/Sync
 
