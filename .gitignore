@@ -9,6 +9,7 @@ expo-env.d.ts
 node_modules/
 .expo/
 .codegraph/
+.derivedData/
 
 # Package-local dependencies and build output
 figma-plugin/node_modules/
@@ -23,6 +24,9 @@ figma-plugin/dist/
 # Local editor and generated design scratch files
 .idea/
 .magicpath/
+.playwright-cli/
+.serena/
+output/
 
 # Temporary media captures
 tmp_video_contact.jpg
