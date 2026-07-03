@@ -105,6 +105,7 @@ function validateExercise(value: unknown, requireOwnerId: boolean): value is Exe
   if (!value.primaryMuscles.every(isString)) return false;
   if (value.secondaryMuscles !== undefined && (!Array.isArray(value.secondaryMuscles) || !value.secondaryMuscles.every(isString))) return false;
   if (value.searchAliases !== undefined && (!Array.isArray(value.searchAliases) || !value.searchAliases.every(isString))) return false;
+  if (value.restrictionTags !== undefined && (!Array.isArray(value.restrictionTags) || !value.restrictionTags.every(isString))) return false;
   return isOptionalString(value.coachNotes) && isOptionalString(value.notes) && isOptionalString(value.archivedAt) && isOptionalString(value.createdAt) && isOptionalString(value.updatedAt);
 }
 

@@ -63,8 +63,8 @@ function optionalTrim(value?: string) {
   return trimmed ? trimmed : undefined;
 }
 
-function optionalTrimList(values?: string[]) {
-  const trimmed = values?.map((value) => value.trim()).filter(Boolean);
+function optionalTrimList<T extends string>(values?: T[]) {
+  const trimmed = values?.map((value) => value.trim()).filter(Boolean) as T[] | undefined;
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
 }
 
@@ -423,6 +423,7 @@ export function DataProvider({
             equipment: optionalTrim(input.equipment) ?? "Не указано",
             resultType: input.resultType,
             searchAliases: optionalTrimList(input.searchAliases),
+            restrictionTags: optionalTrimList(input.restrictionTags),
             coachNotes: optionalTrim(input.coachNotes),
             notes: optionalTrim(input.notes),
             createdAt: now,
@@ -456,6 +457,7 @@ export function DataProvider({
             equipment: normalizedPatch.equipment !== undefined ? optionalTrim(normalizedPatch.equipment) ?? "Не указано" : current.equipment,
             resultType: normalizedPatch.resultType !== undefined ? normalizedPatch.resultType : current.resultType,
             searchAliases: normalizedPatch.searchAliases !== undefined ? optionalTrimList(normalizedPatch.searchAliases) : current.searchAliases,
+            restrictionTags: normalizedPatch.restrictionTags !== undefined ? optionalTrimList(normalizedPatch.restrictionTags) : current.restrictionTags,
             coachNotes: normalizedPatch.coachNotes !== undefined ? optionalTrim(normalizedPatch.coachNotes) : current.coachNotes,
             notes: normalizedPatch.notes !== undefined ? optionalTrim(normalizedPatch.notes) : current.notes,
             archivedAt: current.archivedAt,

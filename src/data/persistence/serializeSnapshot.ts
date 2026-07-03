@@ -44,7 +44,8 @@ function mergeSeedExercise(seed: Exercise | undefined, persisted: Exercise): Exe
     ...persisted,
     source: persisted.source ?? seed.source,
     resultType: persisted.resultType ?? seed.resultType,
-    searchAliases: persisted.searchAliases ?? seed.searchAliases
+    searchAliases: persisted.searchAliases ?? seed.searchAliases,
+    restrictionTags: persisted.restrictionTags ?? seed.restrictionTags
   };
 }
 

@@ -11,6 +11,7 @@ const legacyMockExercises: Exercise[] = [
     primaryMuscles: ["legs", "quads"],
     equipment: "Блочный тренажер",
     resultType: "weight_reps",
+    restrictionTags: ["kneeStress"],
     coachNotes: "Контролировать амплитуду и не выпрямлять колени до замка."
   },
   {
@@ -21,7 +22,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["shoulders", "triceps"],
     equipment: "Рычажный тренажер",
-    resultType: "weight_reps"
+    resultType: "weight_reps",
+    restrictionTags: ["shoulderStress", "breathHold"]
   },
   {
     id: "ex-3",
@@ -31,7 +33,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["back", "biceps"],
     equipment: "Турник",
-    resultType: "reps_only"
+    resultType: "reps_only",
+    restrictionTags: ["shoulderStress"]
   },
   {
     id: "ex-4",
@@ -41,7 +44,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["chest", "triceps"],
     equipment: "Штанга, скамья",
-    resultType: "weight_reps"
+    resultType: "weight_reps",
+    restrictionTags: ["breathHold"]
   },
   {
     id: "ex-5",
@@ -51,7 +55,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["chest", "triceps"],
     equipment: "Брусья",
-    resultType: "weighted_bodyweight"
+    resultType: "weighted_bodyweight",
+    restrictionTags: ["shoulderStress"]
   },
   {
     id: "ex-6",
@@ -61,7 +66,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["back", "legs"],
     equipment: "Штанга",
-    resultType: "weight_reps"
+    resultType: "weight_reps",
+    restrictionTags: ["axialLoads", "breathHold"]
   },
   {
     id: "ex-7",
@@ -71,7 +77,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["legs", "glutes"],
     equipment: "Штанга",
-    resultType: "weight_reps"
+    resultType: "weight_reps",
+    restrictionTags: ["axialLoads", "kneeStress", "breathHold"]
   },
   {
     id: "ex-8",
@@ -81,7 +88,8 @@ const legacyMockExercises: Exercise[] = [
     source: "built_in",
     primaryMuscles: ["back", "biceps"],
     equipment: "Штанга",
-    resultType: "weight_reps"
+    resultType: "weight_reps",
+    restrictionTags: ["axialLoads", "breathHold"]
   }
 ];
 

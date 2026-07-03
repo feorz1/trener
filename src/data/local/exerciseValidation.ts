@@ -35,12 +35,13 @@ export function assertUniqueActiveExerciseName(
   }
 }
 
-export function normalizeExercisePatch<T extends Partial<Pick<Exercise, "name" | "equipment" | "resultType" | "searchAliases" | "coachNotes" | "notes">>>(patch: T): T {
+export function normalizeExercisePatch<T extends Partial<Pick<Exercise, "name" | "equipment" | "resultType" | "searchAliases" | "restrictionTags" | "coachNotes" | "notes">>>(patch: T): T {
   return {
     ...patch,
     name: patch.name === undefined ? patch.name : patch.name.trim().replace(/\s+/g, " "),
     equipment: patch.equipment === undefined ? patch.equipment : patch.equipment.trim(),
     searchAliases: patch.searchAliases === undefined ? patch.searchAliases : patch.searchAliases.map((alias) => alias.trim().replace(/\s+/g, " ")).filter(Boolean),
+    restrictionTags: patch.restrictionTags === undefined ? patch.restrictionTags : patch.restrictionTags.map((tag) => tag.trim()).filter(Boolean) as T["restrictionTags"],
     coachNotes: patch.coachNotes === undefined ? patch.coachNotes : patch.coachNotes.trim(),
     notes: patch.notes === undefined ? patch.notes : patch.notes.trim()
   };

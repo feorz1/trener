@@ -2,8 +2,9 @@ import { useCallback, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { FlatList, ScrollView, StyleSheet, Text, View, type ListRenderItem } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Alert, Button, Checkbox, Chip, Divider, Icon, ListItemGym, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
-import { useDataMutation, useExerciseActions, useExercises, useSession, useSessionActions, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { Alert, Badge, Button, Checkbox, Chip, Divider, Icon, ListItemGym, Modal, Navigation, Search, StateSelect, getListItemGymSelectedGroupPosition } from "@/components/ui";
+import { useClient, useDataMutation, useExerciseActions, useExercises, useSession, useSessionActions, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { getExerciseClientRestrictionLabels } from "@/features/workouts/exerciseRestrictions";
 import { theme } from "@/theme";
 import type { Exercise } from "@/types";
 
@@ -61,6 +62,7 @@ export default function ExerciseSelectionScreen() {
   const exerciseActions = useExerciseActions();
   const { draft } = useWorkoutDraft(draftId);
   const { session } = useSession(sessionId);
+  const { client: selectedClient } = useClient(draft?.clientId ?? session?.clientId);
   const workouts = useWorkoutActions();
   const sessions = useSessionActions();
   const existingExerciseIds = useMemo(() => {
@@ -73,6 +75,7 @@ export default function ExerciseSelectionScreen() {
   const [search, setSearch] = useState("");
   const [selectedMuscles, setSelectedMuscles] = useState<string[]>([]);
   const [customOnlySelected, setCustomOnlySelected] = useState(false);
+  const [restrictedExercisePending, setRestrictedExercisePending] = useState<Exercise | null>(null);
   const archiveExerciseMutation = useDataMutation(async (exerciseId: string) => exerciseActions.archive(exerciseId));
   const normalizedSearch = search.trim().toLowerCase();
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
@@ -110,6 +113,27 @@ export default function ExerciseSelectionScreen() {
     if (hasSessionContext && existingExerciseIds.has(exerciseId)) return;
     setSelectedIds((current) => (current.includes(exerciseId) ? current.filter((id) => id !== exerciseId) : [...current, exerciseId]));
   }, [existingExerciseIds, hasSessionContext]);
+
+  const requestExerciseSelection = useCallback((exercise: Exercise, hasClientRestrictions: boolean) => {
+    if (hasSessionContext && existingExerciseIds.has(exercise.id)) return;
+    if (selectedIdSet.has(exercise.id)) {
+      toggleExercise(exercise.id);
+      return;
+    }
+
+    if (hasClientRestrictions) {
+      setRestrictedExercisePending(exercise);
+      return;
+    }
+
+    toggleExercise(exercise.id);
+  }, [existingExerciseIds, hasSessionContext, selectedIdSet, toggleExercise]);
+
+  const confirmRestrictedExerciseSelection = useCallback(() => {
+    if (!restrictedExercisePending) return;
+    setSelectedIds((current) => (current.includes(restrictedExercisePending.id) ? current : [...current, restrictedExercisePending.id]));
+    setRestrictedExercisePending(null);
+  }, [restrictedExercisePending]);
 
   const openCreateExercise = useCallback(() => {
     router.push({
@@ -151,6 +175,8 @@ export default function ExerciseSelectionScreen() {
       const alreadyInSession = hasSessionContext && existingExerciseIds.has(exercise.id);
       const displayedSelected = displayedSelectedIdSet.has(exercise.id);
       const isCustom = exercise.source === "custom";
+      const restrictionLabels = getExerciseClientRestrictionLabels(exercise, selectedClient);
+      const hasClientRestrictions = restrictionLabels.length > 0;
       const previousSelected = index > 0 && displayedSelectedIdSet.has(filteredExercises[index - 1].id);
       const nextSelected = index < filteredExercises.length - 1 && displayedSelectedIdSet.has(filteredExercises[index + 1].id);
 
@@ -163,6 +189,7 @@ export default function ExerciseSelectionScreen() {
           selected={displayedSelected}
           disabled={alreadyInSession}
           suppressPressedStyle={isCustom}
+          supportingSlot={hasClientRestrictions ? <Badge label="Есть ограничения" tone="negativeSoft" size="s" icon={false} style={styles.restrictionBadge} /> : undefined}
           trailingSlot={
             isCustom ? (
               <View style={styles.exerciseActions}>
@@ -177,19 +204,21 @@ export default function ExerciseSelectionScreen() {
                   accessibilityLabel={`Выбрать ${exercise.name}`}
                   selected={displayedSelected}
                   showLabel={false}
-                  onChange={alreadyInSession ? undefined : () => toggleExercise(exercise.id)}
+                  onChange={alreadyInSession ? undefined : () => requestExerciseSelection(exercise, hasClientRestrictions)}
                 />
               </View>
             ) : undefined
           }
           onDelete={isCustom ? () => void archiveExercise(exercise.id) : undefined}
-          onPress={alreadyInSession ? undefined : () => toggleExercise(exercise.id)}
-          onSelectedChange={alreadyInSession ? undefined : () => toggleExercise(exercise.id)}
+          onPress={alreadyInSession ? undefined : () => requestExerciseSelection(exercise, hasClientRestrictions)}
+          onSelectedChange={alreadyInSession ? undefined : () => requestExerciseSelection(exercise, hasClientRestrictions)}
         />
       );
     },
-    [archiveExercise, displayedSelectedIdSet, existingExerciseIds, filteredExercises, hasSessionContext, toggleExercise]
+    [archiveExercise, displayedSelectedIdSet, existingExerciseIds, filteredExercises, hasSessionContext, requestExerciseSelection, selectedClient]
   );
+
+  const restrictionModalLabels = selectedClient?.restrictions ?? [];
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
@@ -280,6 +309,24 @@ export default function ExerciseSelectionScreen() {
           </View>
         </>
       )}
+
+      <Modal
+        visible={Boolean(restrictedExercisePending)}
+        presentation="overlay"
+        title="Есть ограничения"
+        showSubline={false}
+        showBodyText={false}
+        bodyStyle={styles.restrictionModalBody}
+        actionStyle={styles.restrictionModalAction}
+        primaryAction={{ label: "Всё равно добавить", type: "destructive", onPress: confirmRestrictedExerciseSelection }}
+        onClose={() => setRestrictedExercisePending(null)}
+      >
+        <View style={styles.restrictionModalBadges}>
+          {restrictionModalLabels.map((restriction) => (
+            <Badge key={restriction} label={restriction} tone="negativeSoft" size="sm" icon={false} />
+          ))}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -313,6 +360,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.xs
+  },
+  restrictionBadge: {
+    alignSelf: "flex-start"
+  },
+  restrictionModalBody: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs
+  },
+  restrictionModalBadges: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm
+  },
+  restrictionModalAction: {
+    padding: theme.spacing.lg
   },
   body: {
     flex: 1,
