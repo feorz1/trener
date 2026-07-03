@@ -8,48 +8,43 @@ function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function getSelectedStartIso(value?: string) {
-  if (!value) return undefined;
-  const [year, month, day] = value.split("-").map(Number);
-  const date = year && month && day ? new Date(year, month - 1, day) : new Date(value);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
 export default function WorkoutPlanningSheet() {
   const { date } = useLocalSearchParams<{ date?: string }>();
   const selectedDate = firstParam(date);
   const workouts = useWorkoutActions();
   const { draft: latestDraft } = useLatestWorkoutDraft();
-  const createDraftMutation = useDataMutation(async (startsAt?: string) => workouts.createDraft({ startsAt }));
-  const discardDraftMutation = useDataMutation(async (draftId: string) => workouts.discardDraft(draftId));
-  const actionError = createDraftMutation.error ?? discardDraftMutation.error;
+  const discardDraftMutation = useDataMutation(async () => {
+    const workoutList = await workouts.list();
+    const drafts = workoutList.filter((workout) => workout.status === "draft");
+    await Promise.all(drafts.map((draft) => workouts.discardDraft(draft.id)));
+  });
+  const actionError = discardDraftMutation.error;
+  const isBusy = discardDraftMutation.isSubmitting;
+  const visibleLatestDraft = latestDraft;
 
   const closeSheet = () => {
     router.back();
   };
 
   const resumeDraft = () => {
-    if (!latestDraft) return;
-    router.push({
+    if (!visibleLatestDraft) return;
+    router.dismissTo({
       pathname: "/workouts/new",
-      params: { draftId: latestDraft.id }
+      params: { draftId: visibleLatestDraft.id }
     });
   };
 
   const createNewWorkout = async () => {
-    if (createDraftMutation.isSubmitting || discardDraftMutation.isSubmitting) return;
-    const draft = await createDraftMutation.mutate(getSelectedStartIso(selectedDate)).catch(() => null);
-    if (!draft) return;
-
-    router.push({
+    if (isBusy) return;
+    router.replace({
       pathname: "/workouts/client-select",
-      params: { draftId: draft.id }
+      params: selectedDate ? { date: selectedDate } : {}
     });
   };
 
   const discardLatestDraft = async () => {
-    if (!latestDraft || createDraftMutation.isSubmitting || discardDraftMutation.isSubmitting) return;
-    await discardDraftMutation.mutate(latestDraft.id).catch(() => null);
+    if (!visibleLatestDraft || isBusy) return;
+    await discardDraftMutation.mutate().catch(() => null);
   };
 
   return (
@@ -66,17 +61,17 @@ export default function WorkoutPlanningSheet() {
         style={styles.modal}
       >
         {actionError ? <Alert tone="negative" layout="compact" width="fill" title={actionError.message} style={styles.alert} /> : null}
-        {latestDraft ? (
+        {visibleLatestDraft ? (
           <>
             <ListItemCell
               title="Продолжить черновик"
-              subtitle={latestDraft.title}
+              subtitle={visibleLatestDraft.title}
               leading="avatar"
               avatarType="icon"
               leadingIconName="edit"
               trailing="icon"
               trailingIconName="chevron right"
-              disabled={createDraftMutation.isSubmitting || discardDraftMutation.isSubmitting}
+              disabled={isBusy}
               onPress={resumeDraft}
             />
             <ListItemCell
@@ -86,7 +81,7 @@ export default function WorkoutPlanningSheet() {
               avatarType="icon"
               leadingIconName="close"
               trailing="none"
-              disabled={createDraftMutation.isSubmitting || discardDraftMutation.isSubmitting}
+              disabled={isBusy}
               onPress={discardLatestDraft}
             />
           </>
@@ -98,17 +93,8 @@ export default function WorkoutPlanningSheet() {
           leadingIconName="edit"
           trailing="icon"
           trailingIconName="chevron right"
-          disabled={createDraftMutation.isSubmitting || discardDraftMutation.isSubmitting}
+          disabled={isBusy}
           onPress={createNewWorkout}
-        />
-        <ListItemCell
-          title="Выбрать из шаблона"
-          subtitle="Будет доступно позже"
-          leading="avatar"
-          avatarType="icon"
-          leadingIconName="list"
-          trailing="none"
-          disabled
         />
       </Modal>
     </View>

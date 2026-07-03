@@ -155,6 +155,11 @@ function getExerciseName(state: LocalDataState, exerciseId: ExerciseId, ownerId:
   return isOwned(exercise, ownerId) ? exercise.name : "Упражнение";
 }
 
+function getExerciseResultType(state: LocalDataState, exerciseId: ExerciseId, ownerId: OwnerId) {
+  const exercise = state.exercisesById[exerciseId];
+  return isOwned(exercise, ownerId) ? exercise.resultType : undefined;
+}
+
 function createWorkoutExercise(state: LocalDataState, ownerId: OwnerId, exerciseId: ExerciseId, order: number, day?: RepeatDay, existingId?: string) {
   if (!isAvailableExercise(state.exercisesById[exerciseId], ownerId)) {
     throw new DataNotFoundError("Exercise", exerciseId);
@@ -164,16 +169,9 @@ function createWorkoutExercise(state: LocalDataState, ownerId: OwnerId, exercise
     id: existingId ?? createId("workout-exercise"),
     exerciseId,
     exerciseName: getExerciseName(state, exerciseId, ownerId),
+    resultType: getExerciseResultType(state, exerciseId, ownerId) ?? defaultResultType,
     day,
-    sets: [
-      {
-        id: createId("set"),
-        order: 1,
-        targetWeightKg: 150,
-        targetReps: 12,
-        completed: false
-      }
-    ],
+    sets: [],
     order
   };
 }
@@ -423,6 +421,8 @@ export function DataProvider({
             primaryMuscles: optionalTrimList(input.primaryMuscles) ?? ["all"],
             secondaryMuscles: optionalTrimList(input.secondaryMuscles),
             equipment: optionalTrim(input.equipment) ?? "Не указано",
+            resultType: input.resultType,
+            searchAliases: optionalTrimList(input.searchAliases),
             coachNotes: optionalTrim(input.coachNotes),
             notes: optionalTrim(input.notes),
             createdAt: now,
@@ -454,6 +454,8 @@ export function DataProvider({
             primaryMuscles: normalizedPatch.primaryMuscles !== undefined ? optionalTrimList(normalizedPatch.primaryMuscles) ?? ["all"] : current.primaryMuscles,
             secondaryMuscles: normalizedPatch.secondaryMuscles !== undefined ? optionalTrimList(normalizedPatch.secondaryMuscles) : current.secondaryMuscles,
             equipment: normalizedPatch.equipment !== undefined ? optionalTrim(normalizedPatch.equipment) ?? "Не указано" : current.equipment,
+            resultType: normalizedPatch.resultType !== undefined ? normalizedPatch.resultType : current.resultType,
+            searchAliases: normalizedPatch.searchAliases !== undefined ? optionalTrimList(normalizedPatch.searchAliases) : current.searchAliases,
             coachNotes: normalizedPatch.coachNotes !== undefined ? optionalTrim(normalizedPatch.coachNotes) : current.coachNotes,
             notes: normalizedPatch.notes !== undefined ? optionalTrim(normalizedPatch.notes) : current.notes,
             archivedAt: current.archivedAt,
@@ -865,6 +867,7 @@ export function DataProvider({
                 exerciseId,
                 exerciseName: getExerciseName(currentState, exerciseId, currentOwnerId),
                 exerciseNameSnapshot: getExerciseName(currentState, exerciseId, currentOwnerId),
+                resultTypeSnapshot: getExerciseResultType(currentState, exerciseId, currentOwnerId) ?? defaultResultType,
                 order: current.exercises.length + 1
               }
             ]

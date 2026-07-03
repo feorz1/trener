@@ -43,10 +43,10 @@ export function Set({ variant = "set", values = defaultValues, addLabel = "До�
   };
 
   return (
-    <View style={[styles.root, style]} onLayout={handleContainerLayout}>
+    <View style={[styles.root, variant === "new" ? styles.newRoot : styles.valuesRoot, style]} onLayout={handleContainerLayout}>
       {variant === "new" ? (
         onAddPress ? (
-          <Pressable accessibilityLabel={addLabel} accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={onAddPress}>
+          <Pressable accessibilityLabel={addLabel} accessibilityRole="button" hitSlop={theme.spacing.sm} style={styles.newAction} onPress={onAddPress}>
             <Badge label={addLabel} tone="neutral" size="s" icon={false} />
           </Pressable>
         ) : (
@@ -86,6 +86,15 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
     overflow: "hidden",
     position: "relative"
+  },
+  valuesRoot: {
+    alignSelf: "stretch"
+  },
+  newRoot: {
+    alignSelf: "flex-start"
+  },
+  newAction: {
+    alignSelf: "flex-start"
   },
   valuesRow: {
     alignSelf: "flex-start",

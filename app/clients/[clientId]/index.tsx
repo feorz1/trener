@@ -41,7 +41,7 @@ export default function ClientProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <View style={styles.topSection}>
-          <View style={styles.listGroup}>
+          <View style={[styles.listGroup, styles.clientDataGroup]}>
             <ListItemCell
               title="Данные клиента"
               subtitle="Имя, контакты, цель тренировки, заметки"
@@ -58,7 +58,7 @@ export default function ClientProfileScreen() {
         {client.restrictions?.length ? (
           <>
             <SectionDivider />
-            <View style={styles.section}>
+            <View style={[styles.section, styles.restrictionsSection]}>
               <Text style={styles.sectionTitle}>Ограничения</Text>
               <View style={styles.badgesWrap}>
                 {client.restrictions.map((restriction) => (
@@ -181,6 +181,9 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing["3xl"]
   },
+  restrictionsSection: {
+    paddingBottom: theme.spacing.lg
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -197,6 +200,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvasSoft,
     paddingVertical: theme.spacing.xs
   },
+  clientDataGroup: {
+    borderRadius: theme.radius.lg
+  },
   badgesWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -204,6 +210,7 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xs
   },
   emptyPanel: {
+    marginTop: theme.spacing.sm,
     minHeight: theme.sizes.alertCompactMinHeight,
     alignItems: "center",
     justifyContent: "center",

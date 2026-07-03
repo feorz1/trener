@@ -1,7 +1,7 @@
 import { createInitialState } from "../seeds/mockSeed";
 import type { LocalDataState } from "../local/localState";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout } from "../local/localState";
-import { LOCAL_OWNER_ID, type OwnerId } from "../types";
+import { LOCAL_OWNER_ID, type Exercise, type OwnerId } from "../types";
 import { CURRENT_SCHEMA_VERSION, type PersistedSnapshot } from "./PersistedSnapshot";
 
 function getLatestId<T extends { id: string }>(items: T[]) {
@@ -37,13 +37,24 @@ function withOwner<T extends { ownerId?: OwnerId }>(item: T): T & { ownerId: Own
   };
 }
 
+function mergeSeedExercise(seed: Exercise | undefined, persisted: Exercise): Exercise {
+  if (!seed || persisted.source === "custom") return persisted;
+  return {
+    ...seed,
+    ...persisted,
+    source: persisted.source ?? seed.source,
+    resultType: persisted.resultType ?? seed.resultType,
+    searchAliases: persisted.searchAliases ?? seed.searchAliases
+  };
+}
+
 export function hydrateDataState(snapshot: PersistedSnapshot): LocalDataState {
   const seed = createInitialState();
   const clients = snapshot.data.clients.map((client) => withOwner(cloneClient(client)));
   const persistedExercises = (snapshot.data.exercises ?? []).map((exercise) => withOwner(cloneExercise(exercise)));
   const exerciseById = {
     ...seed.exercisesById,
-    ...Object.fromEntries(persistedExercises.map((exercise) => [exercise.id, exercise]))
+    ...Object.fromEntries(persistedExercises.map((exercise) => [exercise.id, mergeSeedExercise(seed.exercisesById[exercise.id], exercise)]))
   };
   const exerciseIds = Array.from(new Set([...seed.exerciseIds, ...persistedExercises.map((exercise) => exercise.id)]));
   const workouts = snapshot.data.workouts.map((workout) => withOwner(cloneWorkout(workout)));

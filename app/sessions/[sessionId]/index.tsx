@@ -4,8 +4,17 @@ import { Alert as NativeAlert, ScrollView, StyleSheet, Text, View } from "react-
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Alert, Approach, Badge, Button, Divider, Header, Loader, Navigation, ProgressBar, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui";
 import { useClient, useDataMutation, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
-import { formatSessionDate } from "@/features/workouts/sessionHistory";
-import { defaultWorkoutResultType, formatResultDuration, formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
+import { defaultWorkoutResultType, formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
+import {
+  getLegacyValues,
+  getTimerElapsedSeconds,
+  getTrackingPreset,
+  hasAnyMetricValue,
+  normalizeTrackingType,
+  pickCompatibleValues,
+  valuesToLegacyFields,
+  type SetTimerState
+} from "@/features/workouts/tracking";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -37,6 +46,13 @@ function buildSessionExerciseSets(workoutSets: Workout["exercises"][number]["set
         id: set.id,
         index: set.order,
         resultType,
+        values: getLegacyValues({
+          values: set.values,
+          weight: set.actualWeightKg ?? set.targetWeightKg,
+          reps: set.actualReps ?? set.targetReps,
+          durationSeconds: set.actualDurationSeconds ?? set.targetDurationSeconds,
+          distanceMeters: set.actualDistanceMeters ?? set.targetDistanceMeters
+        }),
         reps: set.actualReps ?? set.targetReps,
         weight: set.actualWeightKg ?? set.targetWeightKg,
         durationSeconds: set.actualDurationSeconds ?? set.targetDurationSeconds,
@@ -54,6 +70,25 @@ function buildSessionWorkout(workout?: Workout) {
     ...exercise,
     sets: buildSessionExerciseSets(sets, exercise.resultType ?? defaultWorkoutResultType)
   }));
+}
+
+function mergeSessionExercises(current: SessionExercise[], incoming: SessionExercise[]) {
+  if (current.length === 0) return incoming;
+
+  return incoming.map((incomingExercise) => {
+    const currentExercise = current.find((exercise) => exercise.id === incomingExercise.id);
+    if (!currentExercise) return incomingExercise;
+
+    const incomingSetIds = new Set(incomingExercise.sets.map((set) => set.id));
+    const localSets = currentExercise.sets.filter((set) => !incomingSetIds.has(set.id));
+
+    if (localSets.length === 0) return incomingExercise;
+
+    return {
+      ...incomingExercise,
+      sets: normalizeSetIndexes([...incomingExercise.sets, ...localSets])
+    };
+  });
 }
 
 export default function WorkoutSessionScreen() {
@@ -85,6 +120,13 @@ export default function WorkoutSessionScreen() {
               id: result.setId ?? result.id,
               index: result.setIndex,
               resultType: result.resultType ?? resultType,
+              values: getLegacyValues({
+                values: result.values,
+                weight: result.weight,
+                repetitions: result.repetitions,
+                durationSeconds: result.durationSeconds,
+                distanceMeters: result.distanceMeters
+              }),
               reps: result.repetitions,
               weight: result.weight,
               durationSeconds: result.durationSeconds,
@@ -110,6 +152,7 @@ export default function WorkoutSessionScreen() {
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
   const [sessionExercises, setSessionExercises] = useState(initialSessionExercises);
+  const [activeTimer, setActiveTimer] = useState<SetTimerState | null>(null);
   const sessionStartedAtRef = useRef(session?.startedAt ? new Date(session.startedAt).getTime() : Date.now());
   const nextSetId = useRef(1);
   const completeSessionMutation = useDataMutation(async (id: string) => sessionActions.complete(id));
@@ -117,7 +160,7 @@ export default function WorkoutSessionScreen() {
   const queryError = sessionQuery.error ?? workoutQuery.error ?? clientQuery.error ?? resultsQuery.error;
 
   useEffect(() => {
-    setSessionExercises(initialSessionExercises);
+    setSessionExercises((current) => mergeSessionExercises(current, initialSessionExercises));
     sessionStartedAtRef.current = session?.startedAt ? new Date(session.startedAt).getTime() : Date.now();
     nextSetId.current = 1;
   }, [initialSessionExercises, session?.startedAt]);
@@ -149,10 +192,11 @@ export default function WorkoutSessionScreen() {
         resultType: exercise.resultType ?? defaultWorkoutResultType,
         setIndex: set.index,
         setId: set.id,
-        weight: set.weight,
-        repetitions: set.reps,
-        durationSeconds: set.durationSeconds,
-        distanceMeters: set.distanceMeters,
+        values: set.values,
+        weight: set.values?.weight ?? set.weight,
+        repetitions: set.values?.reps ?? set.reps,
+        durationSeconds: set.values?.duration ?? set.durationSeconds,
+        distanceMeters: set.values?.distance ?? set.distanceMeters,
         unit: set.unit,
         completed: set.state === "selected"
       }).catch(() => undefined);
@@ -162,38 +206,56 @@ export default function WorkoutSessionScreen() {
 
   const handleSetStateChange = useCallback(
     (exerciseId: string, setId: string, state: ApproachSet["state"]) => {
+      const exercise = sessionExercises.find((item) => item.id === exerciseId);
+      if (!exercise) return;
+      const nextSets = normalizeSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, state } : set)));
+      const changedSet = nextSets.find((set) => set.id === setId);
       setSessionExercises((current) =>
-        current.map((exercise) => {
-          if (exercise.id !== exerciseId) return exercise;
-          const nextSets = normalizeSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, state } : set)));
-          const changedSet = nextSets.find((set) => set.id === setId);
-          if (changedSet) persistSet(exercise, changedSet);
-          return {
-            ...exercise,
-            sets: nextSets
-          };
-        })
+        current.map((item) => (item.id === exerciseId ? { ...item, sets: nextSets } : item))
       );
+      if (changedSet) persistSet(exercise, changedSet);
     },
-    [persistSet]
+    [persistSet, sessionExercises]
   );
 
   const handleSetValueChange = useCallback(
     (exerciseId: string, setId: string, patch: ApproachSetValuePatch) => {
+      const exercise = sessionExercises.find((item) => item.id === exerciseId);
+      if (!exercise) return;
+      const nextSets = normalizeSetIndexes(exercise.sets.map((set) => {
+        if (set.id !== setId) return set;
+        const { replaceValues, ...setPatch } = patch;
+        const currentValues = getLegacyValues({
+          values: set.values,
+          weight: set.weight,
+          reps: set.reps,
+          durationSeconds: set.durationSeconds,
+          distanceMeters: set.distanceMeters
+        });
+        const values = patch.values
+          ? replaceValues
+            ? { ...patch.values }
+            : { ...currentValues, ...patch.values }
+          : currentValues;
+        const legacy = valuesToLegacyFields(values);
+        return {
+          ...set,
+          ...setPatch,
+          values,
+          weight: legacy.weight,
+          reps: legacy.repetitions,
+          durationSeconds: legacy.durationSeconds,
+          distanceMeters: legacy.distanceMeters,
+          logged: true
+        };
+      }));
+      const changedSet = nextSets.find((set) => set.id === setId);
       setSessionExercises((current) =>
-        current.map((exercise) => {
-          if (exercise.id !== exerciseId) return exercise;
-          const nextSets = normalizeSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, ...patch, logged: true } : set)));
-          const changedSet = nextSets.find((set) => set.id === setId);
-          if (changedSet) persistSet(exercise, changedSet);
-          return {
-            ...exercise,
-            sets: nextSets
-          };
-        })
+        current.map((item) => (item.id === exerciseId ? { ...item, sets: nextSets } : item))
       );
+      if (changedSet) persistSet(exercise, changedSet);
     },
-    [persistSet]
+    [persistSet, sessionExercises]
   );
 
   const handleSetReorder = useCallback(
@@ -222,32 +284,133 @@ export default function WorkoutSessionScreen() {
     );
   }, [resultActions, results]);
 
-  const handleAddSet = useCallback((exerciseId: string) => {
-    setSessionExercises((current) =>
-      current.map((exercise) => {
-        if (exercise.id !== exerciseId) return exercise;
-        const templateSet = exercise.sets[exercise.sets.length - 1];
-        const nextSet: SessionResultSet = {
-          id: `${exercise.id}-set-${Date.now()}-${nextSetId.current++}`,
-          index: exercise.sets.length + 1,
-          state: "default",
-          resultType: exercise.resultType ?? defaultWorkoutResultType,
-          unit: kgUnit,
-          weight: templateSet?.weight,
-          reps: templateSet?.reps,
-          durationSeconds: templateSet?.durationSeconds,
-          distanceMeters: templateSet?.distanceMeters
-        };
+  const handleRemoveLastSet = useCallback((exerciseId: string) => {
+    const exercise = sessionExercises.find((item) => item.id === exerciseId);
+    const lastSet = exercise?.sets[exercise.sets.length - 1];
+    if (!lastSet || exercise.sets.length <= 1) return;
+    handleDeleteSet(exerciseId, lastSet.id);
+  }, [handleDeleteSet, sessionExercises]);
 
-        const nextExercise = {
-          ...exercise,
-          sets: normalizeSetIndexes([...exercise.sets, nextSet])
-        };
-        persistSet(nextExercise, nextSet);
-        return nextExercise;
-      })
+  const handleDeleteExercise = useCallback((exerciseItemId: string) => {
+    const exercise = sessionExercises.find((item) => item.id === exerciseItemId);
+    if (!exercise || !sessionId) return;
+
+    setActiveTimer((current) => (current?.exerciseId === exerciseItemId ? null : current));
+    setSessionExercises((current) => current.filter((item) => item.id !== exerciseItemId));
+
+    results
+      .filter((result) =>
+        result.sessionId === sessionId &&
+        (result.sessionExerciseItemId ? result.sessionExerciseItemId === exerciseItemId : result.exerciseId === exercise.exerciseId)
+      )
+      .forEach((result) => {
+        void resultActions.remove(result.id).catch(() => undefined);
+      });
+
+    void sessionActions.removeExercise(sessionId, exercise.exerciseId).catch(() => undefined);
+  }, [resultActions, results, sessionActions, sessionExercises, sessionId]);
+
+  const handleAddSet = useCallback((exerciseId: string) => {
+    const exercise = sessionExercises.find((item) => item.id === exerciseId);
+    if (!exercise) return;
+    const lastSet = exercise.sets[exercise.sets.length - 1];
+    const copiedValues = getLegacyValues({
+      values: lastSet?.values,
+      weight: lastSet?.weight,
+      reps: lastSet?.reps,
+      durationSeconds: lastSet?.durationSeconds,
+      distanceMeters: lastSet?.distanceMeters
+    });
+    const legacy = valuesToLegacyFields(copiedValues);
+    const nextSet: SessionResultSet = {
+      id: `${exercise.id}-set-${Date.now()}-${nextSetId.current++}`,
+      index: exercise.sets.length + 1,
+      state: "default",
+      resultType: exercise.resultType ?? defaultWorkoutResultType,
+      unit: kgUnit,
+      values: copiedValues,
+      weight: legacy.weight,
+      reps: legacy.repetitions,
+      durationSeconds: legacy.durationSeconds,
+      distanceMeters: legacy.distanceMeters
+    };
+    const nextSets = normalizeSetIndexes([...exercise.sets, nextSet]);
+    setSessionExercises((current) =>
+      current.map((item) => (item.id === exerciseId ? { ...item, sets: nextSets } : item))
     );
-  }, [persistSet]);
+    if (hasAnyMetricValue(copiedValues)) {
+      persistSet({ ...exercise, sets: nextSets }, nextSet);
+    }
+  }, [persistSet, sessionExercises]);
+
+  const updateTimerSetValue = useCallback(
+    (timer: SetTimerState, seconds: number) => {
+      handleSetValueChange(timer.exerciseId, timer.setId, { values: { [timer.metricKey]: seconds } });
+    },
+    [handleSetValueChange]
+  );
+
+  const handleStartTimer = useCallback(
+    (exerciseId: string, setId: string, metricKey: "duration" | "interval", mode: SetTimerState["mode"], targetSeconds?: number) => {
+      if (activeTimer && activeTimer.status === "running" && (activeTimer.exerciseId !== exerciseId || activeTimer.setId !== setId || activeTimer.metricKey !== metricKey)) {
+        NativeAlert.alert("Уже запущен другой таймер", "Сначала завершите или сбросьте активный таймер.", [{ text: "Понятно", style: "cancel" }]);
+        return;
+      }
+
+      if (mode === "countdown" && !Number.isFinite(targetSeconds)) {
+        NativeAlert.alert("Введите время", "Чтобы запустить обратный отсчёт, сначала заполните поле времени.");
+        return;
+      }
+
+      const now = Date.now();
+      setActiveTimer({
+        workoutId: session?.workoutId ?? "",
+        exerciseId,
+        setId,
+        metricKey,
+        mode,
+        status: "running",
+        targetSeconds: mode === "countdown" ? targetSeconds : undefined,
+        startedAt: now,
+        endsAt: mode === "countdown" && targetSeconds ? now + targetSeconds * 1000 : undefined,
+        accumulatedSeconds: 0
+      });
+    },
+    [activeTimer, session?.workoutId]
+  );
+
+  const pauseTimer = useCallback(() => {
+    setActiveTimer((current) => current ? { ...current, status: "paused", accumulatedSeconds: getTimerElapsedSeconds(current), startedAt: undefined, endsAt: undefined } : current);
+  }, []);
+
+  const resumeTimer = useCallback(() => {
+    setActiveTimer((current) => {
+      if (!current) return current;
+      const now = Date.now();
+      const remaining = Math.max(0, (current.targetSeconds ?? 0) - current.accumulatedSeconds);
+      return {
+        ...current,
+        status: "running",
+        startedAt: now,
+        endsAt: current.mode === "countdown" ? now + remaining * 1000 : undefined
+      };
+    });
+  }, []);
+
+  const finishTimer = useCallback(() => {
+    setActiveTimer((current) => {
+      if (!current) return current;
+      const elapsed = current.mode === "countdown"
+        ? Math.min(current.targetSeconds ?? getTimerElapsedSeconds(current), getTimerElapsedSeconds(current))
+        : getTimerElapsedSeconds(current);
+      updateTimerSetValue(current, elapsed);
+      return null;
+    });
+  }, [updateTimerSetValue]);
+
+  const resetTimer = useCallback(() => {
+    setActiveTimer(null);
+  }, []);
 
   const completeSession = useCallback(async () => {
     if (!sessionId || completeSessionMutation.isSubmitting) return;
@@ -347,10 +510,18 @@ export default function WorkoutSessionScreen() {
                   exercise={exercise}
                   onAddSet={() => handleAddSet(exercise.id)}
                   onDeleteSet={(setId) => handleDeleteSet(exercise.id, setId)}
+                  onDeleteExercise={() => handleDeleteExercise(exercise.id)}
+                  onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
                   onNoteChange={(nextNote) => handleNoteChange(exercise.id, nextNote)}
                   onSetStateChange={(id, state) => handleSetStateChange(exercise.id, id, state)}
                   onSetValueChange={(id, patch) => handleSetValueChange(exercise.id, id, patch)}
                   onSetsReorder={(nextSets) => handleSetReorder(exercise.id, nextSets)}
+                  activeTimer={activeTimer?.exerciseId === exercise.id ? activeTimer : null}
+                  onStartTimer={(setId, metricKey, mode, targetSeconds) => handleStartTimer(exercise.id, setId, metricKey, mode, targetSeconds)}
+                  onPauseTimer={pauseTimer}
+                  onResumeTimer={resumeTimer}
+                  onFinishTimer={finishTimer}
+                  onResetTimer={resetTimer}
                 />
               );
             })}
@@ -412,10 +583,18 @@ function SessionExerciseCard({
   exercise,
   onAddSet,
   onDeleteSet,
+  onDeleteExercise,
+  onRemoveLastSet,
   onNoteChange,
   onSetStateChange,
   onSetValueChange,
-  onSetsReorder
+  onSetsReorder,
+  activeTimer,
+  onStartTimer,
+  onPauseTimer,
+  onResumeTimer,
+  onFinishTimer,
+  onResetTimer
 }: {
   clientId?: string;
   currentSessionId: string;
@@ -423,75 +602,91 @@ function SessionExerciseCard({
   exercise: SessionExercise;
   onAddSet: () => void;
   onDeleteSet: (setId: string) => void;
+  onDeleteExercise: () => void;
+  onRemoveLastSet: () => void;
   onNoteChange: (nextNote: string) => void;
   onSetStateChange: (id: string, state: ApproachSet["state"]) => void;
   onSetValueChange: (id: string, patch: ApproachSetValuePatch) => void;
   onSetsReorder: (nextSets: ApproachSet[]) => void;
+  activeTimer?: SetTimerState | null;
+  onStartTimer: (setId: string, metricKey: "duration" | "interval", mode: SetTimerState["mode"], targetSeconds?: number) => void;
+  onPauseTimer: () => void;
+  onResumeTimer: () => void;
+  onFinishTimer: () => void;
+  onResetTimer: () => void;
 }) {
+  const trackingPreset = getTrackingPreset(exercise.resultType ?? defaultWorkoutResultType);
   const previousPerformanceInput = {
     clientId,
     exerciseId: exercise.exerciseId,
-    resultType: exercise.resultType ?? defaultWorkoutResultType,
+    resultType: normalizeTrackingType(exercise.resultType ?? defaultWorkoutResultType),
     before,
     excludeSessionId: currentSessionId
   };
   const { previousPerformance } = usePreviousExercisePerformance(previousPerformanceInput);
+  const previousSets = useMemo<ApproachSet[]>(
+    () =>
+      previousPerformance?.sets.map((set) => ({
+        id: `${previousPerformance.sessionId}-${set.setIndex}`,
+        index: set.setIndex,
+        resultType: set.resultType,
+        values: pickCompatibleValues(getLegacyValues({
+          values: set.values,
+          weight: set.weight,
+          repetitions: set.repetitions,
+          durationSeconds: set.durationSeconds,
+          distanceMeters: set.distanceMeters
+        }), trackingPreset.type),
+        weight: set.weight,
+        reps: set.repetitions,
+        durationSeconds: set.durationSeconds,
+        distanceMeters: set.distanceMeters,
+        unit: set.unit
+      })).filter((set) => hasAnyMetricValue(set.values) || trackingPreset.type === "completion_only") ?? [],
+    [previousPerformance, trackingPreset.type]
+  );
 
   return (
     <View style={styles.exerciseWrapper}>
-      <View style={styles.previousResult}>
-        <Text style={styles.previousTitle}>Предыдущий результат</Text>
-        {previousPerformance ? (
-          <View style={styles.previousBody}>
-            <Text style={styles.previousDate}>{formatSessionDate(previousPerformance.completedAt)}</Text>
-            {previousPerformance.sets.map((set, index) => (
-              <Text key={`${previousPerformance.sessionId}-${set.setIndex}-${index}`} style={styles.previousSet}>
-                {set.setIndex}. {formatPreviousSet(set)}
-              </Text>
-            ))}
-          </View>
-        ) : (
-          <Text style={styles.previousEmpty}>Ранее не выполнялось</Text>
-        )}
-      </View>
       <Approach
         title={exercise.exerciseName}
         note={exercise.comment}
+        previousSets={previousSets}
+        trackingPreset={trackingPreset}
         noteTitle="Заметка"
         noteSaveLabel="Сохранить"
         addLabel="Добавить подход"
         sets={exercise.sets}
+        activeTimer={activeTimer}
         showDeleteAction
         style={styles.exerciseCard}
         onAddSet={onAddSet}
+        onRemoveLastSet={onRemoveLastSet}
         onDeleteSet={onDeleteSet}
+        onDeleteExercise={onDeleteExercise}
         onNoteChange={onNoteChange}
         onSetStateChange={onSetStateChange}
         onSetValueChange={onSetValueChange}
         onSetsReorder={onSetsReorder}
+        onStartTimer={onStartTimer}
+        onPauseTimer={onPauseTimer}
+        onResumeTimer={onResumeTimer}
+        onFinishTimer={onFinishTimer}
+        onResetTimer={onResetTimer}
       />
     </View>
   );
 }
 
-function formatPreviousSet(set: { resultType?: string; weight?: number; repetitions?: number; durationSeconds?: number; distanceMeters?: number; unit?: string }) {
-  if (set.resultType === "duration") return Number.isFinite(set.durationSeconds) ? formatResultDuration(set.durationSeconds ?? 0) : "без данных";
-  if (set.resultType === "distance_duration") {
-    const parts: string[] = [];
-    if (Number.isFinite(set.distanceMeters)) parts.push(`${set.distanceMeters} м`);
-    if (Number.isFinite(set.durationSeconds)) parts.push(formatResultDuration(set.durationSeconds ?? 0));
-    return parts.join(" × ") || "без данных";
-  }
-  if (set.resultType === "reps") return Number.isFinite(set.repetitions) ? `${set.repetitions} повт.` : "без данных";
-  if (Number.isFinite(set.weight) && Number.isFinite(set.repetitions)) return `${set.weight} ${set.unit ?? "кг"} × ${set.repetitions}`;
-  if (Number.isFinite(set.repetitions)) return `${set.repetitions} повт.`;
-  if (Number.isFinite(set.weight)) return `${set.weight} ${set.unit ?? "кг"}`;
-  return "без данных";
-}
-
 function isLoggedIncompleteSet(set: SessionResultSet) {
   if (set.state === "selected") return false;
-  return Number.isFinite(set.weight) || Number.isFinite(set.reps) || Number.isFinite(set.durationSeconds) || Number.isFinite(set.distanceMeters);
+  return hasAnyMetricValue(getLegacyValues({
+    values: set.values,
+    weight: set.weight,
+    reps: set.reps,
+    durationSeconds: set.durationSeconds,
+    distanceMeters: set.distanceMeters
+  }));
 }
 
 function WorkoutTimerBadge({ startedAtRef }: { startedAtRef: MutableRefObject<number> }) {

@@ -7,16 +7,16 @@ import { Alert, Badge, Button, Divider, ListItemGym, Loader, Navigation, Progres
 import { useClient, useSession, useSessionResults, useWorkout } from "@/data";
 import {
   defaultWorkoutResultType,
-  formatResultDuration,
   getCompletedSets,
   summarizeWorkoutResult,
   type WorkoutResultSnapshot
 } from "@/features/workouts/sessionResult";
 import { getSessionTotalVolume } from "@/features/workouts/sessionHistory";
+import { formatPreviousSetValue, getLegacyValues } from "@/features/workouts/tracking";
 import { WorkoutSummaryLightRays } from "@/features/workouts/WorkoutSummaryLightRays";
 import { workoutSummaryLightRaysDefaultConfig } from "@/features/workouts/WorkoutSummaryLightRaysConfig";
 import { theme } from "@/theme";
-import type { WorkoutSession } from "@/types";
+import type { WorkoutResultType, WorkoutSession } from "@/types";
 
 type RouteParams = {
   sessionId?: string | string[];
@@ -47,6 +47,13 @@ function buildSnapshot(session: WorkoutSession, clientName: string, results: Ret
           id: set.setId ?? set.id,
           index: set.setIndex,
           resultType: set.resultType ?? exercise.resultTypeSnapshot ?? defaultWorkoutResultType,
+          values: getLegacyValues({
+            values: set.values,
+            weight: set.weight,
+            repetitions: set.repetitions,
+            durationSeconds: set.durationSeconds,
+            distanceMeters: set.distanceMeters
+          }),
           reps: set.repetitions,
           weight: set.weight,
           durationSeconds: set.durationSeconds,
@@ -59,22 +66,15 @@ function buildSnapshot(session: WorkoutSession, clientName: string, results: Ret
   };
 }
 
-function formatSetLabel(set: { resultType?: string; reps?: number; weight?: number; durationSeconds?: number; distanceMeters?: number; unit?: string }) {
-  if (set.resultType === "duration") return Number.isFinite(set.durationSeconds) ? formatResultDuration(set.durationSeconds ?? 0) : "без данных";
-  if (set.resultType === "distance_duration") {
-    const parts: string[] = [];
-    if (Number.isFinite(set.distanceMeters)) parts.push(`${set.distanceMeters} м`);
-    if (Number.isFinite(set.durationSeconds)) parts.push(formatResultDuration(set.durationSeconds ?? 0));
-    return parts.join(" × ") || "без данных";
-  }
-  if (set.resultType === "reps") return Number.isFinite(set.reps) ? `${set.reps} повт.` : "без данных";
-
-  const hasReps = Number.isFinite(set.reps);
-  const hasWeight = Number.isFinite(set.weight);
-
-  if (hasReps && hasWeight) return `${set.reps}x${set.weight}${set.unit ?? "кг"}`;
-  if (hasReps) return `${set.reps} повт.`;
-  return "без данных";
+function formatSetLabel(set: { resultType?: WorkoutResultType; values?: Record<string, number>; reps?: number; weight?: number; durationSeconds?: number; distanceMeters?: number; unit?: string }) {
+  const label = formatPreviousSetValue(set.resultType, getLegacyValues({
+    values: set.values,
+    weight: set.weight,
+    reps: set.reps,
+    durationSeconds: set.durationSeconds,
+    distanceMeters: set.distanceMeters
+  }));
+  return label === "—" ? "без данных" : label;
 }
 
 function formatSummaryDuration(totalSeconds: number) {
@@ -294,7 +294,7 @@ export default function WorkoutSummaryScreen() {
                         id: set.id,
                         label: formatSetLabel(set)
                       }))
-                    : [{ id: `${exercise.id}-missing-data`, label: "выполненных подходов нет" }];
+                    : [{ id: `${exercise.id}-missing-data`, label: "подходов нет" }];
 
                 return (
                   <ListItemGym

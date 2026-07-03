@@ -36,6 +36,8 @@ export type CreateExerciseInput = {
   primaryMuscles: string[];
   secondaryMuscles?: string[];
   equipment?: string;
+  resultType?: WorkoutResultType;
+  searchAliases?: string[];
   coachNotes?: string;
   notes?: string;
 };
@@ -81,6 +83,7 @@ export type UpsertWorkoutResultInput = {
   resultType?: WorkoutResultType;
   setIndex: number;
   setId?: string;
+  values?: WorkoutResult["values"];
   weight?: number;
   repetitions?: number;
   durationSeconds?: number;
@@ -107,6 +110,7 @@ export type PreviousExercisePerformance = {
   sets: Array<{
     setIndex: number;
     resultType: WorkoutResultType;
+    values?: WorkoutResult["values"];
     weight?: number;
     repetitions?: number;
     durationSeconds?: number;

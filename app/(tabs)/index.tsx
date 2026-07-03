@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { router, useLocalSearchParams } from "expo-router";
-import { AccessibilityInfo, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { AccessibilityInfo, Animated, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calendar/CalendarDayStrip";
 import { Alert, Button, Card, Header, Icon } from "@/components/ui";
-import { isActiveSessionConflictError, useClients, useDataMutation, useLatestWorkoutDraft, useResults, useSessionActions, useSessions, useWorkoutActions, useWorkouts } from "@/data";
+import { isActiveSessionConflictError, useClients, useDataMutation, useLatestWorkoutDraft, useResults, useSessionActions, useSessions, useWorkouts } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { Client, Workout, WorkoutResult, WorkoutSession, WorkoutStatus } from "@/types";
@@ -37,8 +37,13 @@ const repeatDayByNativeWeekday: Record<number, RepeatDay> = {
 };
 const repeatDayKeys = new Set<RepeatDay>(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
 const FAB_SCROLL_REVEAL_DELAY = 140;
+const FAB_VISIBILITY_ANIMATION_DURATION = 150;
+const FAB_HIDDEN_TRANSLATE_Y = theme.spacing.md;
+const FAB_HIDDEN_SCALE = 0.96;
+const FAB_PRESSED_SCALE = 0.96;
 const FAB_HIT_SLOP = theme.spacing.xxs;
 const FLOATING_ADD_SIZE = theme.sizes.buttonLgHeight;
+const WEB_TABS_HEADER_OFFSET = Platform.OS === "web" ? theme.sizes.navigationHeight : theme.spacing[0];
 
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
@@ -235,7 +240,6 @@ export default function IndexScreen() {
   const { results } = useResults();
   const { draft: latestDraft } = useLatestWorkoutDraft();
   const sessions = useSessionActions();
-  const workoutActions = useWorkoutActions();
   const {
     plannedDate
   } = useLocalSearchParams<{
@@ -264,11 +268,12 @@ export default function IndexScreen() {
   const fabProgress = useRef(new Animated.Value(1)).current;
   const fabRevealTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { scrollProps } = useConditionalScroll();
-  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0) + WEB_TABS_HEADER_OFFSET;
   const floatingAddBottom = Math.max(insets.bottom, theme.spacing.xl) + theme.sizes.tabBarItemMinHeight + theme.spacing.lg;
   const startSessionMutation = useDataMutation(async (workoutId: string) => sessions.start(workoutId));
-  const createDraftMutation = useDataMutation(async (startsAt?: string) => workoutActions.createDraft({ startsAt }));
-  const actionError = startSessionMutation.error ?? createDraftMutation.error;
+  const actionError = isActiveSessionConflictError(startSessionMutation.error)
+    ? null
+    : startSessionMutation.error;
 
   useEffect(() => {
     if (plannedDateKey) {
@@ -326,7 +331,7 @@ export default function IndexScreen() {
       setFabHidden(!visible);
       Animated.timing(fabProgress, {
         toValue: visible ? 1 : 0,
-        duration: reduceMotionEnabled ? 0 : 160,
+        duration: reduceMotionEnabled ? 0 : FAB_VISIBILITY_ANIMATION_DURATION,
         useNativeDriver: true
       }).start();
     },
@@ -413,8 +418,6 @@ export default function IndexScreen() {
   };
 
   const openPlanningChoice = async () => {
-    if (createDraftMutation.isSubmitting) return;
-
     if (latestDraft) {
       router.push({
         pathname: "/workouts/planning",
@@ -423,12 +426,9 @@ export default function IndexScreen() {
       return;
     }
 
-    const draft = await createDraftMutation.mutate(parseDateKey(selectedDayKey)?.toISOString()).catch(() => null);
-    if (!draft) return;
-
     router.push({
       pathname: "/workouts/client-select",
-      params: { draftId: draft.id }
+      params: { date: selectedDayKey }
     });
   };
 
@@ -460,7 +460,7 @@ export default function IndexScreen() {
           <View style={styles.headerRow}>
             <Header title="Тренировки" showSubtitle={false} size="xl" style={styles.header} />
             {!isToday ? (
-              <Button label="Сегодня" type="secondaryNeutral" size="medium" style={styles.todayButton} onPress={selectToday} accessibilityLabel="Показать сегодняшний день" />
+              <Button label="Сегодня" type="secondaryNeutral" size="medium" onPress={selectToday} accessibilityLabel="Показать сегодняшний день" />
             ) : null}
           </View>
 
@@ -519,20 +519,20 @@ export default function IndexScreen() {
                     {
                       translateY: fabProgress.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [theme.spacing.xl, 0]
+                        outputRange: [FAB_HIDDEN_TRANSLATE_Y, 0]
                       })
                     },
                     {
                       scale: fabProgress.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [0.92, 1]
+                        outputRange: [FAB_HIDDEN_SCALE, 1]
                       })
                     }
                   ]
             }
           ]}
         >
-          <FloatingAddWorkoutButton disabled={createDraftMutation.isSubmitting} onPress={openPlanningChoice} />
+          <FloatingAddWorkoutButton onPress={openPlanningChoice} />
         </Animated.View>
       ) : null}
 
@@ -550,7 +550,7 @@ function FloatingAddWorkoutButton({ disabled, onPress }: { disabled?: boolean; o
       disabled={disabled}
       hitSlop={FAB_HIT_SLOP}
       onPress={onPress}
-      style={({ pressed }) => [styles.floatingAddButton, disabled && styles.floatingAddButtonDisabled, pressed && styles.floatingAddButtonPressed]}
+      style={({ pressed }) => [styles.floatingAddButton, disabled && styles.floatingAddButtonDisabled, pressed && !disabled && styles.floatingAddButtonPressed]}
     >
       <View pointerEvents="none" style={styles.floatingAddShadow} />
       <LiquidGlassView
@@ -582,7 +582,7 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm
   },
   headerRow: {
-    minHeight: theme.sizes.buttonSmHeight,
+    minHeight: theme.sizes.buttonMediumHeight,
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.md
@@ -592,10 +592,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing[0],
     paddingTop: theme.spacing[0],
     paddingBottom: theme.spacing[0]
-  },
-  todayButton: {
-    height: theme.sizes.buttonSmHeight,
-    minHeight: theme.sizes.buttonSmHeight
   },
   cards: {
     gap: theme.spacing.md
@@ -623,7 +619,7 @@ const styles = StyleSheet.create({
     ...theme.shadows.glassAction
   },
   floatingAddButtonPressed: {
-    opacity: 0.86
+    transform: [{ scale: FAB_PRESSED_SCALE }]
   },
   floatingAddButtonDisabled: {
     opacity: 0.45

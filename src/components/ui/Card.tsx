@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 import { Button } from "./Button";
 import { Icon, type IconName } from "./Icon";
@@ -8,6 +8,11 @@ import { ProgressBar } from "./ProgressBar";
 export type CardVariant = "dayPlan" | "workout" | "addWorkout";
 export type CardDayPlanState = "plan" | "planNext";
 export type CardWorkoutStatus = "planned" | "inProgress" | "completed";
+
+const WORKOUT_CARD_PRESSED_SCALE = 0.96;
+const WORKOUT_CARD_PRESS_IN_DURATION = 120;
+const WORKOUT_CARD_PRESS_OUT_DURATION = 180;
+const WORKOUT_CARD_PRESS_EASING = Easing.bezier(0.2, 0, 0, 1);
 
 export type CardProps = Omit<PressableProps, "children" | "style"> & {
   variant?: CardVariant;
@@ -66,6 +71,7 @@ export function Card({
   ...pressableProps
 }: CardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const workoutPressScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -118,14 +124,33 @@ export function Card({
   const progressLabel = `${completedExercises} из ${totalExercises} упражнений`;
   const workoutAction = isCompleted ? undefined : isInProgress ? onContinue : onStart;
   const workoutActionLabel = isInProgress ? continueLabel : startLabel;
+  const animateWorkoutPress = (toValue: number, duration: number) => {
+    Animated.timing(workoutPressScale, {
+      toValue,
+      duration,
+      easing: WORKOUT_CARD_PRESS_EASING,
+      useNativeDriver: true
+    }).start();
+  };
+  const handleWorkoutPressIn: PressableProps["onPressIn"] = (event) => {
+    pressableProps.onPressIn?.(event);
+    animateWorkoutPress(WORKOUT_CARD_PRESSED_SCALE, WORKOUT_CARD_PRESS_IN_DURATION);
+  };
+  const handleWorkoutPressOut: PressableProps["onPressOut"] = (event) => {
+    pressableProps.onPressOut?.(event);
+    animateWorkoutPress(1, WORKOUT_CARD_PRESS_OUT_DURATION);
+  };
 
   return (
-    <Pressable
-      {...pressableProps}
-      accessibilityLabel={pressableProps.accessibilityLabel ?? (workoutAction ? `${workoutActionLabel}: ${muscleGroup}, ${clientName}` : undefined)}
-      accessibilityRole={workoutAction || pressableProps.onPress ? "button" : undefined}
-      onPress={pressableProps.onPress ?? workoutAction}
-      style={({ pressed }) => [styles.workoutRoot, menuOpen && styles.workoutRootWithMenu, pressed && styles.pressed, style]}
+    <Animated.View style={[styles.workoutFrame, menuOpen && styles.workoutRootWithMenu, { transform: [{ scale: workoutPressScale }] }, style]}>
+      <Pressable
+        {...pressableProps}
+        accessibilityLabel={pressableProps.accessibilityLabel ?? (workoutAction ? `${workoutActionLabel}: ${muscleGroup}, ${clientName}` : undefined)}
+        accessibilityRole={workoutAction || pressableProps.onPress ? "button" : undefined}
+        onPress={pressableProps.onPress ?? workoutAction}
+        onPressIn={handleWorkoutPressIn}
+        onPressOut={handleWorkoutPressOut}
+        style={styles.workoutRoot}
     >
       <View style={styles.workoutContent}>
         <View style={styles.workoutHeader}>
@@ -206,7 +231,8 @@ export function Card({
           )}
         </View>
       ) : null}
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -228,6 +254,7 @@ const styles = StyleSheet.create({
   },
   planCount: {
     ...theme.typography.display.sm,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.primary
   },
   planMeta: {
@@ -250,6 +277,9 @@ const styles = StyleSheet.create({
   },
   workoutRootWithMenu: {
     zIndex: 30
+  },
+  workoutFrame: {
+    alignSelf: "stretch"
   },
   addWorkoutRoot: {
     alignSelf: "stretch",
@@ -274,7 +304,7 @@ const styles = StyleSheet.create({
     ...theme.shadows.glassAction
   },
   addWorkoutActionPressed: {
-    opacity: 0.86
+    transform: [{ scale: 0.96 }]
   },
   addWorkoutActionFill: {
     flex: 1,
@@ -288,9 +318,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderRadius: theme.radius.pill,
     backgroundColor: theme.colors.background.glassOverlay
-  },
-  pressed: {
-    backgroundColor: theme.colors.content.primaryPale
   },
   workoutContent: {
     position: "relative",
@@ -396,6 +423,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     ...theme.typography.body.smStrong,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.ink
   },
   metaDot: {

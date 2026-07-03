@@ -68,6 +68,7 @@ const styles = StyleSheet.create({
   label: {
     flex: 1,
     ...theme.typography.body.smStrong,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.ink
   },
   track: {

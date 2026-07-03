@@ -516,9 +516,9 @@ assert.equal(resultTypeSummary.loggedExercises, 4);
 assert.equal(resultTypeSummary.loggedSets, 4);
 assert.equal(resultTypeSummary.totalVolumeKg, 200);
 assert.equal(getSessionTotalVolume(resultTypeResults), 200);
-assert.equal(formatResultSet({ resultType: "reps", repetitions: 18 }), "18 повт.");
-assert.equal(formatResultSet({ resultType: "duration", durationSeconds: 75 }), "01:15");
-assert.equal(formatResultSet({ resultType: "distance_duration", distanceMeters: 400, durationSeconds: 120 }), "400 м × 02:00");
+assert.equal(formatResultSet({ resultType: "reps", repetitions: 18 }), "18");
+assert.equal(formatResultSet({ resultType: "duration", durationSeconds: 75 }), "1:15");
+assert.equal(formatResultSet({ resultType: "distance_duration", distanceMeters: 400, durationSeconds: 120 }), "400м·2:00");
 
 async function runAsyncStatePrimitiveTests() {
   const retryCalls: string[] = [];

@@ -1,5 +1,6 @@
 import type { ApproachSet } from "@/components/ui";
 import type { WorkoutResultType } from "@/types";
+import { getLegacyValues, isSetCompleteAllowed, normalizeTrackingType, pickCompatibleValues } from "./tracking";
 
 export type SessionResultSet = ApproachSet & {
   resultType?: WorkoutResultType;
@@ -61,10 +62,17 @@ export function isLoggedCompletedSet(set: SessionResultSet) {
   if (!isCompletedSet(set)) return false;
 
   const resultType = getSetResultType(set);
-  if (resultType === "weight_reps") return isPositiveNumber(set.weight) && isPositiveNumber(set.reps);
-  if (resultType === "reps") return isPositiveNumber(set.reps);
-  if (resultType === "duration") return isPositiveNumber(set.durationSeconds);
-  return isPositiveNumber(set.distanceMeters) && isPositiveNumber(set.durationSeconds);
+  const values = pickCompatibleValues(
+    getLegacyValues({
+      values: set.values,
+      weight: set.weight,
+      reps: set.reps,
+      durationSeconds: set.durationSeconds,
+      distanceMeters: set.distanceMeters
+    }),
+    resultType
+  );
+  return isSetCompleteAllowed(resultType, values);
 }
 
 export function getLoggedSets(exercise: SessionResultExercise) {
@@ -78,7 +86,7 @@ export function summarizeWorkoutResult(snapshot: WorkoutResultSnapshot): Workout
   const loggedExercises = snapshot.exercises.filter((exercise) => getLoggedSets(exercise).length > 0).length;
   const loggedSets = snapshot.exercises.flatMap(getLoggedSets);
   const totalVolumeKg = loggedSets.reduce((total, set) => {
-    if (getSetResultType(set) !== "weight_reps") return total;
+    if (normalizeTrackingType(getSetResultType(set)) !== "weight_reps") return total;
     return total + (set.weight ?? 0) * (set.reps ?? 0);
   }, 0);
 

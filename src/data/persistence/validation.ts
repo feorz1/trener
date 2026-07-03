@@ -42,7 +42,36 @@ function isIsoString(value: unknown) {
 }
 
 function isOptionalResultType(value: unknown) {
-  return value === undefined || ["weight_reps", "reps", "duration", "distance_duration"].includes(String(value));
+  return value === undefined || [
+    "weight_reps",
+    "reps",
+    "duration",
+    "distance_duration",
+    "reps_only",
+    "weighted_bodyweight",
+    "assisted_bodyweight",
+    "weight_reps_rpe",
+    "duration_hold",
+    "time_result",
+    "weight_duration",
+    "distance_time",
+    "distance_only",
+    "weight_distance",
+    "time_calories",
+    "calories_only",
+    "cardio_extended",
+    "interval_reps",
+    "amrap",
+    "side_reps",
+    "weight_side_reps",
+    "completion_only"
+  ].includes(String(value));
+}
+
+function isOptionalMetricValues(value: unknown) {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((item) => typeof item === "number" && Number.isFinite(item));
 }
 
 function assertUniqueIds(items: Array<{ id: string }>, entityName: string) {
@@ -72,8 +101,10 @@ function validateExercise(value: unknown, requireOwnerId: boolean): value is Exe
   if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   if (!["strength", "mobility", "cardio"].includes(String(value.category))) return false;
   if (value.source !== undefined && !["built_in", "custom"].includes(String(value.source))) return false;
+  if (!isOptionalResultType(value.resultType)) return false;
   if (!value.primaryMuscles.every(isString)) return false;
   if (value.secondaryMuscles !== undefined && (!Array.isArray(value.secondaryMuscles) || !value.secondaryMuscles.every(isString))) return false;
+  if (value.searchAliases !== undefined && (!Array.isArray(value.searchAliases) || !value.searchAliases.every(isString))) return false;
   return isOptionalString(value.coachNotes) && isOptionalString(value.notes) && isOptionalString(value.archivedAt) && isOptionalString(value.createdAt) && isOptionalString(value.updatedAt);
 }
 
@@ -88,6 +119,7 @@ function validateWorkout(value: unknown, requireOwnerId: boolean): value is Work
     if (!isOptionalResultType(exercise.resultType)) return false;
     return exercise.sets.every((set) => {
       if (!isRecord(set) || !isString(set.id) || typeof set.order !== "number" || !Number.isFinite(set.order) || typeof set.completed !== "boolean") return false;
+      if (!isOptionalMetricValues(set.values)) return false;
       return isFiniteOptionalNumber(set.targetWeightKg)
         && isFiniteOptionalNumber(set.targetReps)
         && isFiniteOptionalNumber(set.targetDurationSeconds)
@@ -112,11 +144,12 @@ function validateSession(value: unknown, requireOwnerId: boolean): value is Work
 function validateResult(value: unknown, requireOwnerId: boolean): value is WorkoutResult {
   if (!isRecord(value) || !isString(value.id) || !isString(value.sessionId) || !isString(value.exerciseId) || typeof value.setIndex !== "number" || !Number.isFinite(value.setIndex) || !isOptionalString(value.setId) || !isOptionalString(value.unit) || !isOptionalString(value.exerciseNameSnapshot) || !isOptionalResultType(value.resultType) || typeof value.completed !== "boolean") return false;
   if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
+  if (!isOptionalMetricValues(value.values)) return false;
   return isFiniteOptionalNumber(value.weight) && isFiniteOptionalNumber(value.repetitions) && isFiniteOptionalNumber(value.durationSeconds) && isFiniteOptionalNumber(value.distanceMeters);
 }
 
 function validateQuickValue(value: unknown, requireOwnerId: boolean): value is QuickValue {
-  if (!isRecord(value) || !isString(value.id) || !isString(value.exerciseId) || !isOptionalString(value.clientId) || !["weight", "reps", "duration", "distance"].includes(String(value.metric)) || !Array.isArray(value.values) || !isIsoString(value.updatedAt)) return false;
+  if (!isRecord(value) || !isString(value.id) || !isString(value.exerciseId) || !isOptionalString(value.clientId) || !isString(value.metric) || !Array.isArray(value.values) || !isIsoString(value.updatedAt)) return false;
   if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   return value.values.every((item) => typeof item === "number" && Number.isFinite(item));
 }

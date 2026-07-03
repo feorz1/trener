@@ -107,11 +107,22 @@ function optionalRecord(source: Record<string, unknown>, key: string): Record<st
   return parsed as Record<string, string>;
 }
 
+function optionalNumberRecord(source: Record<string, unknown>, key: string): Record<string, number> | undefined {
+  const value = source[key];
+  if (value === undefined) return undefined;
+  const parsed = object(value, key);
+  for (const item of Object.values(parsed)) {
+    if (typeof item !== "number" || !Number.isFinite(item)) throw new ApiError("validation", `${key} values must be numbers`, { retryable: false });
+  }
+  return parsed as Record<string, number>;
+}
+
 function parseWorkoutSet(input: unknown): ApiWorkoutSetDto {
   const value = object(input, "workout set");
   return {
     id: stringField(value, "id"),
     order: numberField(value, "order"),
+    values: optionalNumberRecord(value, "values"),
     target_weight_kg: optionalNumberField(value, "target_weight_kg"),
     target_reps: optionalNumberField(value, "target_reps"),
     target_duration_seconds: optionalNumberField(value, "target_duration_seconds"),
@@ -199,6 +210,8 @@ export const apiSchemas = {
         primary_muscles: stringArrayField(value, "primary_muscles"),
         secondary_muscles: optionalStringArrayField(value, "secondary_muscles"),
         equipment: stringField(value, "equipment"),
+        result_type: optionalStringField(value, "result_type") as ApiExerciseDto["result_type"],
+        search_aliases: optionalStringArrayField(value, "search_aliases"),
         coach_notes: optionalStringField(value, "coach_notes"),
         notes: optionalStringField(value, "notes"),
         archived_at: optionalStringField(value, "archived_at"),
@@ -269,6 +282,7 @@ export const apiSchemas = {
         result_type: optionalStringField(value, "result_type") as ApiWorkoutResultDto["result_type"],
         set_index: numberField(value, "set_index"),
         set_id: optionalStringField(value, "set_id"),
+        values: optionalNumberRecord(value, "values"),
         weight: optionalNumberField(value, "weight"),
         repetitions: optionalNumberField(value, "repetitions"),
         duration_seconds: optionalNumberField(value, "duration_seconds"),
@@ -305,6 +319,7 @@ export const apiSchemas = {
           return {
             set_index: numberField(set, "set_index"),
             result_type: stringField(set, "result_type") as ApiPreviousExercisePerformanceDto["sets"][number]["result_type"],
+            values: optionalNumberRecord(set, "values"),
             weight: optionalNumberField(set, "weight"),
             repetitions: optionalNumberField(set, "repetitions"),
             duration_seconds: optionalNumberField(set, "duration_seconds"),

@@ -15,7 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.trainerfoundation"
+      "bundleIdentifier": "com.anonymous.trainerfoundation",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Allow Trainer Foundation to connect to the local development server.",
+        "NSBonjourServices": [
+          "_expo._tcp",
+          "_react-native-metro._tcp"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {

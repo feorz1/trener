@@ -180,6 +180,13 @@ function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function getSelectedStartIso(value?: string) {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 function getLabel<T extends string>(items: { key: T; label?: string; title?: string }[], key: T) {
   const item = items.find((option) => option.key === key);
   return item?.label ?? item?.title ?? key;
@@ -212,7 +219,8 @@ function getClientContactSummary(form: ClientForm) {
 }
 
 export default function NewClientScreen() {
-  const { returnTo, draftId } = useLocalSearchParams<{
+  const { date, returnTo, draftId } = useLocalSearchParams<{
+    date?: string;
     returnTo?: string;
     draftId?: string;
   }>();
@@ -250,13 +258,21 @@ export default function NewClientScreen() {
       }
     });
 
+    const returnToValue = firstParam(returnTo);
     const draftIdValue = firstParam(draftId);
+    let nextDraftId = draftIdValue;
     if (draftIdValue) {
       await workouts.setDraftClient(draftIdValue, createdClient.id);
+    } else if (returnToValue === "/workouts/schedule") {
+      const draft = await workouts.createDraft({
+        clientId: createdClient.id,
+        startsAt: getSelectedStartIso(firstParam(date))
+      });
+      nextDraftId = draft.id;
     }
 
-    return createdClient;
-  }, [clients, draftId, form, workouts]);
+    return { client: createdClient, draftId: nextDraftId };
+  }, [clients, date, draftId, form, returnTo, workouts]);
   const createClientMutation = useDataMutation(createClientAction);
 
   const updateForm = <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => {
@@ -284,18 +300,17 @@ export default function NewClientScreen() {
   const createClient = async () => {
     if (createClientMutation.isSubmitting) return;
 
-    const createdClient = await createClientMutation.mutate().catch(() => null);
-    if (!createdClient) return;
+    const result = await createClientMutation.mutate().catch(() => null);
+    if (!result) return;
 
     if (!firstParam(returnTo)) {
       router.back();
       return;
     }
 
-    const draftIdValue = firstParam(draftId);
     router.replace({
       pathname: firstParam(returnTo) === "/workouts/schedule" ? "/workouts/schedule" : "/workouts/new",
-      params: draftIdValue ? { draftId: draftIdValue } : { clientId: createdClient.id }
+      params: result.draftId ? { draftId: result.draftId } : { clientId: result.client.id }
     });
   };
 

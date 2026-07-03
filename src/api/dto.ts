@@ -55,6 +55,8 @@ export type ApiExerciseDto = {
   primary_muscles: string[];
   secondary_muscles?: string[];
   equipment: string;
+  result_type?: WorkoutResultType;
+  search_aliases?: string[];
   coach_notes?: string;
   notes?: string;
   archived_at?: ApiIsoDateString;
@@ -65,6 +67,7 @@ export type ApiExerciseDto = {
 export type ApiWorkoutSetDto = {
   id: ApiEntityId;
   order: number;
+  values?: Partial<Record<string, number>>;
   target_weight_kg?: number;
   target_reps?: number;
   target_duration_seconds?: number;
@@ -151,6 +154,7 @@ export type ApiWorkoutResultDto = {
   result_type?: WorkoutResultType;
   set_index: number;
   set_id?: ApiEntityId;
+  values?: Partial<Record<string, number>>;
   weight?: number;
   repetitions?: number;
   duration_seconds?: number;
@@ -177,6 +181,7 @@ export type ApiPreviousExercisePerformanceDto = {
   sets: Array<{
     set_index: number;
     result_type: WorkoutResultType;
+    values?: Partial<Record<string, number>>;
     weight?: number;
     repetitions?: number;
     duration_seconds?: number;

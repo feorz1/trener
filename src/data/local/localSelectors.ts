@@ -1,4 +1,5 @@
 import type { ClientId, ExerciseId, OwnerId, PreviousExercisePerformance, QuickValueMetric, SessionId, WorkoutId, WorkoutResult, WorkoutResultType, WorkoutSession } from "../types";
+import { getLegacyValues, normalizeTrackingType } from "@/features/workouts/tracking";
 import { cloneClient, cloneExercise, cloneQuickValue, cloneResult, cloneSession, cloneWorkout, type LocalDataState } from "./localState";
 
 function isOwned<T extends { ownerId: OwnerId }>(item: T | undefined, ownerId: OwnerId): item is T {
@@ -135,12 +136,19 @@ export function selectPreviousExercisePerformance(
       .map((id) => state.resultsById[id])
       .filter((result) => {
         if (result.ownerId !== input.ownerId || result.sessionId !== session.id || result.exerciseId !== input.exerciseId || !result.completed) return false;
-        return input.resultType ? getResultType(session, result) === input.resultType : true;
+        return input.resultType ? normalizeTrackingType(getResultType(session, result)) === normalizeTrackingType(input.resultType) : true;
       })
       .sort((left, right) => left.setIndex - right.setIndex)
       .map((result) => ({
         setIndex: result.setIndex,
         resultType: getResultType(session, result),
+        values: getLegacyValues({
+          values: result.values,
+          weight: result.weight,
+          repetitions: result.repetitions,
+          durationSeconds: result.durationSeconds,
+          distanceMeters: result.distanceMeters
+        }),
         weight: result.weight,
         repetitions: result.repetitions,
         durationSeconds: result.durationSeconds,

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 import { Icon } from "./Icon";
 import { Loader, type LoaderTone } from "./Loader";
@@ -8,6 +8,8 @@ export type ButtonType = "primary" | "secondary" | "secondaryNeutral" | "destruc
 export type ButtonSize = "large" | "medium" | "small" | "mediumIcon" | "smallIcon";
 export type ButtonState = "active" | "disabled" | "loading";
 export type ButtonWidth = "hug" | "fill";
+
+const BUTTON_PRESSED_SCALE = 0.96;
 
 export type ButtonProps = Omit<PressableProps, "children" | "disabled" | "style"> & {
   label?: string;
@@ -59,6 +61,7 @@ export function Button({
   icon,
   style,
   accessibilityLabel,
+  hitSlop,
   ...pressableProps
 }: ButtonProps) {
   const isIconOnly = size === "mediumIcon" || size === "smallIcon";
@@ -66,6 +69,7 @@ export function Button({
   const isLoading = state === "loading";
   const visual = typeStyles[type];
   const resolvedLabel = label ?? (isIconOnly ? undefined : defaultLabels[size]);
+  const resolvedHitSlop = hitSlop ?? getDefaultHitSlop(size);
 
   return (
     <Pressable
@@ -74,11 +78,13 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? resolvedLabel}
       accessibilityState={{ busy: isLoading, disabled: isDisabled }}
       disabled={isDisabled || isLoading}
+      hitSlop={resolvedHitSlop}
       style={({ pressed }) => [
         styles.root,
         getRadiusStyle(size),
         sizeStyles[size],
         width === "fill" && styles.fill,
+        Platform.OS === "web" && styles.webMotion,
         { backgroundColor: visual.backgroundColor },
         isDisabled && styles.disabled,
         pressed && !isDisabled && !isLoading && styles.pressed,
@@ -125,7 +131,12 @@ const styles = StyleSheet.create({
     opacity: 0.45
   },
   pressed: {
-    opacity: 0.86
+    transform: [{ scale: BUTTON_PRESSED_SCALE }]
+  },
+  webMotion: {
+    transitionDuration: "170ms",
+    transitionProperty: "transform",
+    transitionTimingFunction: "cubic-bezier(0.2, 0, 0, 1)"
   },
   label: {
     ...theme.typography.button.md
@@ -145,6 +156,21 @@ function getRadiusStyle(size: ButtonSize) {
   }
 
   return radiusStyles.lg;
+}
+
+function getDefaultHitSlop(size: ButtonSize): PressableProps["hitSlop"] {
+  if (size === "small") {
+    const verticalInset = (theme.sizes.touchTargetMin - theme.sizes.buttonSmallHeight) / 2;
+    return { top: verticalInset, bottom: verticalInset, left: theme.spacing[0], right: theme.spacing[0] };
+  }
+
+  if (size === "smallIcon") {
+    const verticalInset = (theme.sizes.touchTargetMin - theme.sizes.buttonSmallIconHeight) / 2;
+    const horizontalInset = (theme.sizes.touchTargetMin - theme.sizes.buttonSmallIconWidth) / 2;
+    return { top: verticalInset, bottom: verticalInset, left: horizontalInset, right: horizontalInset };
+  }
+
+  return undefined;
 }
 
 const radiusStyles = StyleSheet.create({

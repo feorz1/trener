@@ -1,4 +1,5 @@
 import type { OwnerId } from "./owner";
+import type { WorkoutResultType } from "./workout";
 
 export type ExerciseCategory = "strength" | "mobility" | "cardio";
 export type ExerciseSource = "built_in" | "custom";
@@ -12,6 +13,8 @@ export type Exercise = {
   primaryMuscles: string[];
   secondaryMuscles?: string[];
   equipment: string;
+  resultType?: WorkoutResultType;
+  searchAliases?: string[];
   coachNotes?: string;
   notes?: string;
   archivedAt?: string;

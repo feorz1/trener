@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   Image,
   Pressable,
@@ -85,14 +85,57 @@ export function ListItemGym({
   onDelete,
   style,
   accessibilityLabel,
+  onPress,
+  onPressIn,
+  onPressOut,
+  onTouchCancel,
+  onTouchEnd,
   ...pressableProps
 }: ListItemGymProps) {
   const isSelected = selected || mode === "selected";
   const isDeleteEnabled = Boolean(deleteOpen !== undefined || defaultDeleteOpen || onDeleteOpenChange || onDelete);
+  const hasRowPress = Boolean(onPress);
   const widthStyle = width === "fill" ? styles.fillWidth : styles.fixedWidth;
   const radiusStyle = useAnimatedGroupedListItemRadius(groupPosition);
   const [deleteCommitting, setDeleteCommitting] = useState(false);
+  const [rowPressHeld, setRowPressHeld] = useState(false);
   const [swipePressHeld, setSwipePressHeld] = useState(false);
+
+  useEffect(() => {
+    setRowPressHeld(false);
+    setSwipePressHeld(false);
+  }, [isSelected]);
+
+  const clearPressHold = () => {
+    setRowPressHeld(false);
+    setSwipePressHeld(false);
+  };
+
+  const handlePress: PressableProps["onPress"] = (event) => {
+    clearPressHold();
+    onPress?.(event);
+  };
+
+  const handlePressIn: PressableProps["onPressIn"] = (event) => {
+    setRowPressHeld(true);
+    onPressIn?.(event);
+  };
+
+  const handlePressOut: PressableProps["onPressOut"] = (event) => {
+    clearPressHold();
+    onPressOut?.(event);
+  };
+
+  const handleTouchCancel: PressableProps["onTouchCancel"] = (event) => {
+    clearPressHold();
+    onTouchCancel?.(event);
+  };
+
+  const handleTouchEnd: PressableProps["onTouchEnd"] = (event) => {
+    clearPressHold();
+    onTouchEnd?.(event);
+  };
+
   const handleDelete = () => {
     onDelete?.();
     requestAnimationFrame(() => {
@@ -109,12 +152,18 @@ export function ListItemGym({
     <Pressable
       {...pressableProps}
       accessibilityLabel={accessibilityLabel ?? title}
-      accessibilityRole={pressableProps.onPress ? "button" : undefined}
+      accessibilityRole={hasRowPress ? "button" : undefined}
       accessibilityState={{ ...pressableProps.accessibilityState, selected: isSelected }}
-      style={({ pressed }) => [
+      onPress={hasRowPress ? handlePress : undefined}
+      onPressIn={hasRowPress || onPressIn ? handlePressIn : undefined}
+      onPressOut={hasRowPress || onPressOut ? handlePressOut : undefined}
+      onTouchCancel={hasRowPress || onTouchCancel ? handleTouchCancel : undefined}
+      onTouchEnd={hasRowPress || onTouchEnd ? handleTouchEnd : undefined}
+      style={() => [
         styles.root,
         isSelected && styles.selected,
-        ((!suppressPressedStyle && (pressed || swipePressHeld)) || deleteCommitting) && (isSelected ? styles.selectedPressed : styles.pressed)
+        ((!suppressPressedStyle && (rowPressHeld || swipePressHeld)) || deleteCommitting) &&
+          (isSelected ? styles.selectedPressed : styles.pressed)
       ]}
     >
       <ExerciseThumb source={imageSource} />
@@ -222,6 +271,7 @@ const styles = StyleSheet.create({
   thumb: {
     width: theme.sizes.listItemGymThumb,
     height: theme.sizes.listItemGymThumb,
+    overflow: "hidden",
     borderRadius: theme.radius.md
   },
   thumbFallback: {

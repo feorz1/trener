@@ -5,6 +5,7 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 ## Figma
 
 - Source node ID: `387:3810`
+- Active session refresh node ID: `795:21488`
 - State node ID: `391:3325`
 - Note modal node ID: `453:7464`
 - Number style node ID: `387:3765`
@@ -28,6 +29,7 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 | `note` | `string` | Optional note shown below the title and edited in the modal. |
 | `sets` | `ApproachSet[]` | Set rows. |
 | `showDeleteAction` | `boolean` | Enables swipe-to-delete row behavior. |
+| `onDeleteExercise` | `() => void` | Enables the anchored edit button menu delete action for active sessions. |
 | `onNoteChange` | `(note: string) => void` | Called when the note modal saves. |
 | `onSetStateChange` | `(id, state) => void` | Called when a row toggles selected/default. |
 | `onSetValueChange` | `(id, patch) => void` | Called when metric values change. |
@@ -84,4 +86,7 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 - Delete capability must not change the row visual state by itself.
 - Horizontal delete gestures must require horizontal dominance so vertical page scrolling remains available.
 - Note editing uses the canonical `Modal` and `TextArea`.
+- The header edit affordance uses the canonical `Button` small icon size with `icons/edit`.
+- In active sessions, tapping the edit button opens an anchored contextual menu next to the invoking edit button with `Редактировать заметку` and `Удалить упражнение`.
+- Tapping a set completion check dismisses the keyboard and clears focused metric inputs before toggling completion.
 - All styling must come from `src/theme`.

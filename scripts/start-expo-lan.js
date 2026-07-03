@@ -77,7 +77,8 @@ if (!selected) {
 
 console.log(`Using ${selected.address} from ${selected.name} for mobile LAN testing.`);
 
-const timestampResult = spawnSync("npm.cmd", ["run", "storybook:timestamps"], {
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const timestampResult = spawnSync(npmCommand, ["run", "storybook:timestamps"], {
   stdio: "inherit",
   shell: process.platform === "win32",
 });

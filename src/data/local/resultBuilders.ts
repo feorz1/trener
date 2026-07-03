@@ -1,4 +1,5 @@
 import type { OwnerId, SessionId, UpsertWorkoutResultInput, Workout, WorkoutResult, WorkoutResultType } from "../types";
+import { getLegacyValues } from "@/features/workouts/tracking";
 
 const defaultResultType: WorkoutResultType = "weight_reps";
 
@@ -11,6 +12,13 @@ export function buildWorkoutResultFromSet(input: {
   set: Workout["exercises"][number]["sets"][number];
 }): WorkoutResult {
   const resultType = input.exercise.resultType ?? defaultResultType;
+  const values = getLegacyValues({
+    values: input.set.values,
+    weight: input.set.actualWeightKg ?? input.set.targetWeightKg,
+    reps: input.set.actualReps ?? input.set.targetReps,
+    durationSeconds: input.set.actualDurationSeconds ?? input.set.targetDurationSeconds,
+    distanceMeters: input.set.actualDistanceMeters ?? input.set.targetDistanceMeters
+  });
 
   return {
     id: input.id,
@@ -22,6 +30,7 @@ export function buildWorkoutResultFromSet(input: {
     resultType,
     setIndex: input.set.order,
     setId: input.set.id,
+    values,
     weight: input.set.actualWeightKg ?? input.set.targetWeightKg,
     repetitions: input.set.actualReps ?? input.set.targetReps,
     durationSeconds: input.set.actualDurationSeconds ?? input.set.targetDurationSeconds,
@@ -47,6 +56,7 @@ export function buildWorkoutResultFromUpsertInput(input: {
     resultType: input.upsert.resultType ?? input.existing?.resultType,
     setIndex: input.upsert.setIndex,
     setId: input.upsert.setId ?? input.existing?.setId,
+    values: input.upsert.values ?? input.existing?.values,
     weight: input.upsert.weight,
     repetitions: input.upsert.repetitions,
     durationSeconds: input.upsert.durationSeconds,

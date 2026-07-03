@@ -1,4 +1,4 @@
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { ScrollView, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 import { Chip, type ChipProps } from "./Chip";
 
@@ -13,18 +13,23 @@ export type ChipsListProps = {
 
 export function ChipsList({ items, style }: ChipsListProps) {
   return (
-    <View style={[styles.root, style]}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      style={style}
+      contentContainerStyle={styles.root}
+    >
       {items.map(({ id, ...chip }) => (
         <Chip key={id} {...chip} />
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flexDirection: "row",
-    flexWrap: "wrap",
     alignItems: "center",
     gap: theme.spacing.sm
   }

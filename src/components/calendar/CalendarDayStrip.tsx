@@ -307,6 +307,7 @@ const styles = StyleSheet.create({
   },
   dayNumber: {
     ...theme.typography.body.mdStrong,
+    fontVariant: ["tabular-nums"],
     zIndex: 1
   },
   todayDot: {

@@ -20,10 +20,12 @@ import {
   Variant
 } from "@/components/ui";
 import { useClient, useExercises, useDataMutation, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { defaultWorkoutResultType } from "@/features/workouts/sessionResult";
+import { formatPreviousSetValue, getLegacyValues } from "@/features/workouts/tracking";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { ApproachCountItem } from "@/components/ui";
-import type { Exercise, Workout } from "@/types";
+import type { Workout } from "@/types";
 
 type ApproachData = Record<string, ApproachCountItem[]>;
 type WorkoutExercise = Workout["exercises"][number];
@@ -111,10 +113,17 @@ function formatSetValues(sets: ApproachCountItem[]) {
   }));
 }
 
-function formatWorkoutSetValues(sets: Workout["exercises"][number]["sets"]) {
-  return sets.map((set, index) => ({
+function formatWorkoutSetValues(exercise: Workout["exercises"][number]) {
+  const resultType = exercise.resultType ?? defaultWorkoutResultType;
+  return exercise.sets.map((set, index) => ({
     id: set.id,
-    label: `${set.targetReps ?? 0}×${set.targetWeightKg ?? 0}кг`,
+    label: formatPreviousSetValue(resultType, getLegacyValues({
+      values: set.values,
+      weight: set.targetWeightKg,
+      reps: set.targetReps,
+      durationSeconds: set.targetDurationSeconds,
+      distanceMeters: set.targetDistanceMeters
+    })),
     index: index + 1
   }));
 }
@@ -414,7 +423,7 @@ export default function NewWorkoutScreen() {
 
   const renderExercise = useCallback(
     (item: WorkoutExercise) => {
-      const itemSetValues = formatWorkoutSetValues(item.sets);
+      const itemSetValues = formatWorkoutSetValues(item);
 
       return (
         <MeasuredExerciseRow

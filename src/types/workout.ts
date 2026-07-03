@@ -3,6 +3,7 @@ import type { OwnerId } from "./owner";
 export type WorkoutSet = {
   id: string;
   order: number;
+  values?: MetricValues;
   targetWeightKg?: number;
   targetReps?: number;
   targetDurationSeconds?: number;
@@ -13,6 +14,27 @@ export type WorkoutSet = {
   actualDistanceMeters?: number;
   completed: boolean;
 };
+
+export type MetricKey =
+  | "weight"
+  | "addedWeight"
+  | "assistance"
+  | "reps"
+  | "duration"
+  | "interval"
+  | "distance"
+  | "calories"
+  | "rpe"
+  | "rounds"
+  | "extraReps"
+  | "leftReps"
+  | "rightReps"
+  | "speed"
+  | "pace"
+  | "incline"
+  | "resistance";
+
+export type MetricValues = Partial<Record<MetricKey, number>>;
 
 export type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
@@ -55,7 +77,29 @@ export type Workout = {
 
 export type WorkoutSessionStatus = "active" | "completed" | "cancelled";
 
-export type WorkoutResultType = "weight_reps" | "reps" | "duration" | "distance_duration";
+export type WorkoutResultType =
+  | "weight_reps"
+  | "reps"
+  | "duration"
+  | "distance_duration"
+  | "reps_only"
+  | "weighted_bodyweight"
+  | "assisted_bodyweight"
+  | "weight_reps_rpe"
+  | "duration_hold"
+  | "time_result"
+  | "weight_duration"
+  | "distance_time"
+  | "distance_only"
+  | "weight_distance"
+  | "time_calories"
+  | "calories_only"
+  | "cardio_extended"
+  | "interval_reps"
+  | "amrap"
+  | "side_reps"
+  | "weight_side_reps"
+  | "completion_only";
 
 export type WorkoutSessionExercise = {
   id: string;
@@ -97,6 +141,7 @@ export type WorkoutResult = {
   resultType?: WorkoutResultType;
   setIndex: number;
   setId?: string;
+  values?: MetricValues;
   weight?: number;
   repetitions?: number;
   durationSeconds?: number;
@@ -105,7 +150,7 @@ export type WorkoutResult = {
   completed: boolean;
 };
 
-export type QuickValueMetric = "weight" | "reps" | "duration" | "distance";
+export type QuickValueMetric = MetricKey;
 
 export type QuickValue = {
   id: string;

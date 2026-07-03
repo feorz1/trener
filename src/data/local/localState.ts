@@ -27,7 +27,8 @@ export function cloneExercise(exercise: Exercise): Exercise {
   return {
     ...exercise,
     primaryMuscles: [...exercise.primaryMuscles],
-    secondaryMuscles: exercise.secondaryMuscles ? [...exercise.secondaryMuscles] : undefined
+    secondaryMuscles: exercise.secondaryMuscles ? [...exercise.secondaryMuscles] : undefined,
+    searchAliases: exercise.searchAliases ? [...exercise.searchAliases] : undefined
   };
 }
 

@@ -11,41 +11,94 @@ import {
   type ViewStyle
 } from "react-native";
 import { theme } from "@/theme";
+import type { MetricKey, MetricValues, WorkoutResultType } from "@/types";
+import { formatMetricInputValue, parseMetricInput, sanitizeMetricInput, type MetricDefinition } from "@/features/workouts/tracking";
 import { Icon } from "./Icon";
 import { StagedSwipeDelete } from "./StagedSwipeDelete";
 
 export type ApproachCountItem = {
   id: string;
   index: number;
+  resultType?: WorkoutResultType;
+  values?: MetricValues;
   reps?: number;
   weight?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
   unit?: string;
 };
 
-export type ApproachMetric = "weight" | "reps";
+export type ApproachMetric = MetricKey;
+export type ApproachCountValuePatch = Partial<Pick<ApproachCountItem, "values" | "weight" | "reps" | "durationSeconds" | "distanceMeters">>;
 
 export type ApproachCountProps = {
   item: ApproachCountItem;
   focusedMetric?: ApproachMetric;
+  metrics?: MetricDefinition[];
   trailingSlot?: ReactNode;
   onDelete?: () => void;
-  onValueChange?: (patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => void;
+  onValueChange?: (patch: ApproachCountValuePatch) => void;
   onMetricBlur?: (metric: ApproachMetric) => void;
   onMetricCommit?: (metric: ApproachMetric, value: number | undefined) => void;
   onMetricFocus?: (metric: ApproachMetric) => void;
   style?: StyleProp<ViewStyle>;
 };
 
-function parseMetricValue(value: string) {
-  const normalizedValue = value.replace(",", ".").trim();
-  if (!normalizedValue) return undefined;
+const defaultMetrics: MetricDefinition[] = [
+  { key: "weight", label: "КГ", shortLabel: "КГ", inputType: "decimal", required: true, min: 0 },
+  { key: "reps", label: "ПОВТОРОВ", shortLabel: "ПОВТ.", inputType: "integer", required: true, min: 0 }
+];
 
-  const parsedValue = Number(normalizedValue);
-  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+function getMetricValues(item: ApproachCountItem): MetricValues {
+  return {
+    ...item.values,
+    weight: item.values?.weight ?? item.weight,
+    reps: item.values?.reps ?? item.reps,
+    duration: item.values?.duration ?? item.durationSeconds,
+    distance: item.values?.distance ?? item.distanceMeters
+  };
 }
 
-function sanitizeMetricValue(value: string) {
-  return value.replace(/[^\d.,]/g, "");
+function getValuePatch(values: MetricValues): ApproachCountValuePatch {
+  return {
+    values,
+    weight: values.weight,
+    reps: values.reps,
+    durationSeconds: values.duration,
+    distanceMeters: values.distance
+  };
+}
+
+function getTextByMetric(item: ApproachCountItem, metrics: MetricDefinition[]) {
+  const values = getMetricValues(item);
+  return metrics.reduce<Partial<Record<ApproachMetric, string>>>((result, metric) => {
+    result[metric.key] = formatMetricInputValue(values[metric.key], metric);
+    return result;
+  }, {});
+}
+
+function getMetricLabel(metric: MetricDefinition) {
+  if (metric.key === "distance") return "МЕТРЫ";
+  if (metric.key === "duration" || metric.key === "interval") return "МИН:СЕК";
+  if (metric.key === "addedWeight") return "ДОП. КГ";
+  if (metric.key === "assistance") return "ПОМОЩЬ, КГ";
+  if (metric.key === "speed") return "КМ/Ч";
+  if (metric.key === "pace") return "ТЕМП";
+  if (metric.key === "incline") return "НАКЛОН, %";
+  return metric.label;
+}
+
+function formatDurationInputMask(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 5);
+  if (!digits) return "0:00";
+
+  const rawValue = Number(digits);
+  const minutes = Math.floor(rawValue / 100);
+  const seconds = rawValue % 100;
+  const normalizedSeconds = seconds % 60;
+  const normalizedMinutes = minutes + Math.floor(seconds / 60);
+
+  return `${normalizedMinutes}:${String(normalizedSeconds).padStart(2, "0")}`;
 }
 
 const metricInputReset =
@@ -59,6 +112,7 @@ const metricInputReset =
 export function ApproachCount({
   item,
   focusedMetric,
+  metrics = defaultMetrics,
   trailingSlot,
   onDelete,
   onValueChange,
@@ -67,37 +121,40 @@ export function ApproachCount({
   onMetricFocus,
   style
 }: ApproachCountProps) {
-  const [weight, setWeight] = useState(item.weight === undefined ? "" : String(item.weight));
-  const [reps, setReps] = useState(item.reps === undefined ? "" : String(item.reps));
+  const [textByMetric, setTextByMetric] = useState(() => getTextByMetric(item, metrics));
   const dirtyMetricsRef = useRef<Partial<Record<ApproachMetric, boolean>>>({});
+  const metricValueKey = metrics.map((metric) => `${metric.key}:${getMetricValues(item)[metric.key] ?? ""}`).join("|");
 
   useEffect(() => {
-    setWeight(item.weight === undefined ? "" : String(item.weight));
-  }, [item.weight]);
+    setTextByMetric((current) => {
+      const next = getTextByMetric(item, metrics);
+      if (focusedMetric) {
+        next[focusedMetric] = current[focusedMetric] ?? next[focusedMetric];
+      }
+      return next;
+    });
+  }, [focusedMetric, item.id, metricValueKey, metrics]);
 
-  useEffect(() => {
-    setReps(item.reps === undefined ? "" : String(item.reps));
-  }, [item.reps]);
-
-  const updateMetric = (key: ApproachMetric, value: string) => {
-    const nextValue = sanitizeMetricValue(value);
+  const updateMetric = (metric: MetricDefinition, value: string) => {
+    const key = metric.key;
+    const nextValue = metric.inputType === "duration" ? formatDurationInputMask(value) : sanitizeMetricInput(value, metric);
+    const parsedValue = parseMetricInput(nextValue, metric);
+    const nextValues = { ...getMetricValues(item) };
     dirtyMetricsRef.current[key] = true;
 
-    if (key === "weight") {
-      setWeight(nextValue);
-      onValueChange?.({ weight: parseMetricValue(nextValue) });
-      return;
-    }
+    if (parsedValue === undefined) delete nextValues[key];
+    else nextValues[key] = parsedValue;
 
-    setReps(nextValue);
-    onValueChange?.({ reps: parseMetricValue(nextValue) });
+    setTextByMetric((current) => ({ ...current, [key]: nextValue }));
+    onValueChange?.(getValuePatch(nextValues));
   };
 
-  const commitMetric = (key: ApproachMetric, value: string) => {
+  const commitMetric = (metric: MetricDefinition, value: string) => {
+    const key = metric.key;
     if (!dirtyMetricsRef.current[key]) return;
 
     dirtyMetricsRef.current[key] = false;
-    onMetricCommit?.(key, parseMetricValue(value));
+    onMetricCommit?.(key, parseMetricInput(value, metric));
   };
 
   const content = (
@@ -107,30 +164,26 @@ export function ApproachCount({
       </View>
 
       <View style={styles.metrics}>
-        <Metric
-          accessibilityLabel={`${item.unit ?? "КГ"}, подход ${item.index}`}
-          label={item.unit ?? "КГ"}
-          shouldFocus={focusedMetric === "weight"}
-          value={weight}
-          onBlur={() => {
-            commitMetric("weight", weight);
-            onMetricBlur?.("weight");
-          }}
-          onChange={(value) => updateMetric("weight", value)}
-          onFocus={() => onMetricFocus?.("weight")}
-        />
-        <Metric
-          accessibilityLabel={`Повторов, подход ${item.index}`}
-          label="ПОВТОРОВ"
-          shouldFocus={focusedMetric === "reps"}
-          value={reps}
-          onBlur={() => {
-            commitMetric("reps", reps);
-            onMetricBlur?.("reps");
-          }}
-          onChange={(value) => updateMetric("reps", value)}
-          onFocus={() => onMetricFocus?.("reps")}
-        />
+        {metrics.map((metric) => {
+          const value = textByMetric[metric.key] ?? "";
+          const label = getMetricLabel(metric);
+          return (
+            <Metric
+              key={metric.key}
+              accessibilityLabel={`${label}, подход ${item.index}`}
+              label={label}
+              inputType={metric.inputType}
+              shouldFocus={focusedMetric === metric.key}
+              value={value}
+              onBlur={() => {
+                commitMetric(metric, value);
+                onMetricBlur?.(metric.key);
+              }}
+              onChange={(value) => updateMetric(metric, value)}
+              onFocus={() => onMetricFocus?.(metric.key)}
+            />
+          );
+        })}
       </View>
 
       {trailingSlot ?? (
@@ -159,10 +212,12 @@ function Metric({
   value,
   onBlur,
   onChange,
-  onFocus
+  onFocus,
+  inputType
 }: {
   label: string;
   accessibilityLabel?: string;
+  inputType: MetricDefinition["inputType"];
   shouldFocus?: boolean;
   value: string;
   onBlur?: () => void;
@@ -203,12 +258,22 @@ function Metric({
     }
   }, [focused, value.length]);
 
+  useEffect(() => {
+    if (!focused || inputType !== "duration") return;
+
+    const nextSelection = { start: value.length, end: value.length };
+    setSelection(nextSelection);
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection: nextSelection });
+    });
+  }, [focused, inputType, value.length]);
+
   return (
     <View style={styles.metric}>
       <NativeTextInput
         ref={inputRef}
         accessibilityLabel={accessibilityLabel ?? label}
-        keyboardType="decimal-pad"
+        keyboardType={inputType === "integer" || inputType === "duration" ? "number-pad" : "decimal-pad"}
         showSoftInputOnFocus
         onBlur={() => {
           setFocused(false);

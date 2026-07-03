@@ -7,6 +7,7 @@ export type ApproachQuickValuesProps = {
   frequentValues?: number[];
   popularValues?: number[];
   resetKey?: string;
+  formatValue?: (value: number) => string;
   style?: StyleProp<ViewStyle>;
   onSelectValue?: (value: number) => void;
 };
@@ -25,7 +26,7 @@ type QuickValueSection = {
   values: number[];
 };
 
-export function ApproachQuickValues({ frequentValues = [], popularValues = [], resetKey, style, onSelectValue }: ApproachQuickValuesProps) {
+export function ApproachQuickValues({ frequentValues = [], popularValues = [], resetKey, formatValue = formatQuickValue, style, onSelectValue }: ApproachQuickValuesProps) {
   const scrollRef = useRef<ScrollView>(null);
   const normalizedFrequentValues = useMemo(() => uniqueValues(frequentValues), [frequentValues]);
   const normalizedPopularValues = useMemo(() => uniqueValues(popularValues), [popularValues]);
@@ -70,7 +71,7 @@ export function ApproachQuickValues({ frequentValues = [], popularValues = [], r
           contentContainerStyle={styles.content}
         >
           {sections.map((section) => (
-            <QuickValueGroup key={section.id} title={section.title} values={section.values} onSelectValue={onSelectValue} />
+            <QuickValueGroup key={section.id} title={section.title} values={section.values} formatValue={formatValue} onSelectValue={onSelectValue} />
           ))}
         </ScrollView>
       </LiquidGlassView>
@@ -78,14 +79,14 @@ export function ApproachQuickValues({ frequentValues = [], popularValues = [], r
   );
 }
 
-function QuickValueGroup({ title, values, onSelectValue }: { title: string; values: number[]; onSelectValue?: (value: number) => void }) {
+function QuickValueGroup({ title, values, formatValue, onSelectValue }: { title: string; values: number[]; formatValue: (value: number) => string; onSelectValue?: (value: number) => void }) {
   return (
     <View style={styles.group}>
       <Text style={styles.title}>{title}</Text>
       <View style={styles.chipRow}>
         {values.map((value) => (
           <Pressable key={value} accessibilityRole="button" onPress={() => onSelectValue?.(value)} style={({ pressed }) => [styles.chip, pressed && styles.chipPressed]}>
-            <Text style={styles.chipText}>{formatQuickValue(value)}</Text>
+            <Text style={styles.chipText}>{formatValue(value)}</Text>
           </Pressable>
         ))}
       </View>
