@@ -6,66 +6,125 @@ import Animated, { useAnimatedRef } from "react-native-reanimated";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Alert,
   Badge,
   Button,
   Divider,
   Header,
   Icon,
-  ListItemCell,
+  Loader,
   ListItemGym,
-  Modal,
   Navigation,
-  Radio,
   Select,
-  SuperSet
+  SuperSet,
+  Variant
 } from "@/components/ui";
-import { mockClients } from "@/data/mockClients";
-import { mockExercises } from "@/data/mockExercises";
+import { useClient, useExercises, useDataMutation, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { defaultWorkoutResultType } from "@/features/workouts/sessionResult";
+import { formatPreviousSetValue, getLegacyValues } from "@/features/workouts/tracking";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
 import type { ApproachCountItem } from "@/components/ui";
+import type { Workout } from "@/types";
 
 type ApproachData = Record<string, ApproachCountItem[]>;
-type WorkoutExercise = (typeof mockExercises)[number];
+type WorkoutExercise = Workout["exercises"][number];
+type RepeatDay = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
+type DayExerciseIds = Partial<Record<RepeatDay, string[]>>;
+type ScheduleTimes = Partial<Record<RepeatDay, string>>;
 const EXERCISE_ROW_GAP = theme.spacing.xxs;
 const EXERCISE_ROW_HEIGHT = theme.sizes.listItemGymSwipeMinHeight - EXERCISE_ROW_GAP;
 const EXERCISE_SLOT_HEIGHT = theme.sizes.listItemGymSwipeMinHeight;
-
+const EMPTY_EXERCISE_IDS: string[] = [];
+const repeatDays: RepeatDay[] = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+const dayLabels: Record<RepeatDay, string> = {
+  monday: "Пн",
+  tuesday: "Вт",
+  wednesday: "Ср",
+  thursday: "Чт",
+  friday: "Пт",
+  saturday: "Сб",
+  sunday: "Вс"
+};
+const repeatDayByNativeWeekday: Record<number, RepeatDay> = {
+  0: "sunday",
+  1: "monday",
+  2: "tuesday",
+  3: "wednesday",
+  4: "thursday",
+  5: "friday",
+  6: "saturday"
+};
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function parseIds(value?: string | string[]) {
-  const raw = firstParam(value);
-  if (!raw) return [];
-  return raw.split(",").filter(Boolean);
+function startOfDay(date: Date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
 }
 
-function parseApproachData(value?: string | string[]) {
-  const raw = firstParam(value);
-  if (!raw) return {};
+function addDays(date: Date, days: number) {
+  const value = new Date(date);
+  value.setDate(value.getDate() + days);
+  return value;
+}
 
-  try {
-    return JSON.parse(decodeURIComponent(raw)) as ApproachData;
-  } catch {
-    try {
-      return JSON.parse(raw) as ApproachData;
-    } catch {
-      return {};
-    }
+function parseDateKey(value?: string) {
+  if (!value) return startOfDay(new Date());
+
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return startOfDay(new Date());
+
+  return startOfDay(new Date(year, month - 1, day));
+}
+
+function getDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getWeekStart(date: Date) {
+  const value = startOfDay(date);
+  const nativeDay = value.getDay();
+  const mondayOffset = nativeDay === 0 ? -6 : 1 - nativeDay;
+  return addDays(value, mondayOffset);
+}
+
+function getFirstPlannedDateKey(anchorDate: Date, selectedDays: RepeatDay[]) {
+  if (selectedDays.length === 0) return getDateKey(anchorDate);
+
+  for (let offset = 0; offset < repeatDays.length; offset += 1) {
+    const candidateDate = addDays(anchorDate, offset);
+    const candidateDay = repeatDayByNativeWeekday[candidateDate.getDay()];
+    if (selectedDays.includes(candidateDay)) return getDateKey(candidateDate);
   }
-}
 
-function serializeApproachData(data: ApproachData) {
-  const entries = Object.entries(data).filter(([, sets]) => sets.length > 0);
-  if (entries.length === 0) return undefined;
-  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
+  return getDateKey(anchorDate);
 }
 
 function formatSetValues(sets: ApproachCountItem[]) {
   return sets.map((set, index) => ({
     id: set.id,
     label: `${set.reps ?? 0}×${set.weight ?? 0}${(set.unit ?? "кг").toLowerCase()}`
+  }));
+}
+
+function formatWorkoutSetValues(exercise: Workout["exercises"][number]) {
+  const resultType = exercise.resultType ?? defaultWorkoutResultType;
+  return exercise.sets.map((set, index) => ({
+    id: set.id,
+    label: formatPreviousSetValue(resultType, getLegacyValues({
+      values: set.values,
+      weight: set.targetWeightKg,
+      reps: set.targetReps,
+      durationSeconds: set.targetDurationSeconds,
+      distanceMeters: set.targetDistanceMeters
+    })),
+    index: index + 1
   }));
 }
 
@@ -150,171 +209,154 @@ function triggerSelection() {
 }
 
 export default function NewWorkoutScreen() {
-  const { clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
-    clientId?: string;
-    clientName?: string;
-    date?: string;
-    exerciseIds?: string;
-    supersetConnectionIds?: string;
-    approachData?: string;
+  const { draftId, activeDay } = useLocalSearchParams<{
+    draftId?: string;
+    activeDay?: string;
   }>();
-  const initialClientId = firstParam(clientId);
-  const selectedExerciseIds = useMemo(() => parseIds(exerciseIds), [exerciseIds]);
-  const selectedSupersetConnectionIds = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
-  const selectedApproachData = useMemo(() => parseApproachData(approachData), [approachData]);
-  const selectedExerciseKey = selectedExerciseIds.join(",");
-  const selectedSupersetConnectionKey = selectedSupersetConnectionIds.join(",");
-  const [orderedExerciseIds, setOrderedExerciseIds] = useState<string[]>(selectedExerciseIds);
-  const [localSupersetConnectionIds, setLocalSupersetConnectionIds] = useState<string[]>(selectedSupersetConnectionIds);
-  const [localApproachData, setLocalApproachData] = useState<ApproachData>(selectedApproachData);
+  const draftIdValue = firstParam(draftId);
+  const activeDayValue = firstParam(activeDay);
+  const draftQuery = useWorkoutDraft(draftIdValue);
+  const { draft } = draftQuery;
+  const workouts = useWorkoutActions();
+  const { client: selectedClient } = useClient(draft?.clientId);
+  const selectedWorkoutDays = useMemo<RepeatDay[]>(() => (draft?.repeatDays && draft.repeatDays.length > 0 ? draft.repeatDays : ["monday"]), [draft?.repeatDays]);
+  const selectedScheduleTimes = useMemo(() => draft?.scheduleTimes ?? {}, [draft?.scheduleTimes]);
+  const initialActiveDay = repeatDays.includes(activeDayValue as RepeatDay) ? (activeDayValue as RepeatDay) : selectedWorkoutDays[0];
+  const [activeWorkoutDay, setActiveWorkoutDay] = useState<RepeatDay>(initialActiveDay);
   const [exerciseRowHeights, setExerciseRowHeights] = useState<Record<string, number>>({});
   const [exerciseListWidth, setExerciseListWidth] = useState<number | undefined>();
   const [exerciseDragging, setExerciseDragging] = useState(false);
   const { scrollProps } = useConditionalScroll({ disabled: exerciseDragging });
   const scrollableRef = useAnimatedRef<ScrollView>();
   const selectedExercises = useMemo(
-    () => orderedExerciseIds.flatMap((id) => mockExercises.find((exercise) => exercise.id === id) ?? []),
-    [orderedExerciseIds]
+    () =>
+      (draft?.exercises ?? [])
+        .filter((exercise) => exercise.day === activeWorkoutDay)
+        .sort((left, right) => (left.order ?? 0) - (right.order ?? 0)),
+    [activeWorkoutDay, draft?.exercises]
   );
   const exerciseLayout = useMemo(() => getExerciseLayoutRows(selectedExercises, exerciseRowHeights), [exerciseRowHeights, selectedExercises]);
   const exerciseItemHeights = useMemo(() => exerciseLayout.rows.map((row) => row.height), [exerciseLayout.rows]);
-  const [selectedClientId, setSelectedClientId] = useState<string | undefined>(initialClientId);
-  const [pendingClientId, setPendingClientId] = useState<string | undefined>(initialClientId);
-  const [clientModalVisible, setClientModalVisible] = useState(false);
-  const selectedClient = mockClients.find((client) => client.id === selectedClientId);
-  const selectedClientName = selectedClient?.name ?? firstParam(clientName);
   const hasExercises = selectedExercises.length > 0;
+  const activeDayHasTime = Boolean(selectedScheduleTimes[activeWorkoutDay]);
+  const allSelectedDaysHaveTimes = selectedWorkoutDays.every((day) => Boolean(selectedScheduleTimes[day]));
+  const allSelectedDaysHaveExercises = selectedWorkoutDays.every((day) => (draft?.exercises.filter((exercise) => exercise.day === day).length ?? 0) > 0);
+  const selectedDayItems = useMemo(() => selectedWorkoutDays.map((day) => ({ key: day, label: dayLabels[day] })), [selectedWorkoutDays]);
+  const activeDayIndex = selectedWorkoutDays.indexOf(activeWorkoutDay);
+  const nextWorkoutDay = activeDayIndex >= 0 ? selectedWorkoutDays[activeDayIndex + 1] : undefined;
+  const canUseFooterAction = nextWorkoutDay ? hasExercises && activeDayHasTime : allSelectedDaysHaveExercises && allSelectedDaysHaveTimes;
+  const saveWorkoutAction = useCallback(async () => {
+    if (!draftIdValue) return null;
+
+    await workouts.updateDraft(draftIdValue, {
+      clientId: draft?.clientId,
+      repeatDays: selectedWorkoutDays,
+      scheduleTimes: selectedScheduleTimes
+    });
+    return workouts.publishDraft(draftIdValue);
+  }, [draft?.clientId, draftIdValue, selectedScheduleTimes, selectedWorkoutDays, workouts]);
+  const saveWorkoutMutation = useDataMutation(saveWorkoutAction);
   const supersetConnections = useMemo(
     () =>
-      selectedExercises.slice(0, -1).map((exercise, index) => {
-        const nextExercise = selectedExercises[index + 1];
-        const id = `${exercise.id}:${nextExercise.id}`;
+      selectedExercises.slice(0, -1).map((exercise, index) => ({
+        id: `${exercise.id}:${selectedExercises[index + 1].id}`,
+        selected: Boolean(exercise.supersetWithNext)
+      })),
+    [selectedExercises]
+  );
 
-        return { id, selected: localSupersetConnectionIds.includes(id) };
-      }),
-    [localSupersetConnectionIds, selectedExercises]
+  const toggleSupersetConnection = useCallback(
+    (id: string) => {
+      if (!draftIdValue) return;
+
+      const [itemId] = id.split(":");
+      const item = selectedExercises.find((exercise) => exercise.id === itemId);
+      if (!item) return;
+
+      void workouts.updateDraftExercise(draftIdValue, item.id, {
+        supersetWithNext: !item.supersetWithNext
+      });
+    },
+    [draftIdValue, selectedExercises, workouts]
   );
 
   useEffect(() => {
-    setOrderedExerciseIds(selectedExerciseIds);
+    const nextActiveDay = repeatDays.includes(activeDayValue as RepeatDay) && selectedWorkoutDays.includes(activeDayValue as RepeatDay)
+      ? (activeDayValue as RepeatDay)
+      : selectedWorkoutDays[0];
+
+    setActiveWorkoutDay((current) => (selectedWorkoutDays.includes(current) ? current : nextActiveDay));
+  }, [activeDayValue, selectedWorkoutDays]);
+
+  useEffect(() => {
     setExerciseRowHeights({});
-    setLocalSupersetConnectionIds((current) => {
-      const validIds = getAdjacentConnectionIds(selectedExerciseIds);
-      const sourceIds = selectedSupersetConnectionIds.length > 0 ? selectedSupersetConnectionIds : current;
-
-      return sourceIds.filter((id) => validIds.includes(id));
-    });
-    setLocalApproachData(selectedApproachData);
-  }, [selectedApproachData, selectedExerciseKey, selectedSupersetConnectionKey]);
-
-  const openClientModal = () => {
-    setPendingClientId(selectedClientId);
-    setClientModalVisible(true);
-  };
-
-  const closeClientModal = () => {
-    setClientModalVisible(false);
-  };
-
-  const saveClientSelection = () => {
-    if (!pendingClientId) return;
-
-    setSelectedClientId(pendingClientId);
-    router.setParams({ clientId: pendingClientId });
-    setClientModalVisible(false);
-  };
-
-  const openNewClient = useCallback(() => {
-    const serializedApproachData = serializeApproachData(localApproachData);
-
-    setClientModalVisible(false);
-    router.push({
-      pathname: "/clients/new",
-      params: {
-        returnTo: "/workouts/new",
-        ...(date ? { date } : {}),
-        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-        ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
-        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
-      }
-    });
-  }, [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds]);
+  }, [activeWorkoutDay]);
 
   const openExerciseSelection = useCallback(() => {
-    const serializedApproachData = serializeApproachData(localApproachData);
+    if (!draftIdValue) return;
 
     router.push({
       pathname: "/workouts/exercises",
       params: {
-        ...(selectedClientId ? { clientId: selectedClientId } : {}),
-        ...(selectedClientName ? { clientName: selectedClientName } : {}),
-        ...(date ? { date } : {}),
-        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-        ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
-        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
+        draftId: draftIdValue,
+        day: activeWorkoutDay
       }
     });
-  }, [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId, selectedClientName]);
+  }, [activeWorkoutDay, draftIdValue]);
 
-  const openSchedule = useCallback(() => {
-    const serializedApproachData = serializeApproachData(localApproachData);
+  const openDayEdit = useCallback(() => {
+    if (!draftIdValue) return;
 
     router.push({
-      pathname: "/workouts/schedule",
-      params: {
-        ...(selectedClientId ? { clientId: selectedClientId } : {}),
-        ...(selectedClientName ? { clientName: selectedClientName } : {}),
-        ...(date ? { date } : {}),
-        ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-        ...(serializedApproachData ? { approachData: serializedApproachData } : {})
-      }
+      pathname: "/workouts/day-edit",
+      params: { draftId: draftIdValue }
     });
-  }, [date, localApproachData, orderedExerciseIds, selectedClientId, selectedClientName]);
+  }, [draftIdValue]);
+
+  const openSlotSelection = useCallback(
+    (day: RepeatDay) => {
+      if (!draftIdValue) return;
+
+      router.push({
+        pathname: "/workouts/slot-select",
+        params: {
+          draftId: draftIdValue,
+          returnTo: "workout-new",
+          slotDay: day
+        }
+      });
+    },
+    [draftIdValue]
+  );
 
   const openExerciseApproach = useCallback(
-    (exerciseId: string) => {
-      const serializedApproachData = serializeApproachData(localApproachData);
+    (item: WorkoutExercise) => {
+      if (!draftIdValue) return;
 
       router.push({
         pathname: "/workouts/[exerciseId]/approach",
         params: {
-          exerciseId,
-          ...(selectedClientId ? { clientId: selectedClientId } : {}),
-          ...(selectedClientName ? { clientName: selectedClientName } : {}),
-          ...(date ? { date } : {}),
-          ...(orderedExerciseIds.length > 0 ? { exerciseIds: orderedExerciseIds.join(",") } : {}),
-          ...(localSupersetConnectionIds.length > 0 ? { supersetConnectionIds: localSupersetConnectionIds.join(",") } : {}),
-          ...(serializedApproachData ? { approachData: serializedApproachData } : {})
+          exerciseId: item.exerciseId,
+          draftId: draftIdValue,
+          exerciseItemId: item.id
         }
       });
     },
-    [date, localApproachData, localSupersetConnectionIds, orderedExerciseIds, selectedClientId, selectedClientName]
+    [draftIdValue]
   );
 
-  const removeExercise = useCallback((exerciseId: string) => {
-    setOrderedExerciseIds((currentIds) => {
-      const nextIds = currentIds.filter((id) => id !== exerciseId);
-
-      setLocalSupersetConnectionIds((currentConnectionIds) => {
-        const validConnectionIds = getAdjacentConnectionIds(nextIds);
-        return currentConnectionIds.filter((id) => validConnectionIds.includes(id));
-      });
-      setLocalApproachData((current) => {
-        const { [exerciseId]: _removed, ...rest } = current;
+  const removeExercise = useCallback(
+    (itemId: string) => {
+      if (draftIdValue) {
+        void workouts.removeDraftExercise(draftIdValue, itemId);
+      }
+      setExerciseRowHeights((current) => {
+        const { [itemId]: _removed, ...rest } = current;
         return rest;
       });
-
-      return nextIds;
-    });
-    setExerciseRowHeights((current) => {
-      const { [exerciseId]: _removed, ...rest } = current;
-      return rest;
-    });
-  }, []);
-
-  const toggleSupersetConnection = useCallback((id: string) => {
-    setLocalSupersetConnectionIds((current) => (current.includes(id) ? current.filter((connectionId) => connectionId !== id) : [...current, id]));
-  }, []);
+    },
+    [draftIdValue, workouts]
+  );
 
   const updateExerciseRowHeight = useCallback((exerciseId: string, height: number) => {
     const measuredHeight = Math.max(EXERCISE_ROW_HEIGHT, Math.round(height));
@@ -329,14 +371,16 @@ export default function NewWorkoutScreen() {
     setExerciseListWidth(Math.round(event.nativeEvent.layout.width));
   }, []);
 
-  const handleExerciseDragEnd = useCallback(({ order }: SortableFlexDragEndParams) => {
-    setExerciseDragging(false);
-    setOrderedExerciseIds((currentIds) => {
-      const nextIds = order(currentIds);
-      setLocalSupersetConnectionIds((current) => preserveSupersetConnectionsAfterReorder(currentIds, nextIds, current));
-      return nextIds;
-    });
-  }, []);
+  const handleExerciseDragEnd = useCallback(
+    ({ order }: SortableFlexDragEndParams) => {
+      setExerciseDragging(false);
+      if (!draftIdValue) return;
+
+      const nextExercises = order(selectedExercises);
+      void workouts.reorderDraftExercises(draftIdValue, nextExercises.map((exercise) => exercise.id));
+    },
+    [draftIdValue, selectedExercises, workouts]
+  );
 
   const handleExerciseDragStart = useCallback(() => {
     setExerciseDragging(true);
@@ -352,59 +396,129 @@ export default function NewWorkoutScreen() {
     triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
+  const goToNextDay = useCallback(() => {
+    if (!nextWorkoutDay) return;
+
+    setActiveWorkoutDay(nextWorkoutDay);
+    setExerciseRowHeights({});
+    router.setParams({ activeDay: nextWorkoutDay });
+  }, [nextWorkoutDay]);
+
+  const saveWorkout = useCallback(async () => {
+    if (!draftIdValue || saveWorkoutMutation.isSubmitting) return;
+
+    const savedWorkout = await saveWorkoutMutation.mutate().catch(() => null);
+    if (!savedWorkout) return;
+    router.dismissTo("/");
+  }, [draftIdValue, saveWorkoutMutation]);
+
+  const handleFooterPress = () => {
+    if (nextWorkoutDay) {
+      goToNextDay();
+      return;
+    }
+
+    saveWorkout();
+  };
+
   const renderExercise = useCallback(
-    (item: WorkoutExercise) => (
-      <MeasuredExerciseRow
-        exerciseId={item.id}
-        onHeightChange={updateExerciseRowHeight}
-      >
+    (item: WorkoutExercise) => {
+      const itemSetValues = formatWorkoutSetValues(item);
+
+      return (
+        <MeasuredExerciseRow
+          exerciseId={item.id}
+          onHeightChange={updateExerciseRowHeight}
+        >
         <ListItemGym
-          title={item.name}
+          title={item.exerciseName}
           mode="move"
           width="fill"
-          setVariant={localApproachData[item.id]?.length > 0 ? "set" : "new"}
-          setValues={localApproachData[item.id] ? formatSetValues(localApproachData[item.id]) : undefined}
-          onPress={localApproachData[item.id]?.length > 0 ? () => openExerciseApproach(item.id) : undefined}
+          setVariant={item.sets.length > 0 ? "set" : "new"}
+          setValues={item.sets.length > 0 ? itemSetValues : undefined}
+          onPress={item.sets.length > 0 ? () => openExerciseApproach(item) : undefined}
           suppressPressedStyle
-          onAddSetPress={() => openExerciseApproach(item.id)}
+          onAddSetPress={() => openExerciseApproach(item)}
           onDelete={() => removeExercise(item.id)}
           style={styles.exerciseCard}
           trailingSlot={
             <Sortable.Handle>
-              <View accessibilityLabel="Move exercise" accessibilityRole="button" style={styles.dragHandle}>
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.dragHandle}>
                 <Icon name="move" size={theme.spacing.xl} color={theme.colors.content.mute} />
               </View>
             </Sortable.Handle>
           }
         />
-      </MeasuredExerciseRow>
-    ),
-    [localApproachData, openExerciseApproach, removeExercise, updateExerciseRowHeight]
+        </MeasuredExerciseRow>
+      );
+    },
+    [openExerciseApproach, removeExercise, updateExerciseRowHeight]
   );
+
+  if (draftQuery.isLoading) {
+    return <WorkoutDraftState title="Загружаем черновик" loading />;
+  }
+
+  if (draftQuery.error) {
+    return <WorkoutDraftState title="Не удалось загрузить черновик" description={draftQuery.error.message} actionLabel="Повторить" onAction={draftQuery.retry} />;
+  }
+
+  if (!draftIdValue || draftQuery.notFound || !draft) {
+    return <WorkoutDraftState title="Черновик не найден" description="Вернитесь к планированию и создайте тренировку заново." />;
+  }
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title="Создание тренировки" onBack={() => router.back()} />
 
+      <View style={styles.daySelectorHeader}>
+        <View style={styles.daySelectorTitleRow}>
+          <Text style={styles.daySelectorTitle}>Дни тренировок</Text>
+          <Button
+            type="secondaryNeutral"
+            size="smallIcon"
+            accessibilityLabel="Редактировать дни тренировок"
+            icon={<Icon name="edit" size={theme.sizes.buttonIconSmall} color={theme.colors.content.ink} />}
+            onPress={openDayEdit}
+          />
+        </View>
+        <Variant<RepeatDay>
+          label="Дни тренировок"
+          items={selectedDayItems}
+          value={activeWorkoutDay}
+          columns={selectedWorkoutDays.length}
+          width="fill"
+          showLabel={false}
+          style={styles.daySelectorVariant}
+          onChange={(day) => {
+            setActiveWorkoutDay(day);
+            setExerciseRowHeights({});
+            router.setParams({ activeDay: day });
+          }}
+        />
+        {!activeDayHasTime ? (
+          <View style={styles.timeFallback}>
+            <Select
+              label="Время"
+              placeholder="Выбери время"
+              value={selectedScheduleTimes[activeWorkoutDay]}
+              width="fill"
+              showMessage={false}
+              inset="none"
+              onPress={() => openSlotSelection(activeWorkoutDay)}
+            />
+          </View>
+        ) : null}
+      </View>
+
+      <Divider width="fill" tone="canvasSoft" />
       <Animated.ScrollView
         ref={scrollableRef as never}
         contentContainerStyle={styles.content}
         {...scrollProps}
       >
-        <View>
-          <Select
-            label="Клиент"
-            value={selectedClientName}
-            placeholder="Выберите клиента"
-            width="fill"
-            showMessage={false}
-            onPress={openClientModal}
-          />
-        </View>
-
         {hasExercises ? (
           <View style={styles.exerciseSection}>
-            <Divider width="fill" tone="canvasSoft" />
             <View style={styles.exerciseHeader}>
               <Text style={styles.exerciseHeaderTitle}>Упражнения</Text>
               <Badge label={String(selectedExercises.length)} tone="neutral" size="s" icon={false} />
@@ -468,7 +582,6 @@ export default function NewWorkoutScreen() {
           </View>
         ) : (
           <View style={styles.exercises}>
-            <Divider width="fill" tone="canvasSoft" />
             <Header title="Упражнения" size="lg" showSubtitle={false} style={styles.sectionHeader} />
             <View style={styles.emptyState}>
               <Icon name="muscle arms" size={theme.sizes.approachHeaderThumb + theme.spacing["3xl"]} color={theme.colors.status.negativeDarkest} />
@@ -480,47 +593,55 @@ export default function NewWorkoutScreen() {
             </View>
           </View>
         )}
+        {saveWorkoutMutation.error ? (
+          <View style={styles.inlineAlert}>
+            <Alert
+              tone="negative"
+              layout="expanded"
+              title="Тренировка не сохранена"
+              description={saveWorkoutMutation.error.message}
+              width="fill"
+            />
+          </View>
+        ) : null}
       </Animated.ScrollView>
 
       <View style={styles.footer}>
         <Button
-          label="Сохранить и запланировать"
+          label={nextWorkoutDay ? "Следующий день" : "Сохранить и запланировать"}
           type="primary"
           size="large"
           width="fill"
-          state={hasExercises ? "active" : "disabled"}
-          onPress={openSchedule}
+          state={saveWorkoutMutation.isSubmitting ? "loading" : canUseFooterAction ? "active" : "disabled"}
+          onPress={handleFooterPress}
         />
       </View>
+    </SafeAreaView>
+  );
+}
 
-      <Modal
-        visible={clientModalVisible}
-        presentation="overlay"
-        title="Выбор клиента"
-        showSubline={false}
-        showBodyText={false}
-        showCloseButton
-        actionLayout="stacked"
-        primaryAction={{ label: "Сохранить", type: "primary", disabled: !pendingClientId, onPress: saveClientSelection }}
-        secondaryAction={{ label: "Создать нового клиента", type: "secondaryNeutral", onPress: openNewClient }}
-        onClose={closeClientModal}
-        bodyStyle={styles.modalBody}
-      >
-        {mockClients.map((client) => {
-          const selected = client.id === pendingClientId;
-
-          return (
-            <ListItemCell
-              key={client.id}
-              title={client.name}
-              leading="none"
-              density="compact"
-              trailingSlot={<Radio selected={selected} showLabel={false} onChange={() => setPendingClientId(client.id)} />}
-              onPress={() => setPendingClientId(client.id)}
-            />
-          );
-        })}
-      </Modal>
+function WorkoutDraftState({
+  title,
+  description,
+  loading = false,
+  actionLabel,
+  onAction
+}: {
+  title: string;
+  description?: string;
+  loading?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
+      <Navigation title="Создание тренировки" onBack={() => router.back()} />
+      <View style={styles.screenState}>
+        {loading ? <Loader size="medium" tone="brand" /> : null}
+        <Text style={styles.screenStateTitle}>{title}</Text>
+        {description ? <Text style={styles.screenStateCopy}>{description}</Text> : null}
+        {actionLabel && onAction ? <Button label={actionLabel} type="secondary" size="large" width="fill" onPress={onAction} /> : null}
+      </View>
     </SafeAreaView>
   );
 }
@@ -555,6 +676,28 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1
+  },
+  daySelectorHeader: {
+    backgroundColor: theme.colors.background.canvas
+  },
+  daySelectorTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm
+  },
+  daySelectorTitle: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.ink
+  },
+  daySelectorVariant: {
+    paddingBottom: theme.spacing.lg
+  },
+  timeFallback: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg
   },
   exercises: {
     flex: 1,
@@ -649,6 +792,28 @@ const styles = StyleSheet.create({
   footer: {
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  inlineAlert: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg
+  },
+  screenState: {
+    flex: 1,
+    alignItems: "stretch",
+    justifyContent: "center",
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg
+  },
+  screenStateTitle: {
+    ...theme.typography.body.lg,
+    color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  screenStateCopy: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
+    textAlign: "center"
   },
   modalBody: {
     gap: theme.spacing[0]

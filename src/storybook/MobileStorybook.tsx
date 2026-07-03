@@ -3,7 +3,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Action, type ActionLayout } from "@/components/ui/Action";
 import { Alert, type AlertLayout, type AlertTone } from "@/components/ui/Alert";
-import { Approach, type ApproachCountState, type ApproachSet } from "@/components/ui/Approach";
+import { Approach, type ApproachCountState, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui/Approach";
 import { Avatar, type AvatarSize, type AvatarType } from "@/components/ui/Avatar";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { Button, type ButtonSize, type ButtonState, type ButtonType } from "@/components/ui/Button";
@@ -27,10 +27,11 @@ import { Radio, type RadioState } from "@/components/ui/Radio";
 import { Search, type SearchState } from "@/components/ui/Search";
 import { Select, type SelectState } from "@/components/ui/Select";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { Set as WorkoutSet, type WorkoutSetVariant } from "@/components/ui/Set";
+import { Set as WorkoutSet, type WorkoutSetValue, type WorkoutSetVariant } from "@/components/ui/Set";
 import { StateSelect } from "@/components/ui/StateSelect";
 import { SuperSet, type SuperSetSegment } from "@/components/ui/SuperSet";
 import { Switch } from "@/components/ui/Switch";
+import { TabBar, trainerTabBarItems } from "@/components/ui/TabBar";
 import { TextArea, type TextAreaState } from "@/components/ui/TextArea";
 import { Variant } from "@/components/ui/Variant";
 import { theme } from "@/theme";
@@ -54,6 +55,7 @@ type ComponentId =
   | "Divider"
   | "Button"
   | "Navigation"
+  | "TabBar"
   | "Header"
   | "Select"
   | "Loader"
@@ -90,6 +92,7 @@ const componentItems: Array<{ value: ComponentId; title: string; updatedAt: stri
   { value: "Divider", title: "Divider", updatedAt: componentUpdates.Divider },
   { value: "Button", title: "Button", updatedAt: componentUpdates.Button },
   { value: "Navigation", title: "Navigation", updatedAt: componentUpdates.Navigation },
+  { value: "TabBar", title: "Tab Bar", updatedAt: componentUpdates.TabBar },
   { value: "Header", title: "Header", updatedAt: componentUpdates.Header },
   { value: "Select", title: "Select", updatedAt: componentUpdates.Select },
   { value: "Loader", title: "Loader", updatedAt: componentUpdates.Loader },
@@ -113,6 +116,14 @@ const cardVariants: CardVariant[] = ["dayPlan", "workout", "addWorkout"];
 const cardDayPlanStates: CardDayPlanState[] = ["plan", "planNext"];
 const cardStatuses: CardWorkoutStatus[] = ["planned", "inProgress", "completed"];
 const dateCellStates: DateCellState[] = ["date", "select", "disabled"];
+const listItemGymSetValues: WorkoutSetValue[] = [
+  { id: "one", label: "12x10кг" },
+  { id: "two", label: "8x15кг" },
+  { id: "three", label: "6x15кг" },
+  { id: "four", label: "4x10кг" },
+  { id: "five", label: "10x20кг" },
+  { id: "six", label: "12x25кг" }
+];
 const defaultApproachSets: ApproachSet[] = [
   { id: "one", index: 1, weight: 150, reps: 12, status: "completed" },
   { id: "two", index: 1, weight: 150, reps: 12, status: "completed" },
@@ -128,22 +139,22 @@ const createApproachSet = (index: number): ApproachSet => ({
   status: "completed"
 });
 const calendarDayStripWeek: CalendarDayStripItem[] = [
-  { key: "2026-05-11", weekday: "Mon", dayNumber: "12", temporalState: "past" },
-  { key: "2026-05-12", weekday: "Tue", dayNumber: "12", temporalState: "past" },
-  { key: "2026-05-13", weekday: "Wed", dayNumber: "15", temporalState: "default" },
-  { key: "2026-05-14", weekday: "Thu", dayNumber: "14", temporalState: "default" },
-  { key: "2026-05-15", weekday: "Fri", dayNumber: "15", temporalState: "future" },
-  { key: "2026-05-16", weekday: "Sat", dayNumber: "15", temporalState: "future" },
-  { key: "2026-05-17", weekday: "Sun", dayNumber: "15", temporalState: "future" }
+  { key: "2026-05-11", weekday: "Пн", dayNumber: "12", temporalState: "past" },
+  { key: "2026-05-12", weekday: "Вт", dayNumber: "12", temporalState: "past" },
+  { key: "2026-05-13", weekday: "Ср", dayNumber: "15", temporalState: "default" },
+  { key: "2026-05-14", weekday: "Чт", dayNumber: "14", temporalState: "default" },
+  { key: "2026-05-15", weekday: "Пт", dayNumber: "15", temporalState: "future" },
+  { key: "2026-05-16", weekday: "Сб", dayNumber: "15", temporalState: "future" },
+  { key: "2026-05-17", weekday: "Вс", dayNumber: "15", temporalState: "future" }
 ];
 const calendarDayStripNextWeek: CalendarDayStripItem[] = [
-  { key: "2026-05-18", weekday: "Mon", dayNumber: "18", temporalState: "future" },
-  { key: "2026-05-19", weekday: "Tue", dayNumber: "19", temporalState: "future" },
-  { key: "2026-05-20", weekday: "Wed", dayNumber: "20", temporalState: "future" },
-  { key: "2026-05-21", weekday: "Thu", dayNumber: "21", temporalState: "future" },
-  { key: "2026-05-22", weekday: "Fri", dayNumber: "22", temporalState: "future" },
-  { key: "2026-05-23", weekday: "Sat", dayNumber: "23", temporalState: "future" },
-  { key: "2026-05-24", weekday: "Sun", dayNumber: "24", temporalState: "future" }
+  { key: "2026-05-18", weekday: "Пн", dayNumber: "18", temporalState: "future" },
+  { key: "2026-05-19", weekday: "Вт", dayNumber: "19", temporalState: "future" },
+  { key: "2026-05-20", weekday: "Ср", dayNumber: "20", temporalState: "future" },
+  { key: "2026-05-21", weekday: "Чт", dayNumber: "21", temporalState: "future" },
+  { key: "2026-05-22", weekday: "Пт", dayNumber: "22", temporalState: "future" },
+  { key: "2026-05-23", weekday: "Сб", dayNumber: "23", temporalState: "future" },
+  { key: "2026-05-24", weekday: "Вс", dayNumber: "24", temporalState: "future" }
 ];
 const actionLayouts: ActionLayout[] = ["single", "stacked", "inline", "triple"];
 const buttonTypes: ButtonType[] = ["primary", "secondary", "secondaryNeutral", "destructive", "tertiary"];
@@ -228,6 +239,7 @@ export function MobileStorybook() {
   const [buttonSize, setButtonSize] = useState<ButtonSize>("medium");
   const [buttonState, setButtonState] = useState<ButtonState>("active");
   const [navigationShowSubtitle, setNavigationShowSubtitle] = useState(true);
+  const [tabBarValue, setTabBarValue] = useState("home");
   const [headerSize, setHeaderSize] = useState<HeaderSize>("xl");
   const [headerShowSubtitle, setHeaderShowSubtitle] = useState(true);
   const [selectState, setSelectState] = useState<SelectState>("empty");
@@ -369,6 +381,8 @@ export function MobileStorybook() {
       buttonSize={buttonSize}
       buttonState={buttonState}
       navigationShowSubtitle={navigationShowSubtitle}
+      tabBarValue={tabBarValue}
+      onTabBarValueChange={setTabBarValue}
       headerSize={headerSize}
       headerShowSubtitle={headerShowSubtitle}
       selectState={item === "Select" ? selectState : "empty"}
@@ -537,6 +551,8 @@ export function MobileStorybook() {
               setButtonState={setButtonState}
               navigationShowSubtitle={navigationShowSubtitle}
               setNavigationShowSubtitle={setNavigationShowSubtitle}
+              tabBarValue={tabBarValue}
+              setTabBarValue={setTabBarValue}
               headerSize={headerSize}
               setHeaderSize={setHeaderSize}
               headerShowSubtitle={headerShowSubtitle}
@@ -814,7 +830,7 @@ type PreviewContentProps = {
   approachNote: string;
   onApproachNoteChange: (value: string) => void;
   onApproachSetStateChange: (id: string, state: ApproachCountState) => void;
-  onApproachSetValueChange: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
+  onApproachSetValueChange: (id: string, patch: ApproachSetValuePatch) => void;
   onApproachSetDelete: (id: string) => void;
   onApproachAddSet: () => void;
   onApproachRestore: () => void;
@@ -830,6 +846,8 @@ type PreviewContentProps = {
   buttonSize: ButtonSize;
   buttonState: ButtonState;
   navigationShowSubtitle: boolean;
+  tabBarValue: string;
+  onTabBarValueChange: (value: string) => void;
   headerSize: HeaderSize;
   headerShowSubtitle: boolean;
   selectState: SelectState;
@@ -936,6 +954,8 @@ function PreviewContent({
   buttonSize,
   buttonState,
   navigationShowSubtitle,
+  tabBarValue,
+  onTabBarValueChange,
   headerSize,
   headerShowSubtitle,
   selectState,
@@ -1027,7 +1047,7 @@ function PreviewContent({
         completedExercises={cardStatus === "completed" ? 6 : cardStatus === "inProgress" ? 1 : 0}
         totalExercises={6}
         exerciseCount={6}
-        style={cardVariant === "dayPlan" ? styles.cardPlanPreviewItem : styles.cardWorkoutPreviewItem}
+        style={cardVariant === "dayPlan" || cardVariant === "addWorkout" ? styles.cardPlanPreviewItem : styles.cardWorkoutPreviewItem}
       />
     );
   }
@@ -1076,6 +1096,8 @@ function PreviewContent({
         title="Horizontal leg press machine"
         mode={listItemGymMode}
         selected={listItemGymSelected}
+        setVariant="set"
+        setValues={listItemGymSetValues}
         deleteOpen={listItemGymMode === "move" ? listItemGymDeleteOpen : undefined}
         onDeleteOpenChange={onListItemGymDeleteOpenChange}
         onDelete={() => onListItemGymDeleteOpenChange(false)}
@@ -1194,6 +1216,10 @@ function PreviewContent({
 
   if (component === "Navigation") {
     return <Navigation title="Screen Header" subtitle="Additional Title" showSubtitle={navigationShowSubtitle} />;
+  }
+
+  if (component === "TabBar") {
+    return <TabBar selectedValue={tabBarValue} onValueChange={onTabBarValueChange} />;
   }
 
   if (component === "Header") {
@@ -1393,6 +1419,8 @@ type ComponentControlsProps = {
   setButtonState: (value: ButtonState) => void;
   navigationShowSubtitle: boolean;
   setNavigationShowSubtitle: (value: boolean) => void;
+  tabBarValue: string;
+  setTabBarValue: (value: string) => void;
   headerSize: HeaderSize;
   setHeaderSize: (value: HeaderSize) => void;
   headerShowSubtitle: boolean;
@@ -1527,6 +1555,8 @@ function ComponentControls({
   setButtonState,
   navigationShowSubtitle,
   setNavigationShowSubtitle,
+  tabBarValue,
+  setTabBarValue,
   headerSize,
   setHeaderSize,
   headerShowSubtitle,
@@ -1866,6 +1896,16 @@ function ComponentControls({
       <ControlGroup label="subtitle">
         <OptionChip label="show" selected={navigationShowSubtitle} onPress={() => setNavigationShowSubtitle(true)} />
         <OptionChip label="hide" selected={!navigationShowSubtitle} onPress={() => setNavigationShowSubtitle(false)} />
+      </ControlGroup>
+    );
+  }
+
+  if (component === "TabBar") {
+    return (
+      <ControlGroup label="selected">
+        {trainerTabBarItems.map((item) => (
+          <OptionChip key={item.value} label={item.label} selected={tabBarValue === item.value} onPress={() => setTabBarValue(item.value)} />
+        ))}
       </ControlGroup>
     );
   }

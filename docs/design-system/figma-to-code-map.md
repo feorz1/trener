@@ -115,7 +115,7 @@ Do not build screens from ad hoc Figma layers when a canonical component exists 
 - `day cell`: pressable date control.
 - `weekday`: short weekday label.
 - `day number`: numeric date.
-- `current day dot`: optional marker controlled independently from selection.
+- `current day dot`: optional marker controlled independently from selection, centered horizontally with a token-derived absolute top offset.
 - `selected fill`: animated active fill for the selected day.
 
 ### Variant Props
@@ -154,7 +154,7 @@ Do not build screens from ad hoc Figma layers when a canonical component exists 
 | selected text/dot | `color/content/on-primary` | `theme.colors.content.onPrimary` |
 | weekday text | `color/content/body` | `theme.colors.content.body` |
 | date text | `color/content/ink` | `theme.colors.content.ink` |
-| weekday typography | `Typography/Caption` | `theme.typography.caption` |
+| weekday typography | `Typography/Body/SM Caption` | `theme.typography.body.smCaption` |
 | date typography | `Typography/Body/MD Strong` | `theme.typography.body.mdStrong` |
 
 ### Implementation Requirements

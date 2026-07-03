@@ -1,4 +1,4 @@
-import { Client } from "@/types";
+import { Client, LOCAL_OWNER_ID } from "@/types";
 
 const today = new Date();
 const atToday = (hour: number, minute: number) => {
@@ -10,32 +10,39 @@ const atToday = (hour: number, minute: number) => {
 export const mockClients: Client[] = [
   {
     id: "client-1",
-    name: "Anna Morozova",
-    goal: "Strength base and posture",
+    ownerId: LOCAL_OWNER_ID,
+    name: "Анна Морозова",
+    goal: "Силовая база и осанка",
     status: "active",
-    avatarInitials: "AM",
+    avatarInitials: "АМ",
     nextWorkoutAt: atToday(9, 30),
-    notes: "Watch shoulder position during pressing. Prefers short technique cues.",
+    notes: "Следить за положением плеч в жимах. Лучше реагирует на короткие технические подсказки.",
     metrics: { weightKg: 64, heightCm: 170, attendanceRate: 92 }
   },
   {
     id: "client-2",
-    name: "Ilya Sokolov",
-    goal: "Muscle gain",
+    ownerId: LOCAL_OWNER_ID,
+    name: "Константин",
+    phone: "+7 999-312-21-42",
+    telegram: "@konstantin",
+    gender: "male",
+    goal: "Поддержать форму",
     status: "active",
-    avatarInitials: "IS",
+    avatarInitials: "К",
     nextWorkoutAt: atToday(12, 0),
-    notes: "Keep rest periods at least 2 minutes.",
+    notes: "Нельзя скручивания, Нельзя осевые нагрузки",
+    restrictions: ["Травмы спины", "Грыжи / протрузии", "Нельзя скручивания", "Нельзя осевые нагрузки"],
     metrics: { weightKg: 78, heightCm: 181, attendanceRate: 86 }
   },
   {
     id: "client-3",
-    name: "Maria Lebedeva",
-    goal: "Return after a break",
+    ownerId: LOCAL_OWNER_ID,
+    name: "Мария Лебедева",
+    goal: "Возвращение после перерыва",
     status: "new",
-    avatarInitials: "ML",
+    avatarInitials: "МЛ",
     nextWorkoutAt: atToday(18, 30),
-    notes: "First month without failure sets.",
+    notes: "Первый месяц без отказных подходов.",
     metrics: { weightKg: 58, heightCm: 166, attendanceRate: 100 }
   }
 ];

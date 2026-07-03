@@ -15,6 +15,7 @@ export type SelectProps = Omit<PressableProps, "children" | "disabled" | "style"
   showLabel?: boolean;
   showMessage?: boolean;
   width?: "fixed" | "fill";
+  inset?: "default" | "none";
 };
 
 const stateColor: Record<SelectState, string> = {
@@ -38,21 +39,22 @@ const stateBorderColor: Record<SelectState, string> = {
 };
 
 const statusMessages: Record<"error" | "positive" | "warning", string> = {
-  error: "Error message",
-  positive: "Positive message",
-  warning: "Warning message"
+  error: "Проверьте значение",
+  positive: "Значение принято",
+  warning: "Проверьте детали"
 };
 
 export function Select({
   label,
   value,
-  placeholder = "Value",
+  placeholder = "Выберите значение",
   message,
   state = value ? "default" : "empty",
   disabled = state === "disabled",
   showLabel = true,
   showMessage = true,
   width = "fixed",
+  inset = "default",
   accessibilityLabel,
   onBlur,
   onFocus,
@@ -61,14 +63,14 @@ export function Select({
   const [isFocused, setIsFocused] = useState(false);
   const resolvedState: SelectState = disabled ? "disabled" : isFocused ? "focus" : state;
   const statusState = state === "error" || state === "positive" || state === "warning" ? state : null;
-  const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Message");
+  const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Подсказка");
   const showStatus = !!statusState && !isFocused;
   const hasValue = Boolean(value);
   const labelColor = disabled ? theme.colors.content.mute : theme.colors.content.ink;
   const valueColor = disabled || !hasValue ? theme.colors.content.mute : theme.colors.content.ink;
 
   return (
-    <View style={[styles.root, width === "fill" && styles.rootFill]}>
+    <View style={[styles.root, inset === "none" && styles.rootNoInset, width === "fill" && styles.rootFill]}>
       {showLabel ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
 
       <Pressable
@@ -117,6 +119,10 @@ const styles = StyleSheet.create({
   rootFill: {
     width: "auto",
     alignSelf: "stretch"
+  },
+  rootNoInset: {
+    paddingHorizontal: theme.spacing[0],
+    paddingBottom: theme.spacing[0]
   },
   label: {
     ...theme.typography.body.smStrong

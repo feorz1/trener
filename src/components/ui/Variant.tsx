@@ -1,8 +1,8 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 
 const MIN_COLUMNS = 1;
-const MAX_COLUMNS = 5;
+const MAX_COLUMNS = 7;
 const MAX_ROWS = 5;
 const MAX_ITEMS = 25;
 
@@ -17,7 +17,9 @@ export type VariantItem<T extends string> = {
 export type VariantProps<T extends string> = {
   label: string;
   items: VariantItem<T>[];
-  value: T;
+  value?: T;
+  values?: T[];
+  selectionMode?: "single" | "multiple";
   onChange: (value: T) => void;
   columns?: number;
   message?: string;
@@ -25,6 +27,8 @@ export type VariantProps<T extends string> = {
   showMessage?: boolean;
   disabled?: boolean;
   width?: "fixed" | "fill";
+  inset?: "default" | "none";
+  style?: StyleProp<ViewStyle>;
 };
 
 const getItemValue = <T extends string>(item: VariantItem<T>) => {
@@ -55,13 +59,17 @@ export function Variant<T extends string>({
   label,
   items,
   value,
+  values,
+  selectionMode = "single",
   onChange,
   columns,
-  message = "Message",
+  message = "Подсказка",
   showLabel = true,
   showMessage = false,
   disabled = false,
-  width = "fixed"
+  width = "fixed",
+  inset = "default",
+  style
 }: VariantProps<T>) {
   if (items.length > MAX_ITEMS) {
     throw new Error("Variant supports up to 25 items.");
@@ -75,7 +83,7 @@ export function Variant<T extends string>({
   const rows = chunkItems(items, resolvedColumns);
 
   return (
-    <View style={[styles.root, width === "fill" && styles.rootFill]}>
+    <View style={[styles.root, inset === "none" && styles.rootNoInset, width === "fill" && styles.rootFill, style]}>
       {showLabel ? <Text style={[styles.label, disabled && styles.disabledText]}>{label}</Text> : null}
 
       <View style={styles.grid}>
@@ -83,13 +91,13 @@ export function Variant<T extends string>({
           <View key={`row-${rowIndex}`} style={styles.row}>
             {row.map((item) => {
               const itemValue = getItemValue(item);
-              const selected = itemValue === value;
+              const selected = selectionMode === "multiple" ? Boolean(values?.includes(itemValue)) : itemValue === value;
               const itemDisabled = disabled || item.disabled;
 
               return (
                 <Pressable
                   accessibilityLabel={item.accessibilityLabel ?? item.label}
-                  accessibilityRole="radio"
+                  accessibilityRole={selectionMode === "multiple" ? "checkbox" : "radio"}
                   accessibilityState={{ checked: selected, disabled: itemDisabled }}
                   disabled={itemDisabled}
                   key={itemValue}
@@ -124,24 +132,29 @@ const styles = StyleSheet.create({
   root: {
     width: theme.sizes.variantWidth,
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
     gap: theme.spacing.sm
   },
   rootFill: {
     width: "auto",
     alignSelf: "stretch"
   },
+  rootNoInset: {
+    paddingHorizontal: theme.spacing[0],
+    paddingVertical: theme.spacing[0]
+  },
   label: {
     ...theme.typography.body.smStrong,
     color: theme.colors.content.ink
   },
   grid: {
-    gap: theme.spacing.sm
+    gap: theme.spacing.xs
   },
   row: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: theme.spacing.sm
+    gap: theme.spacing.xs
   },
   option: {
     flex: 1,
@@ -158,8 +171,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvasSoft
   },
   optionSelected: {
-    borderColor: theme.colors.content.inkDeep,
-    backgroundColor: theme.colors.background.canvas
+    borderColor: theme.colors.content.primaryPale,
+    backgroundColor: theme.colors.content.primaryPale
   },
   optionPressed: {
     backgroundColor: theme.colors.content.primaryActive

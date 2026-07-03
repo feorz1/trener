@@ -42,7 +42,7 @@ type Story = StoryObj<typeof meta>;
 
 function cardStoryWidth(variant?: CardVariant) {
   return {
-    width: variant === "dayPlan" ? theme.sizes.cardPlanWidth : theme.sizes.cardWorkoutWidth
+    width: variant === "dayPlan" || variant === "addWorkout" ? theme.sizes.cardPlanWidth : theme.sizes.cardWorkoutWidth
   };
 }
 

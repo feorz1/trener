@@ -1,48 +1,142 @@
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts
-} from "@expo-google-fonts/inter";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, Platform, View } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
+import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Sortable from "react-native-sortables";
+import { AuthProvider, AuthRouteBoundary, useAuth } from "@/auth";
+import { DataProvider } from "@/data";
 import { theme } from "@/theme";
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
-    Inter: Inter_400Regular,
-    "Inter-Medium": Inter_500Medium,
-    "Inter-SemiBold": Inter_600SemiBold,
-    "Inter-Bold": Inter_700Bold
-  });
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider initialMetrics={initialWindowMetrics}>
+        <AuthProvider>
+          <RootAppShell />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
 
-  if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.background.canvasSoft }}>
-        <ActivityIndicator color={theme.colors.content.primary} />
-      </View>
-    );
-  }
-
+function RootAppShell() {
+  const { state } = useAuth();
   const appStack = (
     <>
       <StatusBar style="dark" />
       <Stack
         screenOptions={{
           headerShown: false,
+          animation: "simple_push",
           contentStyle: { backgroundColor: theme.colors.background.canvasSoft }
         }}
-      />
+      >
+        <Stack.Screen
+          name="workouts/planning"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/client-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/date-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/repeat-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/slot-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/reschedule-slot-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/reschedule-date-select"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="workouts/day-edit"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetCornerRadius: theme.radius.xl,
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+      </Stack>
     </>
   );
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background.canvasSoft }}>
-      {Platform.OS === "web" ? appStack : <Sortable.PortalProvider>{appStack}</Sortable.PortalProvider>}
-    </GestureHandlerRootView>
+    <DataProvider currentOwnerId={state.session?.ownerId}>
+      <KeyboardProvider>
+        <AuthRouteBoundary>{Platform.OS === "web" ? appStack : <Sortable.PortalProvider>{appStack}</Sortable.PortalProvider>}</AuthRouteBoundary>
+      </KeyboardProvider>
+    </DataProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: theme.colors.background.canvasSoft
+  }
+});

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Pressable,
@@ -67,9 +67,9 @@ const stateBorderColor: Record<InputState, string> = {
 } as const;
 
 const statusMessages: Record<"error" | "positive" | "warning", string> = {
-  error: "Error message",
-  positive: "Positive message",
-  warning: "Warning message"
+  error: "Проверьте значение",
+  positive: "Значение принято",
+  warning: "Проверьте детали"
 };
 
 export function Input({
@@ -79,17 +79,19 @@ export function Input({
   state = value ? "default" : "empty",
   disabled = state === "disabled",
   doubleField = false,
-  prefixValue = "+1",
+  prefixValue = "+7",
   showLabel = true,
   showMessage = true,
   showClearButton = false,
   width = "fixed",
   onClear,
   onChangePrefixText,
-  placeholder = "Value",
+  placeholder = "Значение",
   onChangeText,
   ...textInputProps
 }: InputProps) {
+  const prefixInputRef = useRef<NativeTextInput>(null);
+  const valueInputRef = useRef<NativeTextInput>(null);
   const [focusedField, setFocusedField] = useState<"prefix" | "value" | null>(null);
   const resolvedState: InputState = disabled ? "disabled" : focusedField ? "focus" : state;
   const designPrefixFocused = state === "prefixFocus";
@@ -110,7 +112,7 @@ export function Input({
         : "default";
   const statusState = state === "error" || state === "positive" || state === "warning" ? state : null;
   const showStatus = !!statusState && !focusedField;
-  const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Message");
+  const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Подсказка");
   const showMessageRow = showMessage && !!resolvedMessage;
   const inputTextColor = disabled
     ? theme.colors.content.mute
@@ -122,6 +124,15 @@ export function Input({
     onClear?.();
     onChangeText?.("");
   };
+  const moveCaretToEnd = (inputRef: React.RefObject<NativeTextInput | null>, text?: string) => {
+    const end = text?.length ?? theme.spacing[0];
+    const selection = { start: end, end };
+
+    inputRef.current?.setNativeProps({ selection });
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection });
+    });
+  };
 
   return (
     <View style={[styles.root, width === "fill" && styles.rootFill]}>
@@ -131,11 +142,15 @@ export function Input({
         <View style={styles.doubleRow}>
           <FieldFrame state={prefixState} style={styles.prefixField}>
             <NativeTextInput
+              ref={prefixInputRef}
               editable={!disabled}
               onBlur={() => setFocusedField(null)}
               onChangeText={onChangePrefixText}
-              onFocus={() => setFocusedField("prefix")}
-              placeholder="+1"
+              onFocus={() => {
+                setFocusedField("prefix");
+                moveCaretToEnd(prefixInputRef, prefixValue);
+              }}
+              placeholder="+7"
               placeholderTextColor={theme.colors.content.mute}
               style={[styles.input, styles.prefixInput, webInputReset, { color: disabled ? theme.colors.content.mute : theme.colors.content.ink }]}
               value={prefixValue}
@@ -143,6 +158,7 @@ export function Input({
           </FieldFrame>
           <FieldFrame state={valueState} style={styles.doubleInput}>
             <NativeTextInput
+              ref={valueInputRef}
               {...textInputProps}
               editable={!disabled}
               onBlur={(event) => {
@@ -152,6 +168,7 @@ export function Input({
               onChangeText={onChangeText}
               onFocus={(event) => {
                 setFocusedField("value");
+                moveCaretToEnd(valueInputRef, value);
                 textInputProps.onFocus?.(event);
               }}
               placeholder={placeholder}
@@ -165,6 +182,7 @@ export function Input({
       ) : (
         <FieldFrame state={resolvedState}>
           <NativeTextInput
+            ref={valueInputRef}
             {...textInputProps}
             editable={!disabled}
             onBlur={(event) => {
@@ -174,6 +192,7 @@ export function Input({
             onChangeText={onChangeText}
             onFocus={(event) => {
               setFocusedField("value");
+              moveCaretToEnd(valueInputRef, value);
               textInputProps.onFocus?.(event);
             }}
             placeholder={placeholder}
@@ -199,7 +218,7 @@ export function Input({
 
 function ClearButton({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable accessibilityLabel="Clear value" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={onPress} style={styles.clearButton}>
+    <Pressable accessibilityLabel="Очистить значение" accessibilityRole="button" hitSlop={theme.spacing.sm} onPress={onPress} style={styles.clearButton}>
       <Icon name="close" size={theme.spacing.lg} color={theme.colors.content.ink} />
     </Pressable>
   );

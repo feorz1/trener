@@ -1,26 +1,40 @@
 import * as Haptics from "expo-haptics";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, Text, View, type LayoutChangeEvent, type ScrollView } from "react-native";
-import Animated, { useAnimatedRef } from "react-native-reanimated";
+import { Keyboard, Platform, StyleSheet, Text, View, type LayoutChangeEvent } from "react-native";
+import { KeyboardAwareScrollView, KeyboardStickyView } from "react-native-keyboard-controller";
 import Sortable, { type SortableFlexDragEndParams } from "react-native-sortables";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ApproachCount, ApproachQuickValues, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem, type ApproachMetric } from "@/components/ui";
-import { mockExercises } from "@/data/mockExercises";
+import { ApproachCount, ApproachQuickValues, Badge, Button, Divider, Icon, Navigation, TextArea, type ApproachCountItem, type ApproachCountValuePatch, type ApproachMetric } from "@/components/ui";
+import { useExercise, useQuickValue, useQuickValueActions, useWorkoutActions, useWorkoutDraft } from "@/data";
+import { defaultWorkoutResultType } from "@/features/workouts/sessionResult";
+import { formatDuration, getLegacyValues, getTrackingPreset, pickCompatibleValues, valuesToLegacyFields, type MetricDefinition } from "@/features/workouts/tracking";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
-import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
+import type { MetricValues, Workout, WorkoutResultType } from "@/types";
 
 const DRAG_HANDLE_DELAY_MS = 120;
-const MAX_FREQUENT_VALUE_COUNT = 6;
-const defaultFrequentValues: Record<ApproachMetric, number[]> = {
-  weight: [],
-  reps: []
-};
-const defaultPopularValues: Record<ApproachMetric, number[]> = {
+const MAX_FREQUENT_VALUE_COUNT = 5;
+const ACTIVE_METRIC_BLUR_DELAY_MS = 80;
+const QUICK_VALUES_KEYBOARD_OFFSET = theme.sizes.approachQuickValuesHeight + theme.spacing.md + theme.spacing["2xl"];
+const defaultPopularValues: Partial<Record<ApproachMetric, number[]>> = {
   weight: [6, 8, 12, 15, 18, 20, 25, 30],
-  reps: [5, 6, 8, 10, 12, 15, 20]
+  addedWeight: [0, 2.5, 5, 7.5, 10, 15, 20],
+  assistance: [5, 10, 15, 20, 25, 30, 40, 50],
+  reps: [5, 6, 8, 10, 12, 15, 20],
+  duration: [15, 30, 45, 60, 90, 120],
+  interval: [15, 30, 45, 60, 90, 120],
+  distance: [100, 200, 400, 800, 1000, 1500, 2000, 5000],
+  calories: [50, 100, 150, 200, 300, 500],
+  rpe: [6, 7, 8, 8.5, 9, 9.5],
+  rounds: [1, 2, 3, 4, 5, 6],
+  extraReps: [0, 1, 2, 3, 5, 10],
+  leftReps: [5, 8, 10, 12, 15, 20],
+  rightReps: [5, 8, 10, 12, 15, 20],
+  speed: [6, 8, 10, 12, 14, 16],
+  pace: [240, 300, 360, 420, 480, 600],
+  incline: [0, 2, 5, 8, 10, 12],
+  resistance: [1, 3, 5, 7, 10, 15]
 };
 const popularWeightValuesByExerciseId: Record<string, number[]> = {
   "ex-1": [6, 8, 12, 15, 18, 20, 25, 30],
@@ -48,6 +62,7 @@ type ActiveMetric = {
   setId: string;
   metric: ApproachMetric;
 };
+type WorkoutSet = Workout["exercises"][number]["sets"][number];
 
 function getSetListMinHeight(itemCount: number) {
   if (itemCount === 0) return theme.spacing[0];
@@ -58,52 +73,103 @@ function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function parseIds(value?: string | string[]) {
-  const raw = firstParam(value);
-  if (!raw) return [];
-  return raw.split(",").filter(Boolean);
-}
-
-function parseApproachData(value?: string | string[]) {
-  const raw = firstParam(value);
-  if (!raw) return {};
-
-  try {
-    return JSON.parse(decodeURIComponent(raw)) as ApproachData;
-  } catch {
-    try {
-      return JSON.parse(raw) as ApproachData;
-    } catch {
-      return {};
-    }
-  }
-}
-
-function serializeApproachData(data: ApproachData) {
-  const entries = Object.entries(data).filter(([, sets]) => sets.length > 0);
-  if (entries.length === 0) return undefined;
-  return encodeURIComponent(JSON.stringify(Object.fromEntries(entries)));
-}
-
-function normalizeMetricHistory(value: unknown): Record<ApproachMetric, number[]> {
-  if (!value || typeof value !== "object") return defaultFrequentValues;
-
-  const history = value as Partial<Record<ApproachMetric, unknown>>;
-  return {
-    weight: Array.isArray(history.weight) ? history.weight.filter((item): item is number => Number.isFinite(item)).slice(0, MAX_FREQUENT_VALUE_COUNT) : [],
-    reps: Array.isArray(history.reps) ? history.reps.filter((item): item is number => Number.isFinite(item)).slice(0, MAX_FREQUENT_VALUE_COUNT) : []
-  };
+function normalizeMetricHistory(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is number => Number.isFinite(item)).slice(0, MAX_FREQUENT_VALUE_COUNT) : [];
 }
 
 function getPopularMetricValues(exerciseId: string | undefined, metric: ApproachMetric | undefined) {
   if (!metric) return [];
-  if (!exerciseId) return defaultPopularValues[metric];
 
-  if (metric === "weight") {
+  if (metric === "weight" && exerciseId) {
     return popularWeightValuesByExerciseId[exerciseId] ?? defaultPopularValues.weight;
   }
 
-  return popularRepValuesByExerciseId[exerciseId] ?? defaultPopularValues.reps;
+  if (metric === "reps" && exerciseId) {
+    return popularRepValuesByExerciseId[exerciseId] ?? defaultPopularValues.reps;
+  }
+
+  return defaultPopularValues[metric] ?? [];
+}
+
+function formatQuickMetricValue(metric: MetricDefinition | undefined, value: number) {
+  if (!metric) return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
+  if (metric.inputType === "duration") return formatDuration(value);
+  if (metric.key === "distance") return value >= 1000 ? `${Number.isInteger(value / 1000) ? value / 1000 : String(value / 1000).replace(".", ",")} км` : `${value} м`;
+  if (metric.key === "addedWeight") return value === 0 ? "0" : `+${String(value).replace(".", ",")}`;
+  return Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
+}
+
+function getNextMetric(metrics: MetricDefinition[], currentMetric: ApproachMetric) {
+  const currentIndex = metrics.findIndex((metric) => metric.key === currentMetric);
+  return currentIndex >= 0 ? metrics[currentIndex + 1]?.key : undefined;
+}
+
+function getDefaultValues(resultType: WorkoutResultType): MetricValues {
+  const preset = getTrackingPreset(resultType);
+  return preset.metrics.reduce<MetricValues>((values, metric) => {
+    if (metric.key === "weight") values.weight = 150;
+    else if (metric.key === "reps") values.reps = 12;
+    else if (metric.key === "addedWeight") values.addedWeight = 0;
+    else if (metric.key === "assistance") values.assistance = 0;
+    else if (metric.key === "duration") values.duration = 30;
+    else if (metric.key === "interval") values.interval = 30;
+    else if (metric.key === "distance") values.distance = 1000;
+    else if (metric.key === "calories") values.calories = 0;
+    else if (metric.key === "rpe") values.rpe = 7;
+    else if (metric.key === "rounds") values.rounds = 1;
+    else if (metric.key === "extraReps") values.extraReps = 0;
+    else if (metric.key === "leftReps") values.leftReps = 12;
+    else if (metric.key === "rightReps") values.rightReps = 12;
+    else if (metric.key === "speed") values.speed = 0;
+    else if (metric.key === "pace") values.pace = 0;
+    else if (metric.key === "incline") values.incline = 0;
+    else if (metric.key === "resistance") values.resistance = 0;
+    return values;
+  }, {});
+}
+
+function getSetValues(set: ApproachCountItem): MetricValues {
+  return {
+    ...set.values,
+    weight: set.values?.weight ?? set.weight,
+    reps: set.values?.reps ?? set.reps,
+    duration: set.values?.duration ?? set.durationSeconds,
+    distance: set.values?.distance ?? set.distanceMeters
+  };
+}
+
+function getApproachSetValuePatch(values: MetricValues): ApproachCountValuePatch {
+  return {
+    values,
+    weight: values.weight,
+    reps: values.reps,
+    durationSeconds: values.duration,
+    distanceMeters: values.distance
+  };
+}
+
+function buildApproachSet(set: WorkoutSet, index: number, resultType: WorkoutResultType): ApproachCountItem {
+  const values = pickCompatibleValues(
+    getLegacyValues({
+      values: set.values,
+      weight: set.targetWeightKg,
+      reps: set.targetReps,
+      durationSeconds: set.targetDurationSeconds,
+      distanceMeters: set.targetDistanceMeters
+    }),
+    resultType
+  );
+  const legacy = valuesToLegacyFields(values);
+  return {
+    id: set.id,
+    index: index + 1,
+    resultType,
+    values,
+    weight: legacy.weight,
+    reps: legacy.repetitions,
+    durationSeconds: legacy.durationSeconds,
+    distanceMeters: legacy.distanceMeters
+  };
 }
 
 function rememberMetricValue(values: number[], value: number | undefined) {
@@ -112,8 +178,15 @@ function rememberMetricValue(values: number[], value: number | undefined) {
   return [value, ...values.filter((item) => item !== value)].slice(0, MAX_FREQUENT_VALUE_COUNT);
 }
 
-function getAdjacentConnectionIds(ids: string[]) {
-  return ids.slice(0, -1).map((id, index) => `${id}:${ids[index + 1]}`);
+function ensureUniqueApproachSets(items: ApproachCountItem[], scope = "set") {
+  const seen = new Set<string>();
+
+  return items.map((item, index) => {
+    const baseId = item.id || `${scope}-${index + 1}`;
+    const id = seen.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+    seen.add(id);
+    return { ...item, id, index: index + 1 };
+  });
 }
 
 function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
@@ -121,142 +194,165 @@ function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
   void Haptics.impactAsync(style).catch(() => undefined);
 }
 
-function buildWorkoutParams(
-  clientId: string | undefined,
-  clientName: string | undefined,
-  date: string | undefined,
-  exerciseIds: string[],
-  supersetConnectionIds: string[],
-  approachData?: ApproachData
-) {
-  const serializedApproachData = approachData ? serializeApproachData(approachData) : undefined;
-
+function createInitialSet(resultType: WorkoutResultType): ApproachCountItem {
+  const values = getDefaultValues(resultType);
   return {
-    ...(clientId ? { clientId } : {}),
-    ...(clientName ? { clientName } : {}),
-    ...(date ? { date } : {}),
-    ...(exerciseIds.length > 0 ? { exerciseIds: exerciseIds.join(",") } : {}),
-    ...(supersetConnectionIds.length > 0 ? { supersetConnectionIds: supersetConnectionIds.join(",") } : {}),
-    ...(serializedApproachData ? { approachData: serializedApproachData } : {})
+    id: "set-1",
+    index: 1,
+    resultType,
+    ...getApproachSetValuePatch(values)
   };
 }
 
-const initialSets: ApproachCountItem[] = [
-  { id: "set-1", index: 1, weight: 150, reps: 12 }
-];
-
-function createAddedSet(index: number, template?: ApproachCountItem): ApproachCountItem {
+function createAddedSet(index: number, resultType: WorkoutResultType, template?: ApproachCountItem): ApproachCountItem {
   const id = `set-${Date.now()}-${index}`;
 
   if (!template) {
-    return { id, index, weight: 150, reps: 12 };
+    return { ...createInitialSet(resultType), id, index };
   }
 
+  const values = pickCompatibleValues(getSetValues(template), resultType);
   return {
     id,
     index,
-    weight: template.weight,
-    reps: template.reps,
+    resultType,
+    ...getApproachSetValuePatch(values),
     unit: template.unit
   };
 }
 
 export default function ExerciseApproachScreen() {
-  const { exerciseId, clientId, clientName, date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { exerciseId, draftId, exerciseItemId } = useLocalSearchParams<{
     exerciseId?: string;
-    clientId?: string;
-    clientName?: string;
-    date?: string;
-    exerciseIds?: string;
-    supersetConnectionIds?: string;
-    approachData?: string;
+    draftId?: string;
+    exerciseItemId?: string;
   }>();
   const currentExerciseId = firstParam(exerciseId);
-  const selectedExerciseIds = useMemo(() => parseIds(exerciseIds), [exerciseIds]);
-  const selectedSupersetConnectionIds = useMemo(() => parseIds(supersetConnectionIds), [supersetConnectionIds]);
-  const currentApproachData = useMemo(() => parseApproachData(approachData), [approachData]);
-  const initialExerciseSets = currentExerciseId && currentApproachData[currentExerciseId] ? currentApproachData[currentExerciseId] : initialSets;
-  const exercise = mockExercises.find((item) => item.id === currentExerciseId);
-  const [note, setNote] = useState("Слева - 6\nСправа - 5,6\nНожка - 4");
+  const draftIdValue = firstParam(draftId);
+  const exerciseItemIdValue = firstParam(exerciseItemId);
+  const { exercise } = useExercise(currentExerciseId);
+  const { draft } = useWorkoutDraft(draftIdValue);
+  const workoutActions = useWorkoutActions();
+  const quickValueActions = useQuickValueActions();
+  const draftExercise = useMemo(() => draft?.exercises.find((item) => item.id === exerciseItemIdValue), [draft?.exercises, exerciseItemIdValue]);
+  const resultType = draftExercise?.resultType ?? exercise?.resultType ?? defaultWorkoutResultType;
+  const trackingPreset = useMemo(() => getTrackingPreset(resultType), [resultType]);
+  const initialExerciseSets = useMemo(
+    () =>
+      ensureUniqueApproachSets(
+        draftExercise?.sets.map((set, index) => buildApproachSet(set, index, resultType)) ?? [createInitialSet(resultType)],
+        exerciseItemIdValue ?? currentExerciseId ?? "set"
+      ),
+    [currentExerciseId, draftExercise?.sets, exerciseItemIdValue, resultType]
+  );
+  const initialExerciseSetsKey = useMemo(
+    () =>
+      `${draftIdValue ?? ""}:${exerciseItemIdValue ?? ""}:${currentExerciseId ?? ""}:${draftExercise?.comment ?? ""}:${resultType}:${initialExerciseSets
+        .map((set) => `${set.id}:${JSON.stringify(set.values ?? {})}`)
+        .join("|")}`,
+    [currentExerciseId, draftExercise?.comment, draftIdValue, exerciseItemIdValue, initialExerciseSets, resultType]
+  );
+  const [note, setNote] = useState(draftExercise?.comment ?? "");
   const [sets, setSets] = useState(initialExerciseSets);
   const [activeSetId, setActiveSetId] = useState<string | undefined>();
   const [activeMetric, setActiveMetric] = useState<ActiveMetric | undefined>();
-  const [frequentValues, setFrequentValues] = useState<Record<ApproachMetric, number[]>>(defaultFrequentValues);
+  const { quickValue: activeQuickValue } = useQuickValue(currentExerciseId, activeMetric?.metric);
+  const [frequentValues, setFrequentValues] = useState<Partial<Record<ApproachMetric, number[]>>>({});
   const [setListWidth, setSetListWidth] = useState<number | undefined>();
   const [setDragging, setSetDragging] = useState(false);
   const { scrollProps } = useConditionalScroll({ disabled: setDragging });
-  const keyboardInset = useKeyboardInset();
-  const scrollableRef = useAnimatedRef<ScrollView>();
+  const activeMetricBlurTokenRef = useRef(0);
   const setsRef = useRef(initialExerciseSets);
+  const loadedExerciseKeyRef = useRef<string | undefined>(initialExerciseSetsKey);
+  const frequentValuesRef = useRef<Partial<Record<ApproachMetric, number[]>>>({});
   const latestEditedSetRef = useRef<ApproachCountItem | undefined>(undefined);
   const setListStyle = useMemo(() => [styles.setList, { minHeight: getSetListMinHeight(sets.length) }], [sets.length]);
-  const metricHistoryKey = useMemo(() => `approachMetricHistory:${currentExerciseId ?? "global"}`, [currentExerciseId]);
   const activePopularValues = useMemo(() => getPopularMetricValues(currentExerciseId, activeMetric?.metric), [activeMetric?.metric, currentExerciseId]);
-  const activeFrequentValues = activeMetric ? frequentValues[activeMetric.metric] : [];
+  const activeMetricDefinition = useMemo(() => trackingPreset.metrics.find((metric) => metric.key === activeMetric?.metric), [activeMetric?.metric, trackingPreset.metrics]);
+  const activeFrequentValues = activeMetric ? frequentValues[activeMetric.metric] ?? [] : [];
+  const keyboardAwareOffset = activeMetric ? QUICK_VALUES_KEYBOARD_OFFSET : theme.spacing[0];
   const contentStyle = useMemo(
     () => [
       styles.content,
       activeMetric
         ? {
-            paddingBottom: theme.spacing["3xl"] * 3 + keyboardInset + theme.sizes.approachQuickValuesHeight + theme.spacing.md
+            paddingBottom: theme.sizes.approachQuickValuesHeight + theme.spacing.xl
           }
         : undefined
     ],
-    [activeMetric, keyboardInset]
+    [activeMetric]
   );
 
   useEffect(() => {
-    let mounted = true;
+    const metric = activeMetric?.metric;
+    if (!metric) return;
 
-    void AsyncStorage.getItem(metricHistoryKey)
-      .then((value) => {
-        if (!mounted || !value) return;
-        setFrequentValues(normalizeMetricHistory(JSON.parse(value)));
-      })
-      .catch(() => {
-        if (mounted) {
-          setFrequentValues(defaultFrequentValues);
-        }
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [metricHistoryKey]);
+    const nextValues = normalizeMetricHistory(activeQuickValue?.values);
+    frequentValuesRef.current = { ...frequentValuesRef.current, [metric]: nextValues };
+    setFrequentValues((current) => ({ ...current, [metric]: nextValues }));
+  }, [activeMetric?.metric, activeQuickValue?.values]);
 
   const syncSets = useCallback((nextSets: ApproachCountItem[]) => {
-    const normalizedSets = nextSets.map((set, index) => ({ ...set, index: index + 1 }));
+    const normalizedSets = ensureUniqueApproachSets(nextSets, exerciseItemIdValue ?? currentExerciseId ?? "set");
     setsRef.current = normalizedSets;
     setSets(normalizedSets);
-  }, []);
+  }, [currentExerciseId, exerciseItemIdValue]);
 
-  const goBackToWorkout = useCallback(
-    (nextExerciseIds = selectedExerciseIds, nextSupersetConnectionIds = selectedSupersetConnectionIds, nextApproachData = currentApproachData) => {
-      router.replace({
-        pathname: "/workouts/new",
-        params: buildWorkoutParams(firstParam(clientId), firstParam(clientName), firstParam(date), nextExerciseIds, nextSupersetConnectionIds, nextApproachData)
-      });
-    },
-    [clientId, clientName, currentApproachData, date, selectedExerciseIds, selectedSupersetConnectionIds]
-  );
+  useEffect(() => {
+    if (loadedExerciseKeyRef.current === initialExerciseSetsKey) return;
 
-  const saveSets = () => {
-    if (!currentExerciseId) {
-      goBackToWorkout();
+    loadedExerciseKeyRef.current = initialExerciseSetsKey;
+    setNote(draftExercise?.comment ?? "");
+    syncSets(initialExerciseSets);
+  }, [draftExercise?.comment, initialExerciseSets, initialExerciseSetsKey, syncSets]);
+
+  const saveSets = async () => {
+    if (!draftIdValue || !exerciseItemIdValue) {
+      router.back();
       return;
     }
 
-    goBackToWorkout(selectedExerciseIds, selectedSupersetConnectionIds, {
-      ...currentApproachData,
-      [currentExerciseId]: setsRef.current
+    await workoutActions.updateDraftExercise(draftIdValue, exerciseItemIdValue, {
+      comment: note,
+      resultType,
+      sets: setsRef.current.map((set, index) => ({
+        id: set.id,
+        order: index + 1,
+        values: pickCompatibleValues(getSetValues(set), resultType),
+        targetWeightKg: set.values?.weight ?? set.weight,
+        targetReps: set.values?.reps ?? set.reps,
+        targetDurationSeconds: set.values?.duration ?? set.durationSeconds,
+        targetDistanceMeters: set.values?.distance ?? set.distanceMeters,
+        completed: false
+      }))
     });
+    router.back();
   };
 
   const addSet = () => {
     const nextIndex = setsRef.current.length + 1;
     const template = latestEditedSetRef.current ?? setsRef.current[setsRef.current.length - 1];
-    syncSets([...setsRef.current, createAddedSet(nextIndex, template)]);
+    syncSets([...setsRef.current, createAddedSet(nextIndex, resultType, template)]);
   };
+
+  const clearActiveMetric = useCallback(() => {
+    activeMetricBlurTokenRef.current += 1;
+    setActiveMetric(undefined);
+  }, []);
+
+  const focusMetric = useCallback((metric: ActiveMetric) => {
+    activeMetricBlurTokenRef.current += 1;
+    setActiveMetric(metric);
+  }, []);
+
+  const blurMetric = useCallback((metric: ActiveMetric) => {
+    const blurToken = activeMetricBlurTokenRef.current;
+
+    setTimeout(() => {
+      if (activeMetricBlurTokenRef.current !== blurToken) return;
+      setActiveMetric((current) => (current?.setId === metric.setId && current.metric === metric.metric ? undefined : current));
+    }, ACTIVE_METRIC_BLUR_DELAY_MS);
+  }, []);
 
   const deleteSet = useCallback((setId: string) => {
     setActiveMetric((current) => (current?.setId === setId ? undefined : current));
@@ -264,67 +360,90 @@ export default function ExerciseApproachScreen() {
   }, [syncSets]);
 
   const updateSet = useCallback(
-    (setId: string, patch: Partial<Pick<ApproachCountItem, "weight" | "reps">>) => {
+    (setId: string, patch: ApproachCountValuePatch) => {
       syncSets(
         setsRef.current.map((set) => {
           if (set.id !== setId) return set;
 
-          const nextSet = { ...set, ...patch };
+          const nextValues = pickCompatibleValues(patch.values ?? getSetValues(set), resultType);
+          const legacy = valuesToLegacyFields(nextValues);
+          const nextSet = {
+            ...set,
+            ...patch,
+            resultType,
+            values: nextValues,
+            weight: legacy.weight,
+            reps: legacy.repetitions,
+            durationSeconds: legacy.durationSeconds,
+            distanceMeters: legacy.distanceMeters
+          };
           latestEditedSetRef.current = nextSet;
           return nextSet;
         })
       );
     },
-    [syncSets]
+    [resultType, syncSets]
   );
 
   const rememberFrequentValue = useCallback(
     (metric: ApproachMetric, value: number | undefined) => {
-      setFrequentValues((current) => {
-        const nextValues = rememberMetricValue(current[metric], value);
-        if (nextValues === current[metric]) return current;
+      const current = frequentValuesRef.current;
+      const nextValues = rememberMetricValue(current[metric] ?? [], value);
+      if (nextValues === current[metric]) return;
 
-        const nextHistory = { ...current, [metric]: nextValues };
-        void AsyncStorage.setItem(metricHistoryKey, JSON.stringify(nextHistory)).catch(() => undefined);
-        return nextHistory;
-      });
+      const nextHistory = { ...current, [metric]: nextValues };
+      frequentValuesRef.current = nextHistory;
+      setFrequentValues(nextHistory);
+
+      if (currentExerciseId) {
+        void quickValueActions.upsert({ exerciseId: currentExerciseId, metric, values: nextValues }).catch(() => undefined);
+      }
     },
-    [metricHistoryKey]
+    [currentExerciseId, quickValueActions]
   );
 
   const selectQuickValue = useCallback(
     (value: number) => {
       if (!activeMetric) return;
 
-      updateSet(activeMetric.setId, { [activeMetric.metric]: value });
-      if (activeMetric.metric === "weight") {
-        setActiveMetric({ setId: activeMetric.setId, metric: "reps" });
+      const currentSet = setsRef.current.find((set) => set.id === activeMetric.setId);
+      const nextValues = {
+        ...(currentSet ? getSetValues(currentSet) : {}),
+        [activeMetric.metric]: value
+      };
+      updateSet(activeMetric.setId, getApproachSetValuePatch(nextValues));
+      rememberFrequentValue(activeMetric.metric, value);
+      const nextMetric = getNextMetric(trackingPreset.metrics, activeMetric.metric);
+      if (nextMetric) {
+        focusMetric({ setId: activeMetric.setId, metric: nextMetric });
+        return;
       }
+
+      Keyboard.dismiss();
+      clearActiveMetric();
     },
-    [activeMetric, updateSet]
+    [activeMetric, clearActiveMetric, focusMetric, rememberFrequentValue, trackingPreset.metrics, updateSet]
   );
 
   const handleSetListLayout = useCallback((event: LayoutChangeEvent) => {
-    setSetListWidth(Math.round(event.nativeEvent.layout.width));
+    const { width } = event.nativeEvent.layout;
+
+    setSetListWidth(Math.round(width));
   }, []);
 
   const deleteExercise = () => {
-    if (!currentExerciseId) {
-      goBackToWorkout();
+    if (!draftIdValue || !exerciseItemIdValue) {
+      router.back();
       return;
     }
 
-    const nextExerciseIds = selectedExerciseIds.filter((id) => id !== currentExerciseId);
-    const validConnectionIds = getAdjacentConnectionIds(nextExerciseIds);
-    const nextConnectionIds = selectedSupersetConnectionIds.filter((id) => validConnectionIds.includes(id));
-    const { [currentExerciseId]: _removed, ...nextApproachData } = currentApproachData;
-    goBackToWorkout(nextExerciseIds, nextConnectionIds, nextApproachData);
+    void workoutActions.removeDraftExercise(draftIdValue, exerciseItemIdValue).then(() => router.back());
   };
 
   const commitSetOrder = useCallback(
     ({ order }: SortableFlexDragEndParams) => {
       setActiveSetId(undefined);
-      setActiveMetric(undefined);
+      clearActiveMetric();
       setSetDragging(false);
       const currentSets = setsRef.current;
       const nextSets = order(currentSets);
@@ -334,21 +453,21 @@ export default function ExerciseApproachScreen() {
 
       syncSets(nextSets);
     },
-    [syncSets]
+    [clearActiveMetric, syncSets]
   );
 
   const handleSetDrop = useCallback(() => {
     setActiveSetId(undefined);
-    setActiveMetric(undefined);
+    clearActiveMetric();
     setSetDragging(false);
-  }, []);
+  }, [clearActiveMetric]);
 
   const handleSetDragStart = useCallback(({ key }: { key: string }) => {
     setActiveSetId(key);
-    setActiveMetric(undefined);
+    clearActiveMetric();
     setSetDragging(true);
     triggerImpact(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
+  }, [clearActiveMetric]);
 
   const renderSet = useCallback(
     (item: ApproachCountItem, index: number) => (
@@ -356,14 +475,11 @@ export default function ExerciseApproachScreen() {
         <ApproachCount
           focusedMetric={activeMetric?.setId === item.id ? activeMetric.metric : undefined}
           item={{ ...item, index: index + 1 }}
+          metrics={trackingPreset.metrics}
           onDelete={() => deleteSet(item.id)}
-          onMetricBlur={(metric) => {
-            setTimeout(() => {
-              setActiveMetric((current) => (current?.setId === item.id && current.metric === metric ? undefined : current));
-            }, 80);
-          }}
+          onMetricBlur={(metric) => blurMetric({ setId: item.id, metric })}
           onMetricCommit={rememberFrequentValue}
-          onMetricFocus={(metric) => setActiveMetric({ setId: item.id, metric })}
+          onMetricFocus={(metric) => focusMetric({ setId: item.id, metric })}
           onValueChange={(patch) => updateSet(item.id, patch)}
           trailingSlot={
             <Sortable.Handle style={styles.dragHandle}>
@@ -373,21 +489,36 @@ export default function ExerciseApproachScreen() {
         />
       </View>
     ),
-    [activeMetric, activeSetId, deleteSet, rememberFrequentValue, updateSet]
+    [activeMetric, activeSetId, blurMetric, deleteSet, focusMetric, rememberFrequentValue, trackingPreset.metrics, updateSet]
   );
+
+  const quickValues = activeMetric ? (
+    <ApproachQuickValues
+      frequentValues={activeFrequentValues}
+      popularValues={activePopularValues}
+      resetKey={`${activeMetric.setId}:${activeMetric.metric}`}
+      formatValue={(value) => formatQuickMetricValue(activeMetricDefinition, value)}
+      style={styles.quickValuesOverlay}
+      onSelectValue={selectQuickValue}
+    />
+  ) : null;
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
       <Navigation title={exercise?.name ?? "Упражнение"} onBack={() => router.back()} />
 
-      <Animated.ScrollView
-        ref={scrollableRef as never}
-        automaticallyAdjustKeyboardInsets
+      <KeyboardAwareScrollView
+        bottomOffset={keyboardAwareOffset}
         contentContainerStyle={contentStyle}
+        extraKeyboardSpace={keyboardAwareOffset}
         keyboardShouldPersistTaps="handled"
+        mode="insets"
         {...scrollProps}
+        bounces={activeMetric ? false : scrollProps.bounces}
+        scrollEnabled={activeMetric ? true : scrollProps.scrollEnabled}
+        showsVerticalScrollIndicator={activeMetric ? true : scrollProps.showsVerticalScrollIndicator}
       >
-        <TextArea label="Заметки" value={note} width="fill" showMessage={false} onFocus={() => setActiveMetric(undefined)} onChangeText={setNote} />
+        <TextArea label="Заметки" value={note} width="fill" showMessage={false} onFocus={clearActiveMetric} onChangeText={setNote} />
 
         <View style={styles.approachSection}>
           <Divider width="fill" tone="canvasSoft" />
@@ -417,7 +548,6 @@ export default function ExerciseApproachScreen() {
                 minWidth={setListWidth ?? theme.spacing[0]}
                 overDrag="vertical"
                 overflow="hidden"
-                scrollableRef={scrollableRef}
                 strategy="insert"
                 width={setListWidth ?? "fill"}
                 onDragEnd={commitSetOrder}
@@ -433,24 +563,25 @@ export default function ExerciseApproachScreen() {
             </View>
           </View>
 
-          <View style={styles.addAction}>
-            <Button label="Добавить" type="secondaryNeutral" size="large" width="fill" onPress={addSet} />
-          </View>
+          {activeMetric ? null : (
+            <View style={styles.addAction}>
+              <Button label="Добавить" type="secondaryNeutral" size="large" width="fill" onPress={addSet} />
+            </View>
+          )}
         </View>
-      </Animated.ScrollView>
+      </KeyboardAwareScrollView>
 
-      <View style={styles.footer}>
-        <Button label="Сохранить" type="primary" size="large" width="fill" onPress={saveSets} />
-        <Button label="Удалить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={deleteExercise} />
-      </View>
+      {activeMetric ? null : (
+        <View style={styles.footer}>
+          <Button label="Сохранить" type="primary" size="large" width="fill" onPress={saveSets} />
+          <Button label="Удалить упражнение" type="secondaryNeutral" size="large" width="fill" onPress={deleteExercise} />
+        </View>
+      )}
 
       {activeMetric ? (
-        <ApproachQuickValues
-          frequentValues={activeFrequentValues}
-          popularValues={activePopularValues}
-          style={[styles.quickValues, { bottom: keyboardInset + theme.spacing.sm }]}
-          onSelectValue={selectQuickValue}
-        />
+        <KeyboardStickyView offset={{ closed: QUICK_VALUES_KEYBOARD_OFFSET, opened: -theme.spacing.sm }} style={styles.quickValuesKeyboardLayer}>
+          {quickValues}
+        </KeyboardStickyView>
       ) : null}
     </SafeAreaView>
   );
@@ -463,10 +594,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingBottom: theme.spacing["3xl"] * 3
+    paddingBottom: theme.spacing.lg
   },
   approachSection: {
-    flex: 1,
     backgroundColor: theme.colors.background.canvas
   },
   sectionHeader: {
@@ -520,10 +650,14 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
   },
-  quickValues: {
+  quickValuesKeyboardLayer: {
     position: "absolute",
-    left: theme.spacing.lg,
-    right: theme.spacing.lg,
+    right: theme.spacing[0],
+    bottom: theme.spacing[0],
+    left: theme.spacing[0],
     zIndex: 10
+  },
+  quickValuesOverlay: {
+    marginHorizontal: theme.spacing.sm
   }
 });

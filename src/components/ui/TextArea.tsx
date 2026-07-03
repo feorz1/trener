@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
   Text,
   TextInput as NativeTextInput,
   View,
+  type StyleProp,
   type TextInputProps,
-  type TextStyle
+  type TextStyle,
+  type ViewStyle
 } from "react-native";
 import { theme } from "@/theme";
 
@@ -21,6 +23,7 @@ export type TextAreaProps = Omit<TextInputProps, "editable" | "multiline" | "onC
   showLabel?: boolean;
   showMessage?: boolean;
   width?: "fixed" | "fill";
+  style?: StyleProp<ViewStyle>;
   onChangeText?: (value: string) => void;
 };
 
@@ -41,10 +44,12 @@ export function TextArea({
   showLabel = true,
   showMessage = true,
   width = "fixed",
-  placeholder = "Value",
+  style,
+  placeholder = "Введите текст",
   onChangeText,
   ...textInputProps
 }: TextAreaProps) {
+  const inputRef = useRef<NativeTextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const resolvedState: TextAreaState = disabled ? "disabled" : isFocused && state !== "error" ? "focus" : state;
   const inputTextColor =
@@ -63,14 +68,24 @@ export function TextArea({
       : disabled
         ? theme.colors.content.mute
         : theme.colors.content.ink;
-  const resolvedMessage = message ?? (resolvedState === "error" ? "Error message" : "Message");
+  const resolvedMessage = message ?? (resolvedState === "error" ? "Проверьте текст" : "Подсказка");
+  const moveCaretToEnd = () => {
+    const end = value?.length ?? theme.spacing[0];
+    const selection = { start: end, end };
+
+    inputRef.current?.setNativeProps({ selection });
+    requestAnimationFrame(() => {
+      inputRef.current?.setNativeProps({ selection });
+    });
+  };
 
   return (
-    <View style={[styles.root, width === "fill" && styles.rootFill]}>
+    <View style={[styles.root, width === "fill" && styles.rootFill, style]}>
       {showLabel ? <Text style={[styles.label, { color: labelColor }]}>{label}</Text> : null}
 
       <View style={[styles.field, disabled && styles.disabledField]}>
         <NativeTextInput
+          ref={inputRef}
           {...textInputProps}
           editable={!disabled}
           multiline
@@ -81,6 +96,7 @@ export function TextArea({
           onChangeText={onChangeText}
           onFocus={(event) => {
             setIsFocused(true);
+            moveCaretToEnd();
             textInputProps.onFocus?.(event);
           }}
           placeholder={placeholder}
@@ -144,6 +160,7 @@ const styles = StyleSheet.create({
     fontFamily: theme.typography.body.md.fontFamily,
     fontSize: theme.typography.body.md.fontSize,
     fontWeight: theme.typography.body.md.fontWeight,
+    lineHeight: theme.typography.body.mdStrong.lineHeight,
     letterSpacing: theme.typography.body.md.letterSpacing,
     minHeight: theme.sizes.textAreaFieldMinHeight - theme.spacing.md * 2,
     padding: theme.spacing[0],

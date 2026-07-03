@@ -23,6 +23,7 @@ Use grouped Figma variables and nested code tokens. Do not use raw hex values in
 - Primary actions: `color/content/primary`
 - Text on primary: `color/content/on-primary`
 - Page/card surfaces: `color/background/canvas`, `color/background/canvas-soft`
+- Subtle card stroke: `color/background/border`
 - Card slot separators: `card-divider`
 - Semantic status: `color/status/*`
 - Illustration accents only: `color/accent/*`

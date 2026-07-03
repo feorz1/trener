@@ -19,16 +19,20 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/content/mute` | `#868685` | `theme.colors.content.mute` |
 | `color/content/disabled` | `#CFCFCF` | `theme.colors.content.disabled` |
 | `color/background/canvas` | `#FFFFFF` | `theme.colors.background.canvas` |
-| `color/background/canvas-soft` | `#F3F3F3` | `theme.colors.background.canvasSoft` |
+| `color/background/canvas-soft` | `#EFEFEF` | `theme.colors.background.canvasSoft` |
+| `color/background/border` | `#E9E9E9` | `theme.colors.background.border` |
 | `card-divider` | `#F5F4F2` | `theme.colors.background.cardDivider` |
 | `color/status/positive` | `#2EAD4B` | `theme.colors.status.positive` |
 | `color/status/positive-deep` | `#054D28` | `theme.colors.status.positiveDeep` |
 | `color/status/warning` | `#FFD11A` | `theme.colors.status.warning` |
 | `color/status/warning-deep` | `#F38800` | `theme.colors.status.warningDeep` |
+| `color/status/warning-deep-soft` | `#FDE7CC` | `theme.colors.status.warningDeepSoft` |
+| `color/status/warning-darkest` | `#9A5600` | `theme.colors.status.warningDarkest` |
 | `color/status/warning-content` | `#4A3B1C` | `theme.colors.status.warningContent` |
 | `color/status/negative` | `#D03238` | `theme.colors.status.negative` |
 | `color/status/negative-deep` | `#A72027` | `theme.colors.status.negativeDeep` |
 | `color/status/negative-darkest` | `#A7000D` | `theme.colors.status.negativeDarkest` |
+| `color/status/negative-soft` | `#F6D6D7` | `theme.colors.status.negativeSoft` |
 | `color/status/negative-bg` | `#320707` | `theme.colors.status.negativeBg` |
 | `color/accent/orange` | `#FFC091` | `theme.colors.accent.orange` |
 | `color/accent/cyan` | `#38C8FF` | `theme.colors.accent.cyan` |
@@ -63,22 +67,22 @@ Current Figma collection: `Wise / Trainer Tokens`.
 
 | Figma text style | Font | Size | Line height | Letter spacing | Code target |
 |---|---|---:|---:|---:|---|
-| `Typography/Display/Mega` | Inter Bold | `126` | `107.1` | `0` | `theme.typography.display.mega` |
-| `Typography/Display/XXL` | Inter Bold | `96` | `81.6` | `0` | `theme.typography.display.xxl` |
-| `Typography/Display/XL` | Inter Bold | `64` | `54.4` | `0` | `theme.typography.display.xl` |
-| `Typography/Display/LG` | Inter Regular | `47` | `70.5` | `-0.108` | `theme.typography.display.lg` |
-| `Typography/Display/MD` | Inter Bold | `40` | `34` | `0` | `theme.typography.display.md` |
-| `Typography/Display/SM` | Inter Semi Bold | `32` | `38.4` | `-0.96` | `theme.typography.display.sm` |
-| `Typography/Display/XS` | Inter Semi Bold | `24` | `31.2` | `-0.48` | `theme.typography.display.xs` |
-| `Typography/Body/LG` | Inter Semi Bold | `20` | `24` | `0` | `theme.typography.body.lg` |
-| `Typography/Body/MD` | Inter Regular | `16` | `24` | `0` | `theme.typography.body.md` |
-| `Typography/Body/MD Strong` | Inter Semi Bold | `16` | `20` | `0` | `theme.typography.body.mdStrong` |
-| `Typography/Body/SM` | Inter Regular | `14` | `20` | `0` | `theme.typography.body.sm` |
-| `Typography/Body/SM Strong` | Inter Semi Bold | `14` | `18` | `0` | `theme.typography.body.smStrong` |
-| `Typography/Body/SM Caption` | Inter Semi Bold | `12` | `16` | `0` | `theme.typography.body.smCaption` |
-| `Typography/Body/Caption` | Inter Semi Bold | `10` | `16` | `0` | `theme.typography.body.caption` |
-| `Typography/Caption` | Inter Regular | `12` | `16` | `0` | `theme.typography.caption` |
-| `Typography/Button/MD` | Inter Semi Bold | `16` | `20` | `0` | `theme.typography.button.md` |
+| `Typography/Display/Mega` | SF Pro Display Bold | `126` | `107.1` | `0` | `theme.typography.display.mega` |
+| `Typography/Display/XXL` | SF Pro Display Bold | `96` | `81.6` | `0` | `theme.typography.display.xxl` |
+| `Typography/Display/XL` | SF Pro Display Bold | `64` | `54.4` | `0.22` | `theme.typography.display.xl` |
+| `Typography/Display/LG` | SF Pro Display Regular | `47` | `70.5` | `0.37` | `theme.typography.display.lg` |
+| `Typography/Display/MD` | SF Pro Display Bold | `40` | `34` | `0.37` | `theme.typography.display.md` |
+| `Typography/Display/SM` | SF Pro Display Semibold | `32` | `38.4` | `0.4` | `theme.typography.display.sm` |
+| `Typography/Display/XS` | SF Pro Display Medium | `24` | `31.2` | `0.35` | `theme.typography.display.xs` |
+| `Typography/Body/LG` | SF Pro Display Semibold | `20` | `24` | `0.38` | `theme.typography.body.lg` |
+| `Typography/Body/MD` | SF Pro Display Regular | `16` | `24` | `-0.32` | `theme.typography.body.md` |
+| `Typography/Body/MD Strong` | SF Pro Display Medium | `16` | `20` | `-0.32` | `theme.typography.body.mdStrong` |
+| `Typography/Body/SM` | SF Pro Display Regular | `14` | `20` | `-0.15` | `theme.typography.body.sm` |
+| `Typography/Body/SM Strong` | SF Pro Display Medium | `14` | `18` | `-0.15` | `theme.typography.body.smStrong` |
+| `Typography/Body/SM Caption` | SF Pro Display Medium | `12` | `16` | `0` | `theme.typography.body.smCaption` |
+| `Typography/Body/Caption` | SF Pro Display Semibold | `10` | `16` | `0.12` | `theme.typography.body.caption` |
+| `Typography/Caption` | SF Pro Display Regular | `12` | `16` | `0` | `theme.typography.caption` |
+| `Typography/Button/MD` | SF Pro Display Semibold | `16` | `20` | `-0.32` | `theme.typography.button.md` |
 
 ## Code Mapping Rules
 
@@ -88,6 +92,7 @@ Figma slash names map to nested `theme.*` paths:
 color/content/primary            -> theme.colors.content.primary
 color/content/disabled           -> theme.colors.content.disabled
 color/background/canvas             -> theme.colors.background.canvas
+color/background/border             -> theme.colors.background.border
 color/status/positive           -> theme.colors.status.positive
 color/accent/cyan        -> theme.colors.accent.cyan
 spacing/md              -> theme.spacing.md

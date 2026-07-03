@@ -1,8 +1,16 @@
+import { Platform } from "react-native";
+
+const systemFontFamily = Platform.select({
+  ios: "SF Pro Display",
+  android: "sans-serif",
+  default: "system-ui"
+});
+
 const fontFamilies = {
-  regular: "Inter",
-  medium: "Inter-Medium",
-  semibold: "Inter-SemiBold",
-  bold: "Inter-Bold"
+  regular: systemFontFamily,
+  medium: systemFontFamily,
+  semibold: systemFontFamily,
+  bold: systemFontFamily
 } as const;
 
 export const typography = {
@@ -26,35 +34,35 @@ export const typography = {
       fontSize: 64,
       lineHeight: 54.4,
       fontWeight: "700",
-      letterSpacing: 0
+      letterSpacing: 0.22
     },
     lg: {
       fontFamily: fontFamilies.regular,
       fontSize: 47,
       lineHeight: 70.5,
       fontWeight: "400",
-      letterSpacing: -0.108
+      letterSpacing: 0.37
     },
     md: {
       fontFamily: fontFamilies.bold,
       fontSize: 40,
       lineHeight: 34,
       fontWeight: "700",
-      letterSpacing: 0
+      letterSpacing: 0.37
     },
     sm: {
       fontFamily: fontFamilies.semibold,
       fontSize: 32,
       lineHeight: 38.4,
       fontWeight: "600",
-      letterSpacing: -0.96
+      letterSpacing: 0.4
     },
     xs: {
-      fontFamily: fontFamilies.semibold,
+      fontFamily: fontFamilies.medium,
       fontSize: 24,
       lineHeight: 31.2,
-      fontWeight: "600",
-      letterSpacing: -0.48
+      fontWeight: "500",
+      letterSpacing: 0.35
     }
   },
   body: {
@@ -63,41 +71,41 @@ export const typography = {
       fontSize: 20,
       lineHeight: 24,
       fontWeight: "600",
-      letterSpacing: 0
+      letterSpacing: 0.38
     },
     md: {
       fontFamily: fontFamilies.regular,
       fontSize: 16,
       lineHeight: 24,
       fontWeight: "400",
-      letterSpacing: 0
+      letterSpacing: -0.32
     },
     mdStrong: {
-      fontFamily: fontFamilies.semibold,
+      fontFamily: fontFamilies.medium,
       fontSize: 16,
       lineHeight: 20,
-      fontWeight: "600",
-      letterSpacing: 0
+      fontWeight: "500",
+      letterSpacing: -0.32
     },
     sm: {
       fontFamily: fontFamilies.regular,
       fontSize: 14,
       lineHeight: 20,
       fontWeight: "400",
-      letterSpacing: 0
+      letterSpacing: -0.15
     },
     smStrong: {
-      fontFamily: fontFamilies.semibold,
+      fontFamily: fontFamilies.medium,
       fontSize: 14,
       lineHeight: 18,
-      fontWeight: "600",
-      letterSpacing: 0
+      fontWeight: "500",
+      letterSpacing: -0.15
     },
     smCaption: {
-      fontFamily: fontFamilies.semibold,
+      fontFamily: fontFamilies.medium,
       fontSize: 12,
       lineHeight: 16,
-      fontWeight: "600",
+      fontWeight: "500",
       letterSpacing: 0
     },
     caption: {
@@ -105,7 +113,7 @@ export const typography = {
       fontSize: 10,
       lineHeight: 16,
       fontWeight: "600",
-      letterSpacing: 0
+      letterSpacing: 0.12
     }
   },
   caption: {
@@ -120,7 +128,7 @@ export const typography = {
     fontSize: 10,
     lineHeight: 16,
     fontWeight: "600",
-    letterSpacing: 0
+    letterSpacing: 0.12
   },
   button: {
     md: {
@@ -128,7 +136,7 @@ export const typography = {
       fontSize: 16,
       lineHeight: 20,
       fontWeight: "600",
-      letterSpacing: 0
+      letterSpacing: -0.32
     }
   },
 

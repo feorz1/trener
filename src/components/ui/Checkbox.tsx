@@ -17,7 +17,7 @@ export type CheckboxProps = Omit<PressableProps, "onPress" | "style"> & {
 export function Checkbox({
   selected = false,
   disabled,
-  label = "Text",
+  label = "Пункт",
   showLabel = true,
   size = "md",
   state = "default",

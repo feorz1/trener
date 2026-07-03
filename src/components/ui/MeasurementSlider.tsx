@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -49,22 +50,23 @@ export function MeasurementSlider({
   step = 1,
   majorStep = 5,
   onChange,
-  referenceValue,
-  rangeFrom
+  referenceValue
 }: MeasurementSliderProps) {
   const scrollRef = useRef<ScrollView>(null);
   const lastHapticValue = useRef(value);
+  const liveValue = useRef(value);
   const userScrolling = useRef(false);
   const initializedKey = useRef("");
   const finishScrollTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [layoutWidth, setLayoutWidth] = useState(0);
-  const [scrollOffset, setScrollOffset] = useState(0);
   const safeValue = clampValue(value, min, max);
+  const [displayValue, setDisplayValue] = useState(safeValue);
+  const tickSpacing = theme.sizes.measurementSliderTickSpacing;
+  const selectedOffset = getOffsetForValue(safeValue, min, max, step, tickSpacing);
   const tickValues = useMemo(() => {
     const count = Math.floor((max - min) / step) + 1;
     return Array.from({ length: count }, (_, index) => min + index * step);
   }, [max, min, step]);
-  const tickSpacing = theme.sizes.measurementSliderTickSpacing;
   const sideInset = Math.max(theme.spacing[0], layoutWidth / 2 - tickSpacing / 2);
   const contentWidth = Math.max(theme.spacing[0], tickValues.length * tickSpacing);
   const snapOffsets = useMemo(() => tickValues.map((tickValue) => getOffsetForValue(tickValue, min, max, step, tickSpacing)), [max, min, step, tickSpacing, tickValues]);
@@ -73,17 +75,25 @@ export function MeasurementSlider({
   const scrollToValue = useCallback(
     (nextValue: number, animated: boolean) => {
       const nextOffset = getOffsetForValue(nextValue, min, max, step, tickSpacing);
-      setScrollOffset(nextOffset);
       scrollRef.current?.scrollTo({ x: nextOffset, animated });
     },
     [max, min, step, tickSpacing]
   );
 
   useEffect(() => {
+    liveValue.current = safeValue;
+    if (!userScrolling.current) {
+      setDisplayValue(safeValue);
+    }
+  }, [safeValue, sliderKey]);
+
+  useEffect(() => {
     if (layoutWidth > 0 && initializedKey.current !== sliderKey) {
       initializedKey.current = sliderKey;
+      liveValue.current = safeValue;
+      setDisplayValue(safeValue);
       lastHapticValue.current = safeValue;
-      requestAnimationFrame(() => scrollToValue(safeValue, false));
+      scrollToValue(safeValue, false);
     }
   }, [layoutWidth, safeValue, scrollToValue, sliderKey]);
 
@@ -100,18 +110,30 @@ export function MeasurementSlider({
   };
 
   const emitHaptic = (nextValue: number) => {
+    if (Platform.OS === "web") return;
     if (nextValue === lastHapticValue.current) return;
     lastHapticValue.current = nextValue;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
+  const emitValue = (nextValue: number) => {
+    if (nextValue === liveValue.current) return;
+    liveValue.current = nextValue;
+    setDisplayValue(nextValue);
+    emitHaptic(nextValue);
+  };
+
+  const commitValue = (nextValue: number) => {
+    emitValue(nextValue);
+    if (nextValue !== safeValue) {
+      onChange(nextValue);
+    }
+  };
+
   const finishScroll = (offsetX: number) => {
     const nextValue = getNearestValue(offsetX, min, max, step);
     userScrolling.current = false;
-    if (nextValue !== safeValue) {
-      emitHaptic(nextValue);
-      onChange(nextValue);
-    }
+    commitValue(nextValue);
     scrollToValue(nextValue, true);
   };
 
@@ -131,21 +153,14 @@ export function MeasurementSlider({
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     userScrolling.current = true;
-    setScrollOffset(event.nativeEvent.contentOffset.x);
     const nextValue = getNearestValue(event.nativeEvent.contentOffset.x, min, max, step);
-    if (nextValue !== safeValue) {
-      emitHaptic(nextValue);
-      onChange(nextValue);
-    }
+    emitValue(nextValue);
   };
 
   const handleScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     finishScroll(event.nativeEvent.contentOffset.x);
   };
 
-  const rangeBounds = typeof rangeFrom === "number" ? [clampValue(rangeFrom, min, max), safeValue].sort((left, right) => left - right) : undefined;
-  const rangeLeft = rangeBounds ? sideInset + ((rangeBounds[0] - min) / step) * tickSpacing + tickSpacing / 2 - scrollOffset : 0;
-  const rangeWidth = rangeBounds ? Math.max(theme.sizes.measurementSliderTickWidth, ((rangeBounds[1] - rangeBounds[0]) / step) * tickSpacing) : 0;
   const majorValues = tickValues.filter((tickValue) => (tickValue - min) % majorStep === 0);
 
   return (
@@ -156,18 +171,20 @@ export function MeasurementSlider({
           <>
             <Text style={styles.valueText}>{referenceValue}</Text>
             <Icon name="chevron right" size={theme.spacing.xl} color={theme.colors.content.ink} />
-            <Text style={[styles.valueText, styles.targetValueText]}>{safeValue}</Text>
+            <Text style={[styles.valueText, styles.targetValueText]}>{displayValue}</Text>
           </>
         ) : (
-          <Text style={styles.valueText}>{safeValue}</Text>
+          <Text style={styles.valueText}>{displayValue}</Text>
         )}
       </View>
 
       <View style={styles.rulerWrap}>
         <ScrollView
+          key={sliderKey}
           ref={scrollRef}
           horizontal
           bounces={false}
+          contentOffset={{ x: selectedOffset, y: 0 }}
           decelerationRate="fast"
           onMomentumScrollEnd={handleScrollEnd}
           onMomentumScrollBegin={handleScrollBegin}
@@ -205,7 +222,7 @@ export function MeasurementSlider({
             );
           })}
         </ScrollView>
-        <Svg width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} style={[styles.leftFade, styles.nonInteractive]}>
+        <Svg pointerEvents="none" width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} style={[styles.leftFade, styles.nonInteractive]}>
           <Defs>
             <LinearGradient id="leftFade" x1="0" y1="0" x2="1" y2="0">
               <Stop offset="0" stopColor={theme.colors.background.canvas} stopOpacity="1" />
@@ -214,7 +231,7 @@ export function MeasurementSlider({
           </Defs>
           <Rect width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} fill="url(#leftFade)" />
         </Svg>
-        <Svg width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} style={[styles.rightFade, styles.nonInteractive]}>
+        <Svg pointerEvents="none" width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} style={[styles.rightFade, styles.nonInteractive]}>
           <Defs>
             <LinearGradient id="rightFade" x1="0" y1="0" x2="1" y2="0">
               <Stop offset="0" stopColor={theme.colors.background.canvas} stopOpacity="0.5" />
@@ -223,20 +240,9 @@ export function MeasurementSlider({
           </Defs>
           <Rect width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} fill="url(#rightFade)" />
         </Svg>
-        {rangeBounds ? (
-          <Svg width={rangeWidth} height={theme.sizes.measurementSliderRangeHeight} style={[styles.range, styles.nonInteractive, { left: rangeLeft }]}>
-            <Defs>
-              <LinearGradient id="measurementRange" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor={theme.colors.content.primaryPale} stopOpacity="0" />
-                <Stop offset="1" stopColor={theme.colors.content.primaryPale} stopOpacity="1" />
-              </LinearGradient>
-            </Defs>
-            <Rect width={rangeWidth} height={theme.sizes.measurementSliderRangeHeight} fill="url(#measurementRange)" />
-          </Svg>
-        ) : null}
-        <View style={[styles.centerMarker, styles.nonInteractive]}>
+        <View pointerEvents="none" style={[styles.centerMarker, styles.nonInteractive]}>
           <View style={styles.centerTick} />
-          <Svg width={theme.sizes.measurementSliderIndicatorWidth} height={theme.sizes.measurementSliderIndicatorHeight} viewBox="0 0 10 9" style={styles.markerTriangle}>
+          <Svg pointerEvents="none" width={theme.sizes.measurementSliderIndicatorWidth} height={theme.sizes.measurementSliderIndicatorHeight} viewBox="0 0 10 9" style={styles.markerTriangle}>
             <Path d="M3.09919 0.891148C3.89075 -0.297076 5.63659 -0.297078 6.42815 0.891146L9.18784 5.03374C10.0733 6.3629 9.12044 8.14258 7.52336 8.14258H2.00398C0.406898 8.14258 -0.545945 6.3629 0.339502 5.03375L3.09919 0.891148Z" fill={theme.colors.content.inkDeep} />
           </Svg>
         </View>
@@ -271,6 +277,7 @@ const styles = StyleSheet.create({
   valueText: {
     ...theme.typography.display.xl,
     lineHeight: theme.sizes.measurementSliderValueHeight,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.ink,
     textAlign: "center"
   },
@@ -278,6 +285,7 @@ const styles = StyleSheet.create({
     color: theme.colors.status.positive
   },
   rulerWrap: {
+    position: "relative",
     alignSelf: "stretch",
     height: theme.sizes.measurementSliderRulerHeight
   },
@@ -297,6 +305,7 @@ const styles = StyleSheet.create({
     width: theme.sizes.measurementSliderLabelWidth,
     ...theme.typography.body.md,
     height: theme.spacing.xl,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.ink,
     textAlign: "center"
   },
@@ -310,10 +319,6 @@ const styles = StyleSheet.create({
   },
   majorTick: {
     height: theme.sizes.measurementSliderMajorTickHeight
-  },
-  range: {
-    position: "absolute",
-    top: theme.spacing.xl
   },
   leftFade: {
     position: "absolute",

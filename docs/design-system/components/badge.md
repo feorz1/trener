@@ -20,7 +20,7 @@
 
 | Prop | Type | Required | Description |
 |---|---|---:|---|
-| `tone` | `"error" | "info" | "success" | "warning" | "neutral" | "negativeSolid" | "warningDeep" | "primary"` | yes | Semantic visual tone. |
+| `tone` | `"error" | "info" | "success" | "warning" | "neutral" | "negativeSoft" | "negativeSolid" | "warningDeepSoft" | "warningDeep" | "primary"` | yes | Semantic visual tone. |
 | `size` | `"md" | "sm"` | no | Current supported sizes. Defaults to `md`. |
 | `icon` | `boolean` | no | Shows or hides the status marker. |
 | `children` or `label` | `string` | yes | Visible badge text. |
@@ -34,7 +34,10 @@
 | `tone=success, size=md, icon=true` |
 | `tone=warning, size=md, icon=true` |
 | `tone=neutral, size=md, icon=false` |
+| `tone=neutral, size=sm, icon=false` |
+| `tone=negativeSoft, size=sm, icon=false` |
 | `tone=negativeSolid, size=sm, icon=false` |
+| `tone=warningDeepSoft, size=sm, icon=false` |
 | `tone=warningDeep, size=sm, icon=false` |
 | `tone=primary, size=sm, icon=false` |
 
@@ -54,7 +57,11 @@
 | success icon | `color/status/positive` | `theme.colors.status.positive` |
 | warning background | `color/status/warning` | `theme.colors.status.warning` |
 | warning text/icon | `color/status/warning-content` | `theme.colors.status.warningContent` |
+| warning deep soft background | `color/status/warning-deep` at 20% over canvas | `theme.colors.status.warningDeepSoft` |
+| warning darkest text | `color/status/warning-darkest` | `theme.colors.status.warningDarkest` |
 | warning deep background | `color/status/warning-deep` | `theme.colors.status.warningDeep` |
+| negative soft background | `color/status/negative` at 20% over canvas | `theme.colors.status.negativeSoft` |
+| negative darkest text | `color/status/negative-darkest` | `theme.colors.status.negativeDarkest` |
 | solid negative background | `color/status/negative` | `theme.colors.status.negative` |
 | primary background | `color/content/primary` | `theme.colors.content.primary` |
 | neutral background | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |

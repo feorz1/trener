@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 import { Button } from "./Button";
 import { Icon, type IconName } from "./Icon";
@@ -8,6 +8,11 @@ import { ProgressBar } from "./ProgressBar";
 export type CardVariant = "dayPlan" | "workout" | "addWorkout";
 export type CardDayPlanState = "plan" | "planNext";
 export type CardWorkoutStatus = "planned" | "inProgress" | "completed";
+
+const WORKOUT_CARD_PRESSED_SCALE = 0.96;
+const WORKOUT_CARD_PRESS_IN_DURATION = 120;
+const WORKOUT_CARD_PRESS_OUT_DURATION = 180;
+const WORKOUT_CARD_PRESS_EASING = Easing.bezier(0.2, 0, 0, 1);
 
 export type CardProps = Omit<PressableProps, "children" | "style"> & {
   variant?: CardVariant;
@@ -66,6 +71,7 @@ export function Card({
   ...pressableProps
 }: CardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const workoutPressScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     setMenuOpen(false);
@@ -93,13 +99,19 @@ export function Card({
   if (variant === "addWorkout") {
     return (
       <View style={[styles.addWorkoutRoot, style]}>
-        <Button
-          label={addWorkoutLabel}
-          type="tertiary"
-          size="medium"
-          width="fill"
+        <Pressable
+          accessibilityHint="Открывает планирование тренировки"
+          accessibilityLabel={addWorkoutLabel}
+          accessibilityRole="button"
           onPress={onAddWorkout}
-        />
+          style={({ pressed }) => [styles.addWorkoutAction, pressed && styles.addWorkoutActionPressed]}
+        >
+          <View pointerEvents="none" style={styles.addWorkoutActionShadow} />
+          <View pointerEvents="none" style={styles.addWorkoutActionFill}>
+            <View style={styles.addWorkoutActionOverlay} />
+            <Icon name="add" size={theme.sizes.cardAddWorkoutIcon} color={theme.colors.content.ink} />
+          </View>
+        </Pressable>
       </View>
     );
   }
@@ -107,14 +119,38 @@ export function Card({
   const isCompleted = workoutStatus === "completed";
   const isInProgress = workoutStatus === "inProgress";
   const shouldShowAction = showAction ?? isInProgress;
+  const shouldShowMenu = showMenu && Boolean(onMove || onCancel);
   const exerciseLabel = `${exerciseCount} упражнений`;
   const progressLabel = `${completedExercises} из ${totalExercises} упражнений`;
+  const workoutAction = isCompleted ? undefined : isInProgress ? onContinue : onStart;
+  const workoutActionLabel = isInProgress ? continueLabel : startLabel;
+  const animateWorkoutPress = (toValue: number, duration: number) => {
+    Animated.timing(workoutPressScale, {
+      toValue,
+      duration,
+      easing: WORKOUT_CARD_PRESS_EASING,
+      useNativeDriver: true
+    }).start();
+  };
+  const handleWorkoutPressIn: PressableProps["onPressIn"] = (event) => {
+    pressableProps.onPressIn?.(event);
+    animateWorkoutPress(WORKOUT_CARD_PRESSED_SCALE, WORKOUT_CARD_PRESS_IN_DURATION);
+  };
+  const handleWorkoutPressOut: PressableProps["onPressOut"] = (event) => {
+    pressableProps.onPressOut?.(event);
+    animateWorkoutPress(1, WORKOUT_CARD_PRESS_OUT_DURATION);
+  };
 
   return (
-    <Pressable
-      {...pressableProps}
-      accessibilityRole={pressableProps.onPress ? "button" : undefined}
-      style={({ pressed }) => [styles.workoutRoot, menuOpen && styles.workoutRootWithMenu, pressed && styles.pressed, style]}
+    <Animated.View style={[styles.workoutFrame, menuOpen && styles.workoutRootWithMenu, { transform: [{ scale: workoutPressScale }] }, style]}>
+      <Pressable
+        {...pressableProps}
+        accessibilityLabel={pressableProps.accessibilityLabel ?? (workoutAction ? `${workoutActionLabel}: ${muscleGroup}, ${clientName}` : undefined)}
+        accessibilityRole={workoutAction || pressableProps.onPress ? "button" : undefined}
+        onPress={pressableProps.onPress ?? workoutAction}
+        onPressIn={handleWorkoutPressIn}
+        onPressOut={handleWorkoutPressOut}
+        style={styles.workoutRoot}
     >
       <View style={styles.workoutContent}>
         <View style={styles.workoutHeader}>
@@ -122,26 +158,31 @@ export function Card({
             <Icon name={muscleIconName} size={theme.spacing.xl} color={theme.colors.status.negative} />
             <Text style={styles.muscleText}>{muscleGroup}</Text>
           </View>
-          {showMenu ? (
+          {shouldShowMenu ? (
             <View style={styles.moreArea}>
               <Button
                 type="tertiary"
                 size="smallIcon"
+                accessibilityLabel="Действия тренировки"
                 icon={<Icon name="more" size={theme.sizes.buttonIconSmall} color={theme.colors.content.inkDeep} />}
                 onPress={() => setMenuOpen((value) => !value)}
               />
               {menuOpen ? (
                 <View style={styles.menu}>
-                  <Pressable accessibilityRole="button" onPress={onMove} style={styles.menuItem}>
-                    <Text style={styles.menuText} numberOfLines={1}>
-                      Перенести
-                    </Text>
-                  </Pressable>
-                  <Pressable accessibilityRole="button" onPress={onCancel} style={styles.menuItem}>
-                    <Text style={[styles.menuText, styles.cancelText]} numberOfLines={1}>
-                      Отменить
-                    </Text>
-                  </Pressable>
+                  {onMove ? (
+                    <Pressable accessibilityRole="button" onPress={onMove} style={styles.menuItem}>
+                      <Text style={styles.menuText} numberOfLines={1}>
+                        Перенести
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {onCancel ? (
+                    <Pressable accessibilityRole="button" onPress={onCancel} style={styles.menuItem}>
+                      <Text style={[styles.menuText, styles.cancelText]} numberOfLines={1}>
+                        Отменить
+                      </Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               ) : null}
             </View>
@@ -165,16 +206,33 @@ export function Card({
 
       {!isCompleted && shouldShowAction ? (
         <View style={styles.workoutAction}>
-          <Button
-            label={isInProgress ? continueLabel : startLabel}
-            type={isInProgress ? "secondary" : "tertiary"}
-            size="medium"
-            width="fill"
-            onPress={isInProgress ? onContinue : onStart}
-          />
+          {Platform.OS === "web" ? (
+            <View
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              pointerEvents="none"
+              style={[
+                styles.workoutActionButton,
+                isInProgress ? styles.workoutActionButtonSecondary : styles.workoutActionButtonTertiary
+              ]}
+            >
+              <Text style={[styles.workoutActionButtonLabel, isInProgress ? styles.workoutActionLabelSecondary : styles.workoutActionLabelTertiary]}>
+                {workoutActionLabel}
+              </Text>
+            </View>
+          ) : (
+            <Button
+              label={workoutActionLabel}
+              type={isInProgress ? "secondary" : "tertiary"}
+              size="medium"
+              width="fill"
+              onPress={workoutAction}
+            />
+          )}
         </View>
       ) : null}
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -196,6 +254,7 @@ const styles = StyleSheet.create({
   },
   planCount: {
     ...theme.typography.display.sm,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.primary
   },
   planMeta: {
@@ -219,16 +278,46 @@ const styles = StyleSheet.create({
   workoutRootWithMenu: {
     zIndex: 30
   },
+  workoutFrame: {
+    alignSelf: "stretch"
+  },
   addWorkoutRoot: {
     alignSelf: "stretch",
     minHeight: theme.sizes.cardAddWorkoutMinHeight,
-    justifyContent: "center",
-    padding: theme.spacing.lg,
     borderRadius: theme.radius.xl,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    overflow: "visible"
+  },
+  addWorkoutAction: {
+    position: "relative",
+    width: theme.sizes.buttonLgHeight,
+    height: theme.sizes.buttonLgHeight,
+    borderRadius: theme.radius.pill,
+    overflow: "visible",
     backgroundColor: theme.colors.background.canvasSoft
   },
-  pressed: {
-    backgroundColor: theme.colors.content.primaryPale
+  addWorkoutActionShadow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.canvasSoft,
+    ...theme.shadows.glassAction
+  },
+  addWorkoutActionPressed: {
+    transform: [{ scale: 0.96 }]
+  },
+  addWorkoutActionFill: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.glass
+  },
+  addWorkoutActionOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.background.glassOverlay
   },
   workoutContent: {
     position: "relative",
@@ -253,7 +342,7 @@ const styles = StyleSheet.create({
   muscleText: {
     ...theme.typography.body.mdStrong,
     lineHeight: theme.typography.body.sm.lineHeight,
-    color: theme.colors.status.negative
+    color: theme.colors.content.ink
   },
   moreArea: {
     position: "relative",
@@ -298,6 +387,31 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xxs,
     paddingBottom: theme.spacing.lg
   },
+  workoutActionButton: {
+    alignSelf: "stretch",
+    width: "100%",
+    minHeight: theme.sizes.buttonMediumHeight,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radius.lg
+  },
+  workoutActionButtonSecondary: {
+    backgroundColor: theme.colors.content.primary
+  },
+  workoutActionButtonTertiary: {
+    backgroundColor: theme.colors.background.canvas
+  },
+  workoutActionButtonLabel: {
+    ...theme.typography.button.md
+  },
+  workoutActionLabelSecondary: {
+    color: theme.colors.content.inkDeep
+  },
+  workoutActionLabelTertiary: {
+    color: theme.colors.content.inkDeep
+  },
   clientName: {
     ...theme.typography.display.xs,
     color: theme.colors.content.ink
@@ -309,6 +423,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     ...theme.typography.body.smStrong,
+    fontVariant: ["tabular-nums"],
     color: theme.colors.content.ink
   },
   metaDot: {

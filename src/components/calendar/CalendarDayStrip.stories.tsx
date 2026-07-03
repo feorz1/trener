@@ -11,23 +11,23 @@ type StoryArgs = {
 };
 
 const week: CalendarDayStripItem[] = [
-  { key: "2026-05-11", weekday: "Mon", dayNumber: "12", temporalState: "past" },
-  { key: "2026-05-12", weekday: "Tue", dayNumber: "12", temporalState: "past" },
-  { key: "2026-05-13", weekday: "Wed", dayNumber: "15", temporalState: "default" },
-  { key: "2026-05-14", weekday: "Thu", dayNumber: "14", temporalState: "default" },
-  { key: "2026-05-15", weekday: "Fri", dayNumber: "15", temporalState: "future" },
-  { key: "2026-05-16", weekday: "Sat", dayNumber: "15", temporalState: "future" },
-  { key: "2026-05-17", weekday: "Sun", dayNumber: "15", temporalState: "future" }
+  { key: "2026-05-11", weekday: "Пн", dayNumber: "12", temporalState: "past" },
+  { key: "2026-05-12", weekday: "Вт", dayNumber: "12", temporalState: "past" },
+  { key: "2026-05-13", weekday: "Ср", dayNumber: "15", temporalState: "default" },
+  { key: "2026-05-14", weekday: "Чт", dayNumber: "14", temporalState: "default" },
+  { key: "2026-05-15", weekday: "Пт", dayNumber: "15", temporalState: "future" },
+  { key: "2026-05-16", weekday: "Сб", dayNumber: "15", temporalState: "future" },
+  { key: "2026-05-17", weekday: "Вс", dayNumber: "15", temporalState: "future" }
 ];
 
 const nextWeek: CalendarDayStripItem[] = [
-  { key: "2026-05-18", weekday: "Mon", dayNumber: "18", temporalState: "future" },
-  { key: "2026-05-19", weekday: "Tue", dayNumber: "19", temporalState: "future" },
-  { key: "2026-05-20", weekday: "Wed", dayNumber: "20", temporalState: "future" },
-  { key: "2026-05-21", weekday: "Thu", dayNumber: "21", temporalState: "future" },
-  { key: "2026-05-22", weekday: "Fri", dayNumber: "22", temporalState: "future" },
-  { key: "2026-05-23", weekday: "Sat", dayNumber: "23", temporalState: "future" },
-  { key: "2026-05-24", weekday: "Sun", dayNumber: "24", temporalState: "future" }
+  { key: "2026-05-18", weekday: "Пн", dayNumber: "18", temporalState: "future" },
+  { key: "2026-05-19", weekday: "Вт", dayNumber: "19", temporalState: "future" },
+  { key: "2026-05-20", weekday: "Ср", dayNumber: "20", temporalState: "future" },
+  { key: "2026-05-21", weekday: "Чт", dayNumber: "21", temporalState: "future" },
+  { key: "2026-05-22", weekday: "Пт", dayNumber: "22", temporalState: "future" },
+  { key: "2026-05-23", weekday: "Сб", dayNumber: "23", temporalState: "future" },
+  { key: "2026-05-24", weekday: "Вс", dayNumber: "24", temporalState: "future" }
 ];
 
 const meta: Meta<StoryArgs> = {

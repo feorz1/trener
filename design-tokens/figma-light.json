@@ -569,7 +569,7 @@
     "font-family": {
       "base": {
         "$type": "fontFamily",
-        "$value": "Inter"
+        "$value": "SF Pro Display"
       }
     },
     "font-size": {

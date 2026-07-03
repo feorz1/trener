@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Alert,
   Badge,
   Button,
   Checkbox,
@@ -17,7 +19,9 @@ import {
   TextArea,
   Variant
 } from "@/components/ui";
+import { useClientActions, useDataMutation, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
+import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
 
 type Gender = "male" | "female";
@@ -65,6 +69,8 @@ type ClientForm = {
 };
 
 const STEPS: ClientStep[] = ["basic", "age", "height", "weight", "targetWeight", "health", "restrictions", "lifestyle", "experience", "goal", "summary"];
+const CLIENT_FORM_KEYBOARD_OFFSET = theme.spacing.lg;
+const CLIENT_FORM_TEXT_AREA_KEYBOARD_OFFSET = theme.sizes.textAreaFieldMinHeight + theme.spacing.lg;
 
 const sectionByStep: Record<ClientStep, number> = {
   basic: 1,
@@ -174,6 +180,13 @@ function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function getSelectedStartIso(value?: string) {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = year && month && day ? new Date(year, month - 1, day) : new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
 function getLabel<T extends string>(items: { key: T; label?: string; title?: string }[], key: T) {
   const item = items.find((option) => option.key === key);
   return item?.label ?? item?.title ?? key;
@@ -200,21 +213,67 @@ function getGoalSummary(form: ClientForm) {
   return goal;
 }
 
+function getClientContactSummary(form: ClientForm) {
+  const phone = [form.phonePrefix, form.phone].filter(Boolean).join(" ");
+  return [phone, form.telegram].filter(Boolean).join(", ");
+}
+
 export default function NewClientScreen() {
-  const { date, exerciseIds, supersetConnectionIds, approachData } = useLocalSearchParams<{
+  const { date, returnTo, draftId } = useLocalSearchParams<{
     date?: string;
-    exerciseIds?: string;
-    supersetConnectionIds?: string;
-    approachData?: string;
+    returnTo?: string;
+    draftId?: string;
   }>();
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<ClientForm>(initialForm);
+  const clients = useClientActions();
+  const workouts = useWorkoutActions();
   const step = STEPS[stepIndex];
   const sectionStep = sectionByStep[step];
   const selectedHealthLabels = form.healthConstraints.map((key) => getLabel(healthOptions, key));
   const selectedSportLabels = form.sports.map((key) => getLabel(sportOptions, key));
   const restrictionLabels = useMemo(() => getRestrictionLabels(form), [form]);
   const { scrollProps } = useConditionalScroll();
+  const keyboardInset = useKeyboardInset();
+  const keyboardVisible = keyboardInset > theme.spacing[0];
+  const hasVisibleTextArea =
+    (step === "health" && form.healthConstraints.includes("other")) ||
+    (step === "restrictions" && form.exerciseRestrictions.includes("other")) ||
+    (step === "experience" && form.sports.includes("other"));
+  const keyboardOffset = hasVisibleTextArea ? CLIENT_FORM_TEXT_AREA_KEYBOARD_OFFSET : CLIENT_FORM_KEYBOARD_OFFSET;
+  const createClientAction = useCallback(async () => {
+    const createdClient = await clients.create({
+      name: form.name,
+      phone: [form.phonePrefix, form.phone].filter(Boolean).join(" "),
+      telegram: form.telegram,
+      gender: form.gender,
+      goal: getGoalSummary(form),
+      status: "new",
+      notes: getRestrictionLabels(form).join(", "),
+      restrictions: getRestrictionLabels(form),
+      metrics: {
+        weightKg: form.weight,
+        heightCm: form.height,
+        attendanceRate: 100
+      }
+    });
+
+    const returnToValue = firstParam(returnTo);
+    const draftIdValue = firstParam(draftId);
+    let nextDraftId = draftIdValue;
+    if (draftIdValue) {
+      await workouts.setDraftClient(draftIdValue, createdClient.id);
+    } else if (returnToValue === "/workouts/schedule") {
+      const draft = await workouts.createDraft({
+        clientId: createdClient.id,
+        startsAt: getSelectedStartIso(firstParam(date))
+      });
+      nextDraftId = draft.id;
+    }
+
+    return { client: createdClient, draftId: nextDraftId };
+  }, [clients, date, draftId, form, returnTo, workouts]);
+  const createClientMutation = useDataMutation(createClientAction);
 
   const updateForm = <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
@@ -238,19 +297,20 @@ export default function NewClientScreen() {
     }
   };
 
-  const createClient = () => {
-    const createdClientId = `demo-${Date.now()}`;
+  const createClient = async () => {
+    if (createClientMutation.isSubmitting) return;
+
+    const result = await createClientMutation.mutate().catch(() => null);
+    if (!result) return;
+
+    if (!firstParam(returnTo)) {
+      router.back();
+      return;
+    }
 
     router.replace({
-      pathname: "/workouts/new",
-      params: {
-        clientId: createdClientId,
-        clientName: form.name,
-        ...(date ? { date: firstParam(date) } : {}),
-        ...(exerciseIds ? { exerciseIds: firstParam(exerciseIds) } : {}),
-        ...(supersetConnectionIds ? { supersetConnectionIds: firstParam(supersetConnectionIds) } : {}),
-        ...(approachData ? { approachData: firstParam(approachData) } : {})
-      }
+      pathname: firstParam(returnTo) === "/workouts/schedule" ? "/workouts/schedule" : "/workouts/new",
+      params: result.draftId ? { draftId: result.draftId } : { clientId: result.client.id }
     });
   };
 
@@ -264,44 +324,71 @@ export default function NewClientScreen() {
         onBack={goBack}
       />
 
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAwareBody}>
-        <ScrollView automaticallyAdjustKeyboardInsets contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" {...scrollProps}>
-          <View style={styles.header}>
-            <Text style={styles.title}>{getStepTitle(step)}</Text>
-            <ProgressBar completed={progressBySection[sectionStep]} total={100} label={`${sectionStep} из 7`} showBadge tone="primary" />
-          </View>
-
-          <Divider width="fill" tone="canvasSoft" />
-
-          {step === "basic" ? <BasicStep form={form} updateForm={updateForm} /> : null}
-          {step === "age" ? <BodySliderStep title="Текущий возраст" value={form.age} min={0} max={100} onChange={(value) => updateForm("age", value)} /> : null}
-          {step === "height" ? <BodySliderStep title="Текущий рост" value={form.height} min={0} max={250} onChange={(value) => updateForm("height", value)} /> : null}
-          {step === "weight" ? <BodySliderStep title="Текущий вес" value={form.weight} min={0} max={250} onChange={updateWeight} /> : null}
-          {step === "targetWeight" ? (
-            <BodySliderStep
-              title="Желаемый вес"
-              value={form.targetWeight}
-              min={0}
-              max={250}
-              referenceValue={form.weight}
-              rangeFrom={form.weight}
-              onChange={(value) => updateForm("targetWeight", value)}
-            />
-          ) : null}
-          {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
-          {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
-          {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
-          {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
-          {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
-          {step === "summary" ? (
-            <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
-          ) : null}
-        </ScrollView>
-
-        <View style={styles.footer}>
-          <Button label={step === "summary" ? "Создать клиента" : "Продолжить"} type="primary" size="large" width="fill" onPress={step === "summary" ? createClient : goNext} />
+      <KeyboardAwareScrollView
+        bottomOffset={keyboardOffset}
+        contentContainerStyle={styles.content}
+        extraKeyboardSpace={keyboardOffset}
+        keyboardShouldPersistTaps="handled"
+        mode="insets"
+        style={styles.keyboardAwareBody}
+        {...scrollProps}
+        scrollEnabled
+      >
+        <View style={styles.header}>
+          <Text style={styles.title}>{getStepTitle(step)}</Text>
+          <ProgressBar completed={progressBySection[sectionStep]} total={100} label={`${sectionStep} из 7`} showBadge tone="primary" />
         </View>
-      </KeyboardAvoidingView>
+
+        <Divider width="fill" tone="canvasSoft" />
+
+        {step === "basic" ? <BasicStep form={form} updateForm={updateForm} /> : null}
+        {step === "age" ? <BodySliderStep title="Текущий возраст" value={form.age} min={0} max={100} onChange={(value) => updateForm("age", value)} /> : null}
+        {step === "height" ? <BodySliderStep title="Текущий рост" value={form.height} min={0} max={250} onChange={(value) => updateForm("height", value)} /> : null}
+        {step === "weight" ? <BodySliderStep title="Текущий вес" value={form.weight} min={0} max={250} onChange={updateWeight} /> : null}
+        {step === "targetWeight" ? (
+          <BodySliderStep
+            title="Желаемый вес"
+            value={form.targetWeight}
+            min={0}
+            max={250}
+            referenceValue={form.weight}
+            rangeFrom={form.weight}
+            onChange={(value) => updateForm("targetWeight", value)}
+          />
+        ) : null}
+        {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
+        {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
+        {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
+        {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
+        {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
+        {step === "summary" ? (
+          <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
+        ) : null}
+        {createClientMutation.error ? (
+          <View style={styles.inlineAlert}>
+            <Alert
+              tone="negative"
+              layout="expanded"
+              title="Клиент не создан"
+              description={createClientMutation.error.message}
+              width="fill"
+            />
+          </View>
+        ) : null}
+      </KeyboardAwareScrollView>
+
+      {keyboardVisible ? null : (
+        <View style={styles.footer}>
+          <Button
+            label={step === "summary" ? "Создать клиента" : "Продолжить"}
+            type="primary"
+            size="large"
+            width="fill"
+            state={createClientMutation.isSubmitting ? "loading" : "active"}
+            onPress={step === "summary" ? createClient : goNext}
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -458,6 +545,7 @@ function LifestyleStep({
           value={form.workoutsPerWeek}
           columns={5}
           width="fill"
+          style={styles.workoutCountVariant}
           onChange={(value) => updateForm("workoutsPerWeek", value)}
         />
       </View>
@@ -478,7 +566,16 @@ function ExperienceStep({
       <RadioGroup items={experienceOptions} value={form.trainingExperience} onChange={(value) => updateForm("trainingExperience", value)} />
       <SectionTitle title="Какими видами спорта занимались" />
       <View style={styles.section}>
-        <ChoiceGrid items={sportOptions} selectedValues={form.sports} onToggle={(value) => updateForm("sports", toggleItem(form.sports, value))} />
+        <Variant
+          label="Виды спорта"
+          showLabel={false}
+          items={sportOptions}
+          values={form.sports}
+          selectionMode="multiple"
+          columns={2}
+          width="fill"
+          onChange={(value) => updateForm("sports", toggleItem(form.sports, value))}
+        />
         {form.sports.includes("other") ? (
           <TextArea
             label="Другой спорт"
@@ -520,7 +617,9 @@ function SummaryStep({
   selectedSportLabels: string[];
   restrictionLabels: string[];
 }) {
-  const allRestrictionLabels = Array.from(new Set([...selectedHealthLabels, ...restrictionLabels]));
+  const allRestrictionLabels = Array.from(
+    new Set([...selectedHealthLabels, ...restrictionLabels, form.healthOther, form.exerciseRestrictionsOther].filter(Boolean))
+  );
   const summaryRows = [
     ["Возраст", `${form.age} лет`],
     ["Рост / Вес", `${form.height} см / ${form.weight} кг`],
@@ -537,10 +636,8 @@ function SummaryStep({
     <View style={styles.body}>
       <ListItemCell
         title={form.name || "Новый клиент"}
-        subtitle={`${form.phonePrefix} ${form.phone}`}
-        leading="avatar"
-        avatarType="initials"
-        avatarInitials={getInitials(form.name)}
+        subtitle={getClientContactSummary(form)}
+        leading="none"
         trailing="none"
         density="compact"
       />
@@ -564,10 +661,8 @@ function SummaryStep({
         <Text style={styles.sectionTitle}>Ограничения</Text>
         <View style={styles.badgeWrap}>
           {allRestrictionLabels.map((label) => (
-            <Badge key={label} label={label} tone="negativeSolid" size="sm" icon={false} />
+            <Badge key={label} label={label} tone="negativeSoft" size="sm" icon={false} />
           ))}
-          {form.healthOther ? <Badge label={form.healthOther} tone="negativeSolid" size="sm" icon={false} /> : null}
-          {form.exerciseRestrictionsOther ? <Badge label={form.exerciseRestrictionsOther} tone="negativeSolid" size="sm" icon={false} /> : null}
         </View>
       </View>
     </View>
@@ -635,62 +730,12 @@ function RadioGroup<T extends string>({
   );
 }
 
-function ChoiceGrid<T extends string>({
-  items,
-  selectedValues,
-  onToggle
-}: {
-  items: { key: T; label: string }[];
-  selectedValues: T[];
-  onToggle: (value: T) => void;
-}) {
-  const rows = [];
-  for (let index = 0; index < items.length; index += 2) {
-    rows.push(items.slice(index, index + 2));
-  }
-
-  return (
-    <View style={styles.choiceGrid}>
-      {rows.map((row, rowIndex) => (
-        <View key={`row-${rowIndex}`} style={styles.choiceRow}>
-          {row.map((item) => {
-            const selected = selectedValues.includes(item.key);
-
-            return (
-              <Pressable
-                key={item.key}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: selected }}
-                onPress={() => onToggle(item.key)}
-                style={({ pressed }) => [styles.choiceTile, selected && styles.choiceTileSelected, pressed && styles.choiceTilePressed]}
-              >
-                <Text numberOfLines={1} style={styles.choiceTileLabel}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 function SectionTitle({ title }: { title: string }) {
   return (
     <View style={styles.sectionTitleWrap}>
       <Text style={styles.sectionTitle}>{title}</Text>
     </View>
   );
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "НК";
-  return parts
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 }
 
 const styles = StyleSheet.create({
@@ -729,8 +774,12 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.xs,
+    paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.lg
+  },
+  workoutCountVariant: {
+    paddingHorizontal: theme.spacing[0],
+    paddingVertical: theme.spacing.sm
   },
   sliderCard: {
     alignSelf: "stretch",
@@ -752,55 +801,21 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
     overflow: "hidden",
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvasSoft
   },
   badgeSection: {
-    gap: theme.spacing.md,
-    padding: theme.spacing.lg
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg
   },
   badgeWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: theme.spacing.sm
-  },
-  choiceGrid: {
-    alignSelf: "stretch",
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm
-  },
-  choiceRow: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: theme.spacing.sm
-  },
-  choiceTile: {
-    flex: 1,
-    minWidth: theme.spacing[0],
-    height: theme.sizes.variantOptionHeight,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    borderWidth: 2,
-    borderRadius: theme.radius.md,
-    borderColor: theme.colors.background.canvasSoft,
-    backgroundColor: theme.colors.background.canvasSoft
-  },
-  choiceTileSelected: {
-    borderColor: theme.colors.content.inkDeep,
-    backgroundColor: theme.colors.background.canvas
-  },
-  choiceTilePressed: {
-    opacity: 0.84
-  },
-  choiceTileLabel: {
-    ...theme.typography.body.md,
-    minHeight: theme.typography.body.md.lineHeight,
-    color: theme.colors.content.ink,
-    textAlign: "center"
   },
   summaryGroup: {
     paddingVertical: theme.spacing.sm
@@ -811,5 +826,10 @@ const styles = StyleSheet.create({
   footer: {
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.background.canvas
+  },
+  inlineAlert: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg
   }
 });

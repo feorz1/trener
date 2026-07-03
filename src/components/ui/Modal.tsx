@@ -60,6 +60,7 @@ export type ModalProps = {
   onClose?: () => void;
   style?: StyleProp<ViewStyle>;
   bodyStyle?: StyleProp<ViewStyle>;
+  actionStyle?: StyleProp<ViewStyle>;
 };
 
 export function ModalBody({
@@ -102,7 +103,8 @@ export function Modal({
   showCloseButton = true,
   onClose,
   style,
-  bodyStyle
+  bodyStyle,
+  actionStyle
 }: ModalProps) {
   const immediatePressHandled = useRef(false);
   const immediatePressResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -188,7 +190,7 @@ export function Modal({
       </ModalBody>
 
       {showActions ? (
-        <Action layout={actionLayout} primary={primaryActionConfig} secondary={secondaryActionConfig} tertiary={tertiaryActionConfig} />
+        <Action layout={actionLayout} primary={primaryActionConfig} secondary={secondaryActionConfig} tertiary={tertiaryActionConfig} style={actionStyle} />
       ) : null}
     </View>
   );
@@ -316,7 +318,7 @@ function ModalOverlay({ visible, onClose, children }: { visible: boolean; onClos
     <NativeModal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlayBackdrop, { opacity: backdropOpacity }]} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Close modal overlay" style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill} onPress={onClose} />
         <Animated.View style={[styles.overlaySheet, { bottom: theme.spacing.xl, transform: [{ translateY: sheetTranslateY }] }]}>
           {renderedChildren}
         </Animated.View>

@@ -12,6 +12,15 @@ const exercises = [
   "Dumbbell shoulder press"
 ];
 
+const overflowSetValues = [
+  { id: "one", label: "12x10кг" },
+  { id: "two", label: "8x15кг" },
+  { id: "three", label: "6x15кг" },
+  { id: "four", label: "4x10кг" },
+  { id: "five", label: "10x20кг" },
+  { id: "six", label: "12x25кг" }
+];
+
 const meta = {
   title: "Components/ListItemGym",
   component: ListItemGym,
@@ -47,6 +56,17 @@ export const SwipeDelete: Story = {
       />
     );
   }
+};
+
+export const SetsOverflow: Story = {
+  render: () => (
+    <ListItemGym
+      title="Жим ногами"
+      mode="move"
+      setVariant="set"
+      setValues={overflowSetValues}
+    />
+  )
 };
 
 export const GroupedSelectedList: Story = {

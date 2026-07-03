@@ -3,7 +3,19 @@ import { View } from "react-native";
 import { Badge, type BadgeTone } from "./Badge";
 import { theme } from "@/theme";
 
-const canonicalTones: BadgeTone[] = ["error", "info", "success", "warning", "neutral", "negativeSolid", "warningDeep", "primary", "select"];
+const canonicalTones: BadgeTone[] = [
+  "error",
+  "info",
+  "success",
+  "warning",
+  "neutral",
+  "negativeSoft",
+  "negativeSolid",
+  "warningDeepSoft",
+  "warningDeep",
+  "primary",
+  "select"
+];
 
 const meta = {
   title: "Components/Badge",
@@ -46,11 +58,20 @@ export const CanonicalVariants: Story = {
       <Badge tone="success" label="Success" icon />
       <Badge tone="warning" label="Warning" icon />
       <Badge tone="neutral" label="Neutral" icon={false} />
-      <Badge tone="negativeSolid" label="0%" size="sm" icon={false} />
-      <Badge tone="warningDeep" label="50%" size="sm" icon={false} />
+      <Badge tone="negativeSoft" label="0%" size="sm" icon={false} />
+      <Badge tone="warningDeepSoft" label="50%" size="sm" icon={false} />
       <Badge tone="primary" label="100%" size="sm" icon={false} />
       <Badge tone="select" label="Select" icon />
       <Badge tone="neutral" label="16%" size="s" icon={false} />
+    </View>
+  )
+};
+
+export const WrappingGuards: Story = {
+  render: () => (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: theme.spacing.sm, maxWidth: theme.sizes.dividerWidth }}>
+      <Badge tone="negativeSoft" label={"Что то нельзя\n"} size="sm" icon={false} />
+      <Badge tone="negativeSoft" label="Очень длинное ограничение, которое не должно раздувать бейдж" size="sm" icon={false} />
     </View>
   )
 };

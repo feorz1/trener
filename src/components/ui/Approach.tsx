@@ -1,7 +1,10 @@
 import * as Haptics from "expo-haptics";
-import { Fragment, forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { MenuView, type MenuAction } from "@react-native-menu/menu";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Alert as NativeAlert,
   Image,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -14,21 +17,30 @@ import {
   type TextStyle,
   type ViewStyle
 } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  Easing as ReanimatedEasing,
-  Extrapolation,
-  interpolate,
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-  type SharedValue
-} from "react-native-reanimated";
 import { theme } from "@/theme";
+import type { MetricKey, MetricValues, WorkoutResultType } from "@/types";
+import {
+  formatDuration,
+  formatMetricInputValue,
+  formatPreviousSetValue,
+  getLegacyValues,
+  getTimerDisplaySeconds,
+  getTimerElapsedSeconds,
+  getTrackingPreset,
+  hasAnyMetricValue,
+  isSetCompleteAllowed,
+  isTimerFinished,
+  parseMetricInput,
+  pickCompatibleValues,
+  sanitizeMetricInput,
+  type MetricDefinition,
+  type SetTimerState,
+  type TrackingPreset
+} from "@/features/workouts/tracking";
 import { Button } from "./Button";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { StagedSwipeDelete } from "./StagedSwipeDelete";
 import { TextArea } from "./TextArea";
 
 export type ApproachCountState = "default" | "selected" | "move";
@@ -37,68 +49,75 @@ export type ApproachSetStatus = "empty" | "completed" | "disabled";
 export type ApproachSet = {
   id: string;
   index: number;
+  resultType?: WorkoutResultType;
+  values?: MetricValues;
   reps?: number;
   weight?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
   unit?: string;
   state?: ApproachCountState;
   status?: ApproachSetStatus;
+};
+
+export type ApproachSetMetric = MetricKey | "durationSeconds" | "distanceMeters";
+export type ApproachSetValuePatch = Partial<Pick<ApproachSet, "values" | "reps" | "weight" | "durationSeconds" | "distanceMeters">> & {
+  replaceValues?: boolean;
 };
 
 export type ApproachProps = {
   title?: string;
   imageSource?: ImageSourcePropType;
   sets?: ApproachSet[];
+  previousSets?: ApproachSet[];
+  trackingPreset?: TrackingPreset;
+  resultType?: WorkoutResultType;
   note?: string;
   addLabel?: string;
   noteTitle?: string;
   noteSaveLabel?: string;
   showAddAction?: boolean;
   showDeleteAction?: boolean;
+  activeTimer?: SetTimerState | null;
   onAddSet?: () => void;
+  onRemoveLastSet?: () => void;
   onDeleteSet?: (id: string) => void;
+  onEditExercise?: () => void;
+  onDeleteExercise?: () => void;
   onNoteChange?: (note: string) => void;
   onSetStateChange?: (id: string, state: ApproachCountState) => void;
-  onSetValueChange?: (id: string, patch: Partial<Pick<ApproachSet, "weight" | "reps">>) => void;
+  onSetValueChange?: (id: string, patch: ApproachSetValuePatch) => void;
   onSetsReorder?: (sets: ApproachSet[]) => void;
+  onApplyPrevious?: (id: string, values: MetricValues) => void;
+  onStartTimer?: (setId: string, metricKey: "duration" | "interval", mode: SetTimerState["mode"], targetSeconds?: number) => void;
+  onPauseTimer?: () => void;
+  onResumeTimer?: () => void;
+  onFinishTimer?: () => void;
+  onResetTimer?: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
 const defaultSets: ApproachSet[] = [
-  { id: "one", index: 1, reps: 12, weight: 150, status: "completed" },
-  { id: "two", index: 1, reps: 12, weight: 150, status: "completed" },
-  { id: "three", index: 1, reps: 12, weight: 150, status: "completed" },
-  { id: "four", index: 4, reps: 12, weight: 150, status: "completed" }
+  { id: "one", index: 1, values: { weight: 25, reps: 12 }, weight: 25, reps: 12, state: "default" },
+  { id: "two", index: 2, values: { weight: 25, reps: 12 }, weight: 25, reps: 12, state: "default" },
+  { id: "three", index: 3, values: { weight: 25, reps: 12 }, weight: 25, reps: 12, state: "default" },
+  { id: "four", index: 4, values: { weight: 25, reps: 12 }, weight: 25, reps: 12, state: "default" }
 ];
 
-function getStateById(sets: ApproachSet[]) {
-  return sets.reduce<Record<string, ApproachCountState>>((stateById, set) => {
-    stateById[set.id] = set.state ?? "default";
-    return stateById;
-  }, {});
-}
-
-function getValueById(sets: ApproachSet[]) {
-  return sets.reduce<Record<string, { reps: string; weight: string }>>((valueById, set) => {
-    valueById[set.id] = {
-      reps: set.reps === undefined ? "" : String(set.reps),
-      weight: set.weight === undefined ? "" : String(set.weight)
-    };
-    return valueById;
-  }, {});
-}
-
-function parseMetricValue(value: string) {
-  const normalizedValue = value.replace(",", ".").trim();
-  if (!normalizedValue) return undefined;
-
-  const parsedValue = Number(normalizedValue);
-  return Number.isFinite(parsedValue) ? parsedValue : undefined;
-}
-
-function sanitizeMetricValue(value: string) {
-  return value.replace(/[^\d.,]/g, "");
-}
-
+const emptyMetricTextById: Record<string, Record<MetricKey, string>> = {};
+const exerciseMenuActions: MenuAction[] = [
+  {
+    id: "edit-note",
+    title: "Редактировать заметку"
+  },
+  {
+    id: "delete-exercise",
+    title: "Удалить упражнение",
+    attributes: {
+      destructive: true
+    }
+  }
+];
 const metricInputReset =
   Platform.OS === "web"
     ? ({
@@ -106,252 +125,265 @@ const metricInputReset =
         outlineStyle: "none"
       } as TextStyle & { boxShadow: "none"; outlineStyle: "none" })
     : undefined;
-const DELETE_WIDTH = theme.sizes.approachDeleteWidth;
-const ROW_SLOT_HEIGHT = theme.sizes.approachCountRowMinHeight + theme.spacing.xs;
-const SWIPE_REVEAL_THRESHOLD = theme.spacing.xl;
-const SWIPE_COMMIT_RATIO = 0.72;
-const SWIPE_VELOCITY_THRESHOLD = 0.35;
-const SWIPE_COMMIT_VELOCITY = 0.85;
-const TIMING_CONFIG = { duration: 180, easing: ReanimatedEasing.out(ReanimatedEasing.cubic) };
-
-type DeleteRowHandle = {
-  close: () => void;
-};
-
-type DragState = {
-  id: string;
-  startIndex: number;
-  targetIndex: number;
-};
-
-type DragSession = {
-  id: string;
-  startIndex: number;
-  targetIndex: number;
-};
-
-type DragBounds = {
-  startIndex: number;
-  itemCount: number;
-  min: number;
-  max: number;
-};
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function clampWorklet(value: number, min: number, max: number) {
-  "worklet";
-  return Math.min(max, Math.max(min, value));
-}
-
-function roundTranslateWorklet(value: number) {
-  "worklet";
-  return Math.round(value);
-}
-
-function moveItem<T>(items: T[], from: number, to: number) {
-  const nextItems = [...items];
-  const [item] = nextItems.splice(from, 1);
-  nextItems.splice(to, 0, item);
-  return nextItems;
-}
-
-function normalizeSetIndexes(sets: ApproachSet[]) {
-  return sets.map((set, index) => ({ ...set, index: index + 1 }));
-}
 
 function triggerImpact(style: Haptics.ImpactFeedbackStyle) {
   if (Platform.OS === "web") return;
   void Haptics.impactAsync(style).catch(() => undefined);
 }
 
-function triggerSelection() {
+function triggerNotification(type: Haptics.NotificationFeedbackType) {
   if (Platform.OS === "web") return;
-  void Haptics.selectionAsync().catch(() => undefined);
+  void Haptics.notificationAsync(type).catch(() => undefined);
+}
+
+function getUniqueSetIds(sets: ApproachSet[]) {
+  const seen = new Set<string>();
+
+  return sets.map((set, index) => {
+    const baseId = set.id || `set-${index + 1}`;
+    const id = seen.has(baseId) ? `${baseId}-${index + 1}` : baseId;
+    seen.add(id);
+    return { ...set, id, index: index + 1 };
+  });
+}
+
+function normalizeSetValues(set: ApproachSet): MetricValues {
+  return getLegacyValues({
+    values: set.values,
+    weight: set.weight,
+    reps: set.reps,
+    durationSeconds: set.durationSeconds,
+    distanceMeters: set.distanceMeters
+  });
+}
+
+function getValuePatch(values: MetricValues): ApproachSetValuePatch {
+  return {
+    values,
+    replaceValues: true,
+    weight: values.weight,
+    reps: values.reps,
+    durationSeconds: values.duration,
+    distanceMeters: values.distance
+  };
+}
+
+function getTextValuesById(sets: ApproachSet[], preset: TrackingPreset) {
+  return sets.reduce<Record<string, Record<MetricKey, string>>>((valueById, set) => {
+    const values = normalizeSetValues(set);
+    valueById[set.id] = { ...emptyMetricTextById[set.id] };
+    for (const metric of preset.metrics) {
+      valueById[set.id][metric.key] = formatMetricInputValue(values[metric.key], metric);
+    }
+    return valueById;
+  }, {});
+}
+
+function mergeTextValuesById(
+  current: Record<string, Record<MetricKey, string>>,
+  incoming: Record<string, Record<MetricKey, string>>
+) {
+  return Object.entries(incoming).reduce<Record<string, Record<MetricKey, string>>>((valueById, [setId, values]) => {
+    valueById[setId] = { ...values, ...(current[setId] ?? {}) };
+    return valueById;
+  }, {});
+}
+
+function getPreviousSet(previousSets: ApproachSet[] | undefined, index: number, preset: TrackingPreset) {
+  const previousSet = previousSets?.[index];
+  if (!previousSet) return undefined;
+  const values = pickCompatibleValues(normalizeSetValues(previousSet), preset.type);
+  return hasAnyMetricValue(values) || preset.type === "completion_only" ? { set: previousSet, values } : undefined;
 }
 
 function noop() {}
+
+function dismissKeyboardAndClearFocus() {
+  const focusedInput = NativeTextInput.State.currentlyFocusedInput() as { blur?: () => void } | null;
+  focusedInput?.blur?.();
+  Keyboard.dismiss();
+}
 
 export function Approach({
   title = "Horizontal leg press machine",
   imageSource,
   sets = defaultSets,
+  previousSets,
+  trackingPreset,
+  resultType,
   note,
-  addLabel = "Add set",
+  addLabel = "Добавить подход",
   noteTitle = "Заметка",
   noteSaveLabel = "Сохранить",
   showAddAction = true,
   showDeleteAction = false,
+  activeTimer,
   onAddSet,
+  onRemoveLastSet,
   onDeleteSet,
+  onEditExercise,
+  onDeleteExercise,
   onNoteChange,
   onSetStateChange,
   onSetValueChange,
-  onSetsReorder,
+  onApplyPrevious,
+  onStartTimer,
+  onPauseTimer,
+  onResumeTimer,
+  onFinishTimer,
+  onResetTimer,
   style
 }: ApproachProps) {
-  const initialStateById = useMemo(() => getStateById(sets), [sets]);
-  const initialValueById = useMemo(() => getValueById(sets), [sets]);
-  const [orderedSets, setOrderedSets] = useState(sets);
-  const [stateById, setStateById] = useState(initialStateById);
-  const [valueById, setValueById] = useState(initialValueById);
+  const preset = useMemo(() => trackingPreset ?? getTrackingPreset(resultType ?? sets[0]?.resultType), [resultType, sets, trackingPreset]);
+  const uniqueSets = useMemo(() => getUniqueSetIds(sets), [sets]);
+  const initialTextById = useMemo(() => getTextValuesById(uniqueSets, preset), [preset, uniqueSets]);
+  const [orderedSets, setOrderedSets] = useState(uniqueSets);
+  const [textById, setTextById] = useState(initialTextById);
   const [savedNote, setSavedNote] = useState(note ?? "");
   const [noteModalVisible, setNoteModalVisible] = useState(false);
   const [draftNote, setDraftNote] = useState(note ?? "");
-  const [dragState, setDragState] = useState<DragState | null>(null);
-  const dragY = useSharedValue<number>(theme.spacing[0]);
-  const dragTargetIndex = useSharedValue<number>(theme.spacing[0]);
-  const orderedSetsRef = useRef(sets);
-  const dragSession = useRef<DragSession | null>(null);
-  const rowRefs = useRef<Record<string, DeleteRowHandle | null>>({});
-  const openRowId = useRef<string | null>(null);
+  const [openDeleteRowId, setOpenDeleteRowId] = useState<string | null>(null);
   const resolvedNote = note ?? savedNote;
-  const draggedSet = dragState ? orderedSets.find((set) => set.id === dragState.id) : undefined;
-  const dragOverlayTop = dragState ? dragState.startIndex * ROW_SLOT_HEIGHT : theme.spacing[0];
+  const notePreview = resolvedNote.trim().replace(/\s+/g, " ");
+  const hasPreviousColumn = Boolean(previousSets?.some((set) => hasAnyMetricValue(pickCompatibleValues(normalizeSetValues(set), preset.type)))) || preset.type === "completion_only";
 
   useEffect(() => {
-    orderedSetsRef.current = sets;
-    setOrderedSets(sets);
-  }, [sets]);
+    setOrderedSets(uniqueSets);
+  }, [uniqueSets]);
 
   useEffect(() => {
-    orderedSetsRef.current = orderedSets;
-  }, [orderedSets]);
+    setTextById((current) => mergeTextValuesById(current, initialTextById));
+  }, [initialTextById]);
 
   useEffect(() => {
-    setStateById(initialStateById);
-  }, [initialStateById]);
-
-  useEffect(() => {
-    setValueById(initialValueById);
-  }, [initialValueById]);
-
-  useEffect(() => {
-    if (note !== undefined) {
-      setSavedNote(note);
-    }
+    if (note !== undefined) setSavedNote(note);
   }, [note]);
 
   useEffect(() => {
-    if (!noteModalVisible) {
-      setDraftNote(resolvedNote);
-    }
+    if (!noteModalVisible) setDraftNote(resolvedNote);
   }, [noteModalVisible, resolvedNote]);
 
-  const closeOpenRow = useCallback(() => {
-    const currentOpenRowId = openRowId.current;
-    if (!currentOpenRowId) return;
+  useEffect(() => {
+    if (!activeTimer || !onFinishTimer) return;
 
-    rowRefs.current[currentOpenRowId]?.close();
-    openRowId.current = null;
+    const interval = setInterval(() => {
+      if (isTimerFinished(activeTimer)) onFinishTimer();
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [activeTimer, onFinishTimer]);
+
+  const closeOpenRow = useCallback(() => setOpenDeleteRowId(null), []);
+
+  const showAppliedFeedback = useCallback(() => {
+    triggerNotification(Haptics.NotificationFeedbackType.Success);
   }, []);
 
-  const handleRowWillOpen = useCallback((id: string) => {
-    const currentOpenRowId = openRowId.current;
-    if (currentOpenRowId && currentOpenRowId !== id) {
-      rowRefs.current[currentOpenRowId]?.close();
-    }
-    openRowId.current = id;
-  }, []);
-
-  const handleRowClose = useCallback((id: string) => {
-    if (openRowId.current === id) {
-      openRowId.current = null;
-    }
-  }, []);
-
-  const handleRowDelete = useCallback(
-    (id: string) => {
-      rowRefs.current[id]?.close();
-      handleRowClose(id);
-      setOrderedSets((current) => normalizeSetIndexes(current.filter((set) => set.id !== id)));
-      onDeleteSet?.(id);
+  const updateSetValues = useCallback(
+    (setId: string, values: MetricValues) => {
+      onSetValueChange?.(setId, getValuePatch(values));
     },
-    [handleRowClose, onDeleteSet]
+    [onSetValueChange]
   );
 
-  const startRowDrag = useCallback(
-    (id: string, index: number) => {
-      const rowState = stateById[id] ?? orderedSets[index]?.state ?? "default";
-      if (rowState !== "move") return;
+  const applyPrevious = useCallback(
+    (set: ApproachSet, previousValues: MetricValues) => {
+      const currentValues = pickCompatibleValues(normalizeSetValues(set), preset.type);
+      const nextValues = { ...currentValues, ...previousValues };
+      const commit = () => {
+        onApplyPrevious?.(set.id, previousValues);
+        updateSetValues(set.id, nextValues);
+        setTextById((current) => ({
+          ...current,
+          [set.id]: preset.metrics.reduce<Record<MetricKey, string>>((result, metric) => {
+            result[metric.key] = formatMetricInputValue(nextValues[metric.key], metric);
+            return result;
+          }, { ...(current[set.id] ?? {}) })
+        }));
+        showAppliedFeedback();
+      };
 
       closeOpenRow();
-      dragY.value = theme.spacing[0];
-      dragTargetIndex.value = index;
-      dragSession.current = { id, startIndex: index, targetIndex: index };
-      setDragState({ id, startIndex: index, targetIndex: index });
-      triggerImpact(Haptics.ImpactFeedbackStyle.Light);
+      if (!hasAnyMetricValue(currentValues)) {
+        commit();
+        return;
+      }
+
+      NativeAlert.alert("Заменить текущие значения?", "Прошлый результат заменит заполненные поля этого подхода.", [
+        { text: "Отмена", style: "cancel" },
+        { text: "Заменить", style: "destructive", onPress: commit }
+      ]);
     },
-    [closeOpenRow, dragTargetIndex, dragY, orderedSets, stateById]
+    [closeOpenRow, onApplyPrevious, preset.metrics, preset.type, showAppliedFeedback, updateSetValues]
   );
 
-  const updateRowDragTarget = useCallback(
-    (targetIndexValue: number) => {
-      const session = dragSession.current;
-      if (!session) return;
-
-      const targetIndex = clamp(targetIndexValue, 0, orderedSets.length - 1);
-      if (targetIndex !== session.targetIndex) {
-        session.targetIndex = targetIndex;
-        setDragState((current) => (current?.id === session.id ? { ...current, targetIndex } : current));
-        triggerSelection();
+  const toggleSet = useCallback(
+    (set: ApproachSet) => {
+      dismissKeyboardAndClearFocus();
+      closeOpenRow();
+      const currentState = set.state ?? "default";
+      const nextState: ApproachCountState = currentState === "selected" ? "default" : "selected";
+      const values = pickCompatibleValues(normalizeSetValues(set), preset.type);
+      if (nextState === "selected" && !isSetCompleteAllowed(preset.type, values)) {
+        triggerNotification(Haptics.NotificationFeedbackType.Warning);
+        return;
       }
+      onSetStateChange?.(set.id, nextState);
     },
-    [orderedSets.length]
+    [closeOpenRow, onSetStateChange, preset.type]
   );
 
-  const finishRowDrag = useCallback(() => {
-    const session = dragSession.current;
-    if (!session) return;
+  const updateMetric = useCallback(
+    (set: ApproachSet, metric: MetricDefinition, rawValue: string) => {
+      const nextText = sanitizeMetricInput(rawValue, metric);
+      const currentValues = normalizeSetValues(set);
+      const parsedValue = parseMetricInput(nextText, metric);
+      const nextValues = { ...currentValues };
 
-    dragSession.current = null;
-
-    if (session.targetIndex === session.startIndex) {
-      dragY.value = theme.spacing[0];
-      setDragState(null);
-      return;
-    }
-
-    const currentSets = orderedSetsRef.current;
-    const currentIndex = currentSets.findIndex((set) => set.id === session.id);
-    if (currentIndex < 0) {
-      dragY.value = theme.spacing[0];
-      setDragState(null);
-      return;
-    }
-
-    const nextIndex = clamp(session.targetIndex, 0, currentSets.length - 1);
-    const nextSets = normalizeSetIndexes(moveItem(currentSets, currentIndex, nextIndex));
-    orderedSetsRef.current = nextSets;
-
-    setOrderedSets(nextSets);
-    dragY.value = theme.spacing[0];
-    setDragState(null);
-    onSetsReorder?.(nextSets);
-  }, [dragY, onSetsReorder]);
-
-  const toggleSet = (id: string) => {
-    closeOpenRow();
-    const nextState: ApproachCountState = stateById[id] === "selected" ? "default" : "selected";
-    setStateById((current) => ({ ...current, [id]: nextState }));
-    onSetStateChange?.(id, nextState);
-  };
-
-  const updateSetValue = (id: string, key: "reps" | "weight", value: string) => {
-    const nextValue = sanitizeMetricValue(value);
-    setValueById((current) => ({
-      ...current,
-      [id]: {
-        ...(current[id] ?? { reps: "", weight: "" }),
-        [key]: nextValue
+      if (parsedValue === undefined) {
+        delete nextValues[metric.key];
+      } else {
+        nextValues[metric.key] = parsedValue;
       }
-    }));
-    const parsedValue = parseMetricValue(nextValue);
-    const patch: Partial<Pick<ApproachSet, "weight" | "reps">> = key === "weight" ? { weight: parsedValue } : { reps: parsedValue };
-    onSetValueChange?.(id, patch);
-  };
+
+      const currentState = set.state ?? "default";
+      if (currentState === "selected" && !isSetCompleteAllowed(preset.type, pickCompatibleValues(nextValues, preset.type))) {
+        onSetStateChange?.(set.id, "default");
+      }
+
+      setTextById((current) => ({
+        ...current,
+        [set.id]: {
+          ...(current[set.id] ?? {}),
+          [metric.key]: nextText
+        }
+      }));
+      onSetValueChange?.(set.id, getValuePatch(nextValues));
+    },
+    [onSetStateChange, onSetValueChange, preset.type]
+  );
+
+  const handleDeleteSet = useCallback(
+    (id: string) => {
+      setOpenDeleteRowId(null);
+      setOrderedSets((current) => getUniqueSetIds(current.filter((set) => set.id !== id)));
+      onDeleteSet?.(id);
+    },
+    [onDeleteSet]
+  );
+
+  const removeLastSet = useCallback(() => {
+    const lastSet = orderedSets[orderedSets.length - 1];
+    if (!lastSet || orderedSets.length <= 1) return;
+
+    const remove = () => {
+      closeOpenRow();
+      onRemoveLastSet?.();
+      if (!onRemoveLastSet) handleDeleteSet(lastSet.id);
+    };
+
+    remove();
+  }, [closeOpenRow, handleDeleteSet, onRemoveLastSet, orderedSets]);
 
   const saveNote = () => {
     setSavedNote(draftNote);
@@ -359,114 +391,98 @@ export function Approach({
     setNoteModalVisible(false);
   };
 
+  const editNote = useCallback(() => {
+    if (onEditExercise) {
+      onEditExercise();
+      return;
+    }
+    setNoteModalVisible(true);
+  }, [onEditExercise]);
+
+  const deleteExercise = useCallback(() => {
+    onDeleteExercise?.();
+  }, [onDeleteExercise]);
+
+  const handleEdit = () => {
+    closeOpenRow();
+    editNote();
+  };
+
   return (
     <View style={[styles.root, style]}>
-      <View style={styles.header}>
-        <View style={styles.thumbnail}>
-          {imageSource ? <Image source={imageSource} resizeMode="cover" style={styles.thumbnailImage} /> : <ThumbnailFallback />}
-        </View>
-        <View style={styles.headerText}>
-          <Text numberOfLines={2} style={styles.title}>
-            {title}
-          </Text>
-          {resolvedNote ? (
-            <Text numberOfLines={1} style={styles.note}>
-              {resolvedNote}
-            </Text>
-          ) : null}
-        </View>
-        <Pressable
-          accessibilityLabel="Edit note"
-          accessibilityRole="button"
-          onPress={() => {
-            closeOpenRow();
-            setNoteModalVisible(true);
-          }}
-          style={({ pressed }) => [styles.noteButton, pressed && styles.noteButtonPressed]}
-        >
-          <Icon name="edit" size={theme.sizes.buttonIconSmall} color={theme.colors.content.ink} />
-        </Pressable>
-      </View>
+      <ApproachHeader
+        title={title}
+        imageSource={imageSource}
+        notePreview={notePreview}
+        onEdit={handleEdit}
+        onDeleteExercise={onDeleteExercise ? deleteExercise : undefined}
+      />
 
       <View style={styles.setList}>
+        <ColumnHeader preset={preset} showPrevious={hasPreviousColumn} />
         {orderedSets.map((set, index) => {
-          const resolvedState = stateById[set.id] ?? set.state ?? "default";
-          const isDragging = dragState?.id === set.id;
-          const shouldRenderPlaceholderBefore = Boolean(
-            dragState && dragState.targetIndex <= dragState.startIndex && dragState.targetIndex === index
-          );
-          const shouldRenderPlaceholderAfter = Boolean(
-            dragState && dragState.targetIndex > dragState.startIndex && dragState.targetIndex === index
-          );
-          const dragSourceTop = index * ROW_SLOT_HEIGHT;
+          const previous = getPreviousSet(previousSets, index, preset);
+          const currentSet = { ...set, index: index + 1, state: set.state ?? "default" };
+          const activeTimerForSet = activeTimer?.setId === set.id ? activeTimer : null;
 
           return (
-            <Fragment key={set.id}>
-              {shouldRenderPlaceholderBefore ? <ApproachDragPlaceholder /> : null}
-              <ApproachRowLayer isDragging={isDragging} top={dragSourceTop}>
-                <ApproachCount
-                  set={{ ...set, index: index + 1, state: resolvedState }}
-                  values={valueById[set.id] ?? { reps: "", weight: "" }}
-                  showDeleteAction={showDeleteAction}
-                  dragY={dragY}
-                  dragBounds={{
-                    startIndex: index,
-                    itemCount: orderedSets.length,
-                    min: -index * ROW_SLOT_HEIGHT,
-                    max: (orderedSets.length - 1 - index) * ROW_SLOT_HEIGHT
-                  }}
-                  dragTargetIndex={dragTargetIndex}
-                  deleteRowRef={(handle) => {
-                    rowRefs.current[set.id] = handle;
-                  }}
-                  onDelete={onDeleteSet ? () => handleRowDelete(set.id) : undefined}
-                  onFocus={closeOpenRow}
-                  onMetricChange={(key, value) => updateSetValue(set.id, key, value)}
-                  onMoveEnd={finishRowDrag}
-                  onMoveStart={() => startRowDrag(set.id, index)}
-                  onMoveTargetChange={updateRowDragTarget}
-                  onSwipeableClose={() => handleRowClose(set.id)}
-                  onSwipeableWillOpen={() => handleRowWillOpen(set.id)}
-                  onToggle={() => toggleSet(set.id)}
+            <View key={set.id} style={styles.rowStack}>
+              <SetRow
+                set={currentSet}
+                preset={preset}
+                textValues={textById[set.id] ?? {}}
+                previousLabel={previous ? formatPreviousSetValue(preset.type, previous.values) : "—"}
+                previousInteractive={Boolean(previous)}
+                showPrevious={hasPreviousColumn}
+                showDeleteAction={showDeleteAction}
+                deleteOpen={openDeleteRowId === set.id}
+                timer={activeTimerForSet}
+                onApplyPrevious={previous ? () => applyPrevious(currentSet, previous.values) : undefined}
+                onDelete={onDeleteSet ? () => handleDeleteSet(set.id) : undefined}
+                onDeleteOpenChange={(open) => setOpenDeleteRowId(open ? set.id : null)}
+                onFocus={closeOpenRow}
+                onMetricChange={(metric, value) => updateMetric(currentSet, metric, value)}
+                onStartTimer={onStartTimer ? (metricKey, mode, targetSeconds) => onStartTimer(set.id, metricKey, mode, targetSeconds) : undefined}
+                onToggle={() => toggleSet(currentSet)}
+              />
+              {activeTimerForSet ? (
+                <SetTimerPanel
+                  timer={activeTimerForSet}
+                  onPause={onPauseTimer}
+                  onResume={onResumeTimer}
+                  onFinish={onFinishTimer}
+                  onReset={onResetTimer}
                 />
-              </ApproachRowLayer>
-              {shouldRenderPlaceholderAfter ? <ApproachDragPlaceholder /> : null}
-            </Fragment>
+              ) : null}
+            </View>
           );
         })}
-        {draggedSet ? (
-          <DragOverlay dragY={dragY} top={dragOverlayTop}>
-            <ApproachCount
-              set={{ ...draggedSet, index: dragState!.startIndex + 1, state: stateById[draggedSet.id] ?? draggedSet.state ?? "default" }}
-              values={valueById[draggedSet.id] ?? { reps: "", weight: "" }}
-              showDeleteAction={false}
-              dragY={dragY}
-              dragBounds={{
-                startIndex: dragState!.startIndex,
-                itemCount: orderedSets.length,
-                min: -dragState!.startIndex * ROW_SLOT_HEIGHT,
-                max: (orderedSets.length - 1 - dragState!.startIndex) * ROW_SLOT_HEIGHT
-              }}
-              dragTargetIndex={dragTargetIndex}
-              onMetricChange={noop}
-              onToggle={noop}
-            />
-          </DragOverlay>
-        ) : null}
       </View>
 
       {showAddAction ? (
-        <Button
-          icon={<Icon name="add" size={theme.sizes.approachStatusIcon} color={theme.colors.content.ink} />}
-          label={addLabel}
-          type="secondaryNeutral"
-          size="large"
-          width="fill"
-          onPress={() => {
-            closeOpenRow();
-            onAddSet?.();
-          }}
-        />
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityLabel="Удалить последний подход"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: orderedSets.length <= 1 }}
+            disabled={orderedSets.length <= 1}
+            onPress={removeLastSet}
+            style={({ pressed }) => [styles.actionButton, orderedSets.length <= 1 && styles.actionButtonDisabled, pressed && styles.actionButtonPressed]}
+          >
+            <Icon name="minus" size={theme.sizes.approachStatusIcon} color={orderedSets.length <= 1 ? theme.colors.content.disabled : theme.colors.content.ink} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Добавить подход"
+            accessibilityRole="button"
+            onPress={() => {
+              closeOpenRow();
+              onAddSet?.();
+            }}
+            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+          >
+            <Icon name="add" size={theme.sizes.approachStatusIcon} color={theme.colors.content.ink} />
+          </Pressable>
+        </View>
       ) : null}
 
       <Modal
@@ -478,6 +494,8 @@ export function Approach({
         actionLayout="single"
         primaryAction={{ label: noteSaveLabel, onPress: saveNote }}
         onClose={() => setNoteModalVisible(false)}
+        bodyStyle={styles.noteModalBody}
+        actionStyle={styles.noteModalAction}
       >
         <TextArea
           label={noteTitle}
@@ -486,9 +504,70 @@ export function Approach({
           width="fill"
           value={draftNote}
           placeholder=""
+          style={styles.noteModalTextArea}
           onChangeText={setDraftNote}
         />
       </Modal>
+    </View>
+  );
+}
+
+function ApproachHeader({
+  title,
+  imageSource,
+  notePreview,
+  onEdit,
+  onDeleteExercise
+}: {
+  title: string;
+  imageSource?: ImageSourcePropType;
+  notePreview?: string;
+  onEdit: () => void;
+  onDeleteExercise?: () => void;
+}) {
+  const editButton = (
+    <Button
+      accessibilityLabel="Редактировать упражнение"
+      type="secondaryNeutral"
+      size="smallIcon"
+      icon={<Icon name="edit" size={theme.sizes.buttonIconSmall} color={theme.colors.content.ink} />}
+      onPress={onDeleteExercise ? undefined : onEdit}
+    />
+  );
+
+  const handleMenuAction = ({ nativeEvent }: { nativeEvent: { event: string } }) => {
+    if (nativeEvent.event === "edit-note") onEdit();
+    if (nativeEvent.event === "delete-exercise") onDeleteExercise?.();
+  };
+
+  return (
+    <View style={styles.header}>
+      <View style={styles.thumbnail}>
+        {imageSource ? <Image source={imageSource} resizeMode="cover" style={styles.thumbnailImage} /> : <ThumbnailFallback />}
+      </View>
+      <View style={styles.headerText}>
+        <Text numberOfLines={1} ellipsizeMode="tail" style={styles.title}>
+          {title}
+        </Text>
+        {notePreview ? (
+          <Text numberOfLines={1} ellipsizeMode="tail" style={styles.note}>
+            {notePreview}
+          </Text>
+        ) : null}
+      </View>
+      {onDeleteExercise ? (
+        <MenuView
+          actions={exerciseMenuActions}
+          isAnchoredToRight
+          shouldOpenOnLongPress={false}
+          themeVariant="light"
+          onPressAction={handleMenuAction}
+        >
+          {editButton}
+        </MenuView>
+      ) : (
+        editButton
+      )}
     </View>
   );
 }
@@ -502,416 +581,346 @@ function ThumbnailFallback() {
   );
 }
 
-function ApproachRowLayer({
-  children,
-  isDragging,
-  top
-}: {
-  children: ReactNode;
-  isDragging: boolean;
-  top: number;
-}) {
+function ColumnHeader({ preset, showPrevious }: { preset: TrackingPreset; showPrevious: boolean }) {
+  if (preset.layout === "expanded") return null;
+
   return (
-    <Animated.View
-      collapsable={false}
-      style={[styles.dragRowLayer, isDragging && styles.dragSourceLayer, isDragging && { top }]}
-    >
-      {children}
-    </Animated.View>
+    <View style={[styles.columnHeader, !showPrevious && styles.columnHeaderNoPrevious]}>
+      <View style={styles.numberHeaderSpace} />
+      {showPrevious ? <Text style={[styles.columnHeaderText, styles.previousHeaderText]}>ПРОШЛЫЙ</Text> : null}
+      <View style={styles.metricsHeaderGroup}>
+        {preset.metrics.map((metric) => (
+          <Text key={metric.key} style={[styles.columnHeaderText, styles.metricHeaderText]}>
+            {metric.shortLabel.toUpperCase()}
+          </Text>
+        ))}
+      </View>
+      <View style={styles.statusHeaderSpace} />
+    </View>
   );
 }
 
-function ApproachDragPlaceholder() {
-  return <View style={styles.dragPlaceholder} />;
-}
-
-function DragOverlay({ children, dragY, top }: { children: ReactNode; dragY: SharedValue<number>; top: number }) {
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ translateY: roundTranslateWorklet(dragY.value) }]
-    };
-  });
-
-  return (
-    <Animated.View pointerEvents="none" style={[styles.dragOverlay, { top }, animatedStyle]}>
-      {children}
-    </Animated.View>
-  );
-}
-
-function ApproachCount({
+function SetRow({
   set,
-  values,
+  preset,
+  textValues,
+  previousLabel,
+  previousInteractive,
+  showPrevious,
   showDeleteAction,
-  dragY,
-  dragBounds,
-  dragTargetIndex,
-  deleteRowRef,
+  deleteOpen,
+  timer,
+  onApplyPrevious,
   onDelete,
+  onDeleteOpenChange,
   onFocus,
   onMetricChange,
-  onMoveEnd,
-  onMoveStart,
-  onMoveTargetChange,
-  onSwipeableClose,
-  onSwipeableWillOpen,
+  onStartTimer,
   onToggle
 }: {
   set: ApproachSet;
-  values: { reps: string; weight: string };
+  preset: TrackingPreset;
+  textValues: Partial<Record<MetricKey, string>>;
+  previousLabel: string;
+  previousInteractive: boolean;
+  showPrevious: boolean;
   showDeleteAction: boolean;
-  dragY: SharedValue<number>;
-  dragBounds: DragBounds;
-  dragTargetIndex: SharedValue<number>;
-  deleteRowRef?: (handle: DeleteRowHandle | null) => void;
+  deleteOpen?: boolean;
+  timer?: SetTimerState | null;
+  onApplyPrevious?: () => void;
   onDelete?: () => void;
-  onFocus?: () => void;
-  onMetricChange: (key: "reps" | "weight", value: string) => void;
-  onMoveEnd?: () => void;
-  onMoveStart?: () => void;
-  onMoveTargetChange?: (targetIndex: number) => void;
-  onSwipeableClose?: () => void;
-  onSwipeableWillOpen?: () => void;
+  onDeleteOpenChange?: (open: boolean) => void;
+  onFocus: () => void;
+  onMetricChange: (metric: MetricDefinition, value: string) => void;
+  onStartTimer?: (metricKey: "duration" | "interval", mode: SetTimerState["mode"], targetSeconds?: number) => void;
   onToggle: () => void;
 }) {
-  const isSelected = set.state === "selected";
-  const isMuted = set.status === "disabled";
-  const isEmpty = set.status === "empty";
-  const canDelete = Boolean(showDeleteAction && onDelete);
-  const isMove = set.state === "move";
-  const isToggleDisabled = isMuted || isEmpty || isMove;
-  const gestureTargetIndex = useSharedValue<number>(dragBounds.startIndex);
-
-  const handleDelete = useCallback(() => {
-    onDelete?.();
-  }, [onDelete]);
-
-  const moveGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activateAfterLongPress(theme.sizes.approachDragLongPressDelay)
-        .activeOffsetY([-theme.spacing.xs, theme.spacing.xs])
-        .failOffsetX([-theme.spacing["2xl"], theme.spacing["2xl"]])
-        .onStart(() => {
-          dragY.value = theme.spacing[0];
-          gestureTargetIndex.value = dragBounds.startIndex;
-          runOnJS(onMoveStart ?? noop)();
-        })
-        .onUpdate((event) => {
-          const nextDragY = clampWorklet(event.translationY, dragBounds.min, dragBounds.max);
-          const nextTargetIndex = clampWorklet(Math.round(dragBounds.startIndex + nextDragY / ROW_SLOT_HEIGHT), 0, dragBounds.itemCount - 1);
-          dragY.value = roundTranslateWorklet(nextDragY);
-
-          if (nextTargetIndex !== gestureTargetIndex.value) {
-            gestureTargetIndex.value = nextTargetIndex;
-            dragTargetIndex.value = nextTargetIndex;
-            runOnJS(onMoveTargetChange ?? noop)(nextTargetIndex);
-          }
-        })
-        .onFinalize(() => {
-          const snapY = clampWorklet((gestureTargetIndex.value - dragBounds.startIndex) * ROW_SLOT_HEIGHT, dragBounds.min, dragBounds.max);
-          dragY.value = withTiming(roundTranslateWorklet(snapY), TIMING_CONFIG, () => {
-            runOnJS(onMoveEnd ?? noop)();
-          });
-        }),
-    [dragBounds.itemCount, dragBounds.max, dragBounds.min, dragBounds.startIndex, dragTargetIndex, dragY, gestureTargetIndex, onMoveEnd, onMoveStart, onMoveTargetChange]
-  );
-
-  const statusControl = isMove ? (
-    <GestureDetector gesture={moveGesture}>
-      <Animated.View accessibilityLabel="Move set" accessibilityRole="button" style={styles.status}>
-        <Icon name="move" size={theme.sizes.approachStatusIcon} color={theme.colors.content.body} />
-      </Animated.View>
-    </GestureDetector>
-  ) : (
+  const isExpanded = preset.layout === "expanded" || preset.metrics.length > 2;
+  const selected = set.state === "selected";
+  const disabled = set.status === "disabled";
+  const values = pickCompatibleValues(normalizeSetValues(set), preset.type);
+  const canComplete = isSetCompleteAllowed(preset.type, values);
+  const statusControl = (
     <Pressable
+      accessibilityLabel={`Завершить подход ${set.index}`}
       accessibilityRole="button"
-      accessibilityState={{ selected: isSelected, disabled: isToggleDisabled }}
-      disabled={isToggleDisabled}
+      accessibilityState={{ selected, disabled: disabled || !canComplete }}
+      disabled={disabled || !canComplete}
+      hitSlop={theme.spacing.sm}
       onPress={onToggle}
-      style={styles.status}
+      style={styles.statusButton}
     >
-      {isEmpty ? (
-        <Icon name="chevron right" size={theme.sizes.approachStatusIcon} color={theme.colors.content.primary} />
-      ) : (
-        <View style={[styles.statusCircle, !isSelected && styles.statusCircleMuted]}>
-          <Icon
-            name="checkmark"
-            size={theme.sizes.buttonIconSmall}
-            color={isSelected ? theme.colors.content.primaryPale : theme.colors.background.canvas}
-          />
-        </View>
-      )}
+      <View style={[styles.statusCircle, selected ? styles.statusCircleSelected : styles.statusCircleMuted, !canComplete && styles.statusCircleDisabled]}>
+        <Icon name="checkmark" size={theme.sizes.buttonIconSmall} color={selected ? theme.colors.content.primaryPale : theme.colors.background.canvas} />
+      </View>
     </Pressable>
   );
 
-  const rowBody = (
-    <>
-      {isEmpty ? null : (
-        <View style={[styles.numberPill, (isSelected || isMove) && styles.numberPillSelected]}>
-          <Text style={styles.numberText}>{set.index}</Text>
-        </View>
+  const rowContent = (
+    <View style={[styles.rowRoot, isExpanded && styles.rowRootExpanded, selected && styles.rowRootSelected]}>
+      {isExpanded ? (
+        <>
+          <View style={styles.expandedTop}>
+            <SetNumber index={set.index} selected={selected} />
+            <PreviousSetValue
+              label={previousLabel}
+              index={set.index}
+              interactive={previousInteractive}
+              onPress={onApplyPrevious}
+            />
+            {statusControl}
+          </View>
+          <View style={[styles.expandedGrid, preset.metrics.length === 3 && styles.expandedGridThree]}>
+            {preset.metrics.map((metric) => (
+              <MetricInput
+                key={metric.key}
+                metric={metric}
+                value={textValues[metric.key] ?? ""}
+                disabled={disabled}
+                timerActive={timer?.metricKey === metric.key}
+                timerMode={preset.timer?.metric === metric.key ? preset.timer.mode : undefined}
+                selected={selected}
+                timerAccessibilityLabel={`Запустить таймер подхода ${set.index}`}
+                onChange={(value) => onMetricChange(metric, value)}
+                onFocus={onFocus}
+                onStartTimer={
+                  preset.timer?.metric === metric.key && onStartTimer
+                    ? () => onStartTimer(preset.timer!.metric, preset.timer!.mode, values[preset.timer!.metric])
+                    : undefined
+                }
+              />
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
+          <SetNumber index={set.index} selected={selected} />
+          {showPrevious ? (
+            <PreviousSetValue
+              label={previousLabel}
+              index={set.index}
+              interactive={previousInteractive}
+              onPress={onApplyPrevious}
+            />
+          ) : null}
+          <View style={styles.compactMetrics}>
+            {preset.metrics.map((metric) => (
+              <MetricInput
+                key={metric.key}
+                metric={metric}
+                value={textValues[metric.key] ?? ""}
+                disabled={disabled}
+                compact
+                timerActive={timer?.metricKey === metric.key}
+                timerMode={preset.timer?.metric === metric.key ? preset.timer.mode : undefined}
+                selected={selected}
+                timerAccessibilityLabel={`Запустить таймер подхода ${set.index}`}
+                onChange={(value) => onMetricChange(metric, value)}
+                onFocus={onFocus}
+                onStartTimer={
+                  preset.timer?.metric === metric.key && onStartTimer
+                    ? () => onStartTimer(preset.timer!.metric, preset.timer!.mode, values[preset.timer!.metric])
+                    : undefined
+                }
+              />
+            ))}
+          </View>
+          {statusControl}
+        </>
       )}
-
-      <View style={styles.metrics}>
-        <Metric
-          disabled={isMuted}
-          label={set.unit ?? "\u041A\u0413"}
-          value={values.weight}
-          onChange={(value) => onMetricChange("weight", value)}
-          onFocus={onFocus}
-        />
-        <Metric
-          disabled={isMuted}
-          label={"\u041F\u041E\u0412\u0422\u041E\u0420\u041E\u0412"}
-          value={values.reps}
-          onChange={(value) => onMetricChange("reps", value)}
-          onFocus={onFocus}
-        />
-      </View>
-
-      {statusControl}
-    </>
+    </View>
   );
-  const rowRootStyle = [styles.countRoot, isMove && styles.countRootMove, isSelected && styles.countRootSelected];
-  const rowContent = <View style={rowRootStyle}>{rowBody}</View>;
 
-  if (!canDelete) {
-    return <View style={styles.countRow}>{rowContent}</View>;
-  }
+  if (!showDeleteAction || !onDelete) return rowContent;
 
   return (
-    <SwipeDeleteRow ref={deleteRowRef} onClose={onSwipeableClose} onDelete={handleDelete} onOpen={onSwipeableWillOpen} onOpenStart={onSwipeableWillOpen}>
+    <StagedSwipeDelete
+      accessibilityLabel={`Удалить подход ${set.index}`}
+      deleteWidth={theme.sizes.approachDeleteWidth}
+      open={deleteOpen}
+      onDelete={onDelete}
+      onOpenChange={onDeleteOpenChange}
+      style={styles.swipeRow}
+    >
       {rowContent}
-    </SwipeDeleteRow>
+    </StagedSwipeDelete>
   );
 }
 
-const SwipeDeleteRow = forwardRef<DeleteRowHandle, {
-  children: ReactNode;
-  onClose?: () => void;
-  onDelete: () => void;
-  onOpen?: () => void;
-  onOpenStart?: () => void;
-}>(function SwipeDeleteRow({ children, onClose, onDelete, onOpen, onOpenStart }, ref) {
-  const translateX = useSharedValue<number>(theme.spacing[0]);
-  const gestureStartTranslate = useSharedValue<number>(theme.spacing[0]);
-  const commitHapticFired = useSharedValue<boolean>(false);
-  const isOpen = useSharedValue<boolean>(false);
-  const rowWidth = useSharedValue<number>(theme.sizes.approachWidth);
-
-  const notifyClose = useCallback(() => {
-    onClose?.();
-  }, [onClose]);
-
-  const notifyOpen = useCallback(() => {
-    onOpen?.();
-  }, [onOpen]);
-
-  const notifyOpenStart = useCallback(() => {
-    onOpenStart?.();
-  }, [onOpenStart]);
-
-  const deleteAfterCommit = useCallback(() => {
-    onDelete();
-    onClose?.();
-  }, [onClose, onDelete]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      close: () => {
-        isOpen.value = false;
-        translateX.value = withTiming(theme.spacing[0], TIMING_CONFIG, (finished) => {
-          if (finished) {
-            runOnJS(notifyClose)();
-          }
-        });
-      }
-    }),
-    [isOpen, notifyClose, translateX]
-  );
-
-  const commitDelete = useCallback(() => {
-    triggerImpact(Haptics.ImpactFeedbackStyle.Medium);
-    isOpen.value = false;
-    translateX.value = withTiming(-rowWidth.value, TIMING_CONFIG, (finished) => {
-      if (finished) {
-        translateX.value = theme.spacing[0];
-        runOnJS(deleteAfterCommit)();
-      }
-    });
-  }, [deleteAfterCommit, isOpen, rowWidth, translateX]);
-
-  const swipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-theme.spacing.sm, theme.spacing.sm])
-        .failOffsetY([-theme.spacing.lg, theme.spacing.lg])
-        .onBegin(() => {
-          runOnJS(notifyOpenStart)();
-          gestureStartTranslate.value = translateX.value;
-        })
-        .onUpdate((event) => {
-          const fullTranslate = -rowWidth.value;
-          const commitTranslate = fullTranslate * SWIPE_COMMIT_RATIO;
-          const nextTranslate = clampWorklet(gestureStartTranslate.value + event.translationX, fullTranslate, theme.spacing[0]);
-          translateX.value = nextTranslate;
-
-          if (nextTranslate <= commitTranslate && !commitHapticFired.value) {
-            commitHapticFired.value = true;
-            runOnJS(triggerImpact)(Haptics.ImpactFeedbackStyle.Medium);
-          } else if (nextTranslate > commitTranslate) {
-            commitHapticFired.value = false;
-          }
-        })
-        .onEnd((event) => {
-          const fullTranslate = -rowWidth.value;
-          const commitTranslate = fullTranslate * SWIPE_COMMIT_RATIO;
-          const shouldCommit = translateX.value <= commitTranslate || (event.velocityX < -SWIPE_COMMIT_VELOCITY && translateX.value < -DELETE_WIDTH);
-
-          if (shouldCommit) {
-            isOpen.value = false;
-            translateX.value = withTiming(fullTranslate, TIMING_CONFIG, (finished) => {
-              if (finished) {
-                translateX.value = theme.spacing[0];
-                runOnJS(deleteAfterCommit)();
-              }
-            });
-            return;
-          }
-
-          const shouldOpen = translateX.value <= -SWIPE_REVEAL_THRESHOLD || (event.velocityX < -SWIPE_VELOCITY_THRESHOLD && translateX.value < theme.spacing[0]);
-          if (shouldOpen) {
-            isOpen.value = true;
-            translateX.value = withTiming(-DELETE_WIDTH, TIMING_CONFIG, (finished) => {
-              if (finished) {
-                runOnJS(notifyOpen)();
-              }
-            });
-            return;
-          }
-
-          isOpen.value = false;
-          translateX.value = withTiming(theme.spacing[0], TIMING_CONFIG, (finished) => {
-            if (finished) {
-              runOnJS(notifyClose)();
-            }
-          });
-        })
-        .onFinalize(() => {
-          commitHapticFired.value = false;
-        }),
-    [commitHapticFired, deleteAfterCommit, gestureStartTranslate, isOpen, notifyClose, notifyOpen, notifyOpenStart, rowWidth, translateX]
-  );
-
-  const deleteIconStyle = useAnimatedStyle(() => {
-    const iconShift = -(rowWidth.value - DELETE_WIDTH) / 2;
-    return {
-      transform: [
-        {
-          translateX: interpolate(translateX.value, [-rowWidth.value, -DELETE_WIDTH, theme.spacing[0]], [iconShift, theme.spacing[0], theme.spacing[0]], Extrapolation.CLAMP)
-        }
-      ]
-    };
-  });
-  const contentStyle = useAnimatedStyle(() => {
-    const fullTranslate = -rowWidth.value;
-    const commitTranslate = fullTranslate * SWIPE_COMMIT_RATIO;
-    return {
-      opacity: interpolate(translateX.value, [fullTranslate, commitTranslate, theme.spacing[0]], [0, 1, 1], Extrapolation.CLAMP),
-      transform: [{ translateX: translateX.value }]
-    };
-  });
-
+function SetNumber({ index, selected }: { index: number; selected: boolean }) {
   return (
-    <View
-      style={styles.countRow}
-      onLayout={(event) => {
-        rowWidth.value = event.nativeEvent.layout.width || theme.sizes.approachWidth;
-      }}
-    >
-      <Pressable accessibilityLabel="Delete set" accessibilityRole="button" onPress={commitDelete} style={styles.deleteActionFill}>
-        <Animated.View style={[styles.deleteIconLayer, deleteIconStyle]}>
-          <Icon name="trash" size={theme.sizes.approachStatusIcon} color={theme.colors.background.canvas} />
-        </Animated.View>
-      </Pressable>
-      <GestureDetector gesture={swipeGesture}>
-        <Animated.View style={[styles.swipeableChildren, contentStyle]}>{children}</Animated.View>
-      </GestureDetector>
+    <View style={[styles.numberPill, selected && styles.numberPillSelected]}>
+      <Text style={styles.numberText}>{index}</Text>
     </View>
   );
-});
+}
 
-function Metric({
-  disabled,
-  value,
+function PreviousSetValue({
   label,
-  onChange,
-  onFocus
+  index,
+  interactive,
+  onPress
 }: {
-  disabled: boolean;
-  value: string;
   label: string;
+  index: number;
+  interactive: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityLabel={interactive ? `Подставить прошлый результат в подход ${index}` : undefined}
+      accessibilityRole={interactive ? "button" : undefined}
+      disabled={!interactive}
+      onPress={onPress}
+      style={({ pressed }) => [styles.previousValue, pressed && styles.previousValuePressed]}
+    >
+      <Text style={styles.previousValueText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function MetricInput({
+  metric,
+  value,
+  disabled,
+  compact = false,
+  timerActive,
+  timerMode,
+  selected,
+  timerAccessibilityLabel,
+  onChange,
+  onFocus,
+  onStartTimer
+}: {
+  metric: MetricDefinition;
+  value: string;
+  disabled: boolean;
+  compact?: boolean;
+  timerActive?: boolean;
+  timerMode?: SetTimerState["mode"];
+  selected?: boolean;
+  timerAccessibilityLabel?: string;
   onChange: (value: string) => void;
-  onFocus?: () => void;
+  onFocus: () => void;
+  onStartTimer?: () => void;
 }) {
   const inputRef = useRef<NativeTextInput>(null);
   const [focused, setFocused] = useState(false);
   const [selection, setSelection] = useState({ start: value.length, end: value.length });
+  const showTimer = Boolean(onStartTimer && (metric.key === "duration" || metric.key === "interval"));
+
+  useEffect(() => {
+    if (!focused) setSelection({ start: value.length, end: value.length });
+  }, [focused, value.length]);
+
   const moveCaretToEnd = useCallback(() => {
     const nextSelection = { start: value.length, end: value.length };
-
     setSelection(nextSelection);
     requestAnimationFrame(() => {
-      inputRef.current?.setNativeProps({ selection: nextSelection });
+      if (typeof inputRef.current?.setNativeProps === "function") inputRef.current.setNativeProps({ selection: nextSelection });
     });
   }, [value]);
 
-  useEffect(() => {
-    if (!focused) {
-      setSelection({ start: value.length, end: value.length });
-    }
-  }, [focused, value.length]);
-
   return (
-    <View style={styles.metric}>
+    <View style={[styles.metricField, compact && styles.metricFieldCompact, selected && styles.metricFieldSelected]}>
       <NativeTextInput
         ref={inputRef}
-        accessibilityLabel={label}
+        accessibilityLabel={metric.label}
         editable={!disabled}
-        keyboardType="decimal-pad"
+        keyboardType={metric.inputType === "duration" ? "numbers-and-punctuation" : "decimal-pad"}
         onBlur={() => setFocused(false)}
         onChangeText={onChange}
         onFocus={() => {
-          onFocus?.();
+          onFocus();
           setFocused(true);
           moveCaretToEnd();
         }}
-        onSelectionChange={(event: { nativeEvent: TextInputSelectionChangeEventData }) => {
-          setSelection(event.nativeEvent.selection);
-        }}
+        onSelectionChange={(event: { nativeEvent: TextInputSelectionChangeEventData }) => setSelection(event.nativeEvent.selection)}
+        placeholder={metric.inputType === "duration" ? "0:00" : ""}
+        placeholderTextColor={theme.colors.content.disabled}
         selection={focused ? selection : undefined}
-        style={[styles.metricValueInput, disabled && styles.metricDisabledText, metricInputReset]}
+        style={[styles.metricInput, showTimer && styles.metricInputWithTimer, disabled && styles.metricDisabledText, metricInputReset]}
         value={value}
       />
-      <Text pointerEvents="none" style={styles.metricLabel}>
-        {label.toUpperCase()}
-      </Text>
+      {showTimer ? (
+        <Pressable
+          accessibilityLabel={timerAccessibilityLabel ?? "Запустить таймер подхода"}
+          accessibilityRole="button"
+          onPress={() => {
+            if (timerMode === "countdown" && !value.trim()) {
+              triggerNotification(Haptics.NotificationFeedbackType.Warning);
+            }
+            onStartTimer?.();
+          }}
+          style={({ pressed }) => [styles.timerButton, timerActive && styles.timerButtonActive, pressed && styles.actionButtonPressed]}
+        >
+          <Icon name="clock" size={theme.sizes.buttonIconSmall} color={timerActive ? theme.colors.content.inkDeep : theme.colors.content.body} />
+        </Pressable>
+      ) : null}
       {focused ? <View pointerEvents="none" style={styles.metricFocusBorder} /> : null}
     </View>
   );
 }
 
+function SetTimerPanel({
+  timer,
+  onPause,
+  onResume,
+  onFinish,
+  onReset
+}: {
+  timer: SetTimerState;
+  onPause?: () => void;
+  onResume?: () => void;
+  onFinish?: () => void;
+  onReset?: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, []);
+
+  const displaySeconds = getTimerDisplaySeconds(timer, now);
+  const elapsedSeconds = getTimerElapsedSeconds(timer, now);
+  const isRunning = timer.status === "running";
+  const isPaused = timer.status === "paused";
+
+  return (
+    <View style={styles.timerPanel}>
+      <Text style={styles.timerValue}>{formatDuration(displaySeconds)}</Text>
+      <View style={styles.timerActions}>
+        {isRunning ? (
+          <TimerAction label="Пауза" accessibilityLabel="Поставить таймер на паузу" onPress={onPause} />
+        ) : (
+          <TimerAction label={isPaused ? "Продолжить" : "Старт"} accessibilityLabel="Продолжить таймер" onPress={onResume} />
+        )}
+        <TimerAction label="Завершить" accessibilityLabel="Завершить таймер" onPress={onFinish} />
+        <TimerAction label="Сбросить" accessibilityLabel="Сбросить таймер" onPress={onReset} />
+      </View>
+      {timer.mode === "countdown" ? <Text style={styles.timerMeta}>Прошло {formatDuration(elapsedSeconds)}</Text> : null}
+    </View>
+  );
+}
+
+function TimerAction({ label, accessibilityLabel, onPress }: { label: string; accessibilityLabel: string; onPress?: () => void }) {
+  return (
+    <Pressable accessibilityLabel={accessibilityLabel} accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.timerAction, pressed && styles.actionButtonPressed]}>
+      <Text style={styles.timerActionText}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   root: {
-    width: theme.sizes.approachWidth,
+    width: "100%",
     maxWidth: "100%",
     alignSelf: "stretch",
     gap: theme.spacing.sm,
     padding: theme.spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: theme.colors.background.canvasSoft,
+    borderWidth: theme.sizes.approachBorderWidth,
+    borderColor: theme.colors.background.border,
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvas
   },
@@ -920,6 +929,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing.md,
+    paddingRight: theme.spacing.sm,
     overflow: "hidden"
   },
   thumbnail: {
@@ -927,15 +937,18 @@ const styles = StyleSheet.create({
     height: theme.sizes.approachHeaderThumb,
     flexShrink: 0,
     overflow: "hidden",
-    borderRadius: theme.radius.sm,
+    borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvasSoft
   },
   thumbnailImage: {
     width: "100%",
-    height: "100%"
+    height: "100%",
+    borderRadius: theme.radius.lg
   },
   thumbnailFallbackRoot: {
     flex: 1,
+    overflow: "hidden",
+    borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.content.primaryPale
   },
   thumbnailFallbackTop: {
@@ -952,82 +965,92 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xxs
   },
   title: {
-    ...theme.typography.body.smStrong,
+    ...theme.typography.body.mdStrong,
     color: theme.colors.content.ink
   },
   note: {
-    ...theme.typography.body.caption,
+    ...theme.typography.body.smStrong,
     color: theme.colors.content.mute
-  },
-  noteButton: {
-    width: theme.sizes.buttonSmallIconWidth,
-    height: theme.sizes.buttonSmallIconHeight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: theme.radius.pill,
-    backgroundColor: theme.colors.background.canvasSoft
-  },
-  noteButtonPressed: {
-    opacity: 0.86
   },
   setList: {
     gap: theme.spacing.xs,
     position: "relative"
   },
-  dragRowLayer: {
-    position: "relative"
+  columnHeader: {
+    minHeight: theme.spacing.xl,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
+    paddingLeft: theme.spacing.md,
+    paddingRight: theme.spacing.md,
+    paddingTop: theme.spacing.sm
   },
-  dragSourceLayer: {
-    position: "absolute",
-    left: theme.spacing[0],
-    right: theme.spacing[0],
-    opacity: 0,
-    zIndex: 1
+  columnHeaderNoPrevious: {
+    paddingLeft: theme.spacing.md
   },
-  dragOverlay: {
-    position: "absolute",
-    left: theme.spacing[0],
-    right: theme.spacing[0],
-    ...(theme.shadows.raised ?? {}),
-    zIndex: 2
+  columnHeaderText: {
+    minWidth: theme.spacing[0],
+    textAlign: "center",
+    ...theme.typography.body.smCaption,
+    color: theme.colors.content.mute
   },
-  dragPlaceholder: {
-    minHeight: theme.sizes.approachCountRowMinHeight,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.background.canvasSoft,
-    opacity: 0.5
+  previousHeaderText: {
+    flex: 1
   },
-  countRow: {
-    minHeight: theme.sizes.approachCountRowMinHeight,
-    position: "relative",
-    overflow: "hidden",
+  metricsHeaderGroup: {
+    flex: 2,
+    minWidth: theme.spacing[0],
+    flexDirection: "row",
+    gap: theme.spacing.sm
+  },
+  metricHeaderText: {
+    flex: 1
+  },
+  numberHeaderSpace: {
+    width: theme.sizes.approachCountNumber
+  },
+  statusHeaderSpace: {
+    width: theme.sizes.touchTargetMin
+  },
+  rowStack: {
+    gap: theme.spacing.xs
+  },
+  swipeRow: {
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvas
   },
-  countRoot: {
+  rowRoot: {
     width: "100%",
     minHeight: theme.sizes.approachCountRowMinHeight,
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.md,
-    paddingLeft: theme.spacing.md,
-    paddingRight: theme.spacing.md,
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.background.canvas
   },
-  countRootSelected: {
+  rowRootExpanded: {
+    minHeight: theme.sizes.approachCountRowMinHeight + theme.sizes.touchTargetComfort + theme.spacing.lg,
+    alignItems: "stretch",
+    flexDirection: "column",
+    gap: theme.spacing.md
+  },
+  rowRootSelected: {
     backgroundColor: theme.colors.content.primaryPale
   },
-  countRootMove: {
-    backgroundColor: theme.colors.background.canvasSoft
+  expandedTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md
   },
-  countRootPressed: {
-    opacity: 0.92
+  expandedGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: theme.spacing.sm
   },
-  swipeableChildren: {
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.background.canvas
+  expandedGridThree: {
+    flexWrap: "nowrap"
   },
   numberPill: {
     width: theme.sizes.approachCountNumber,
@@ -1044,29 +1067,51 @@ const styles = StyleSheet.create({
     ...theme.typography.body.smStrong,
     color: theme.colors.content.inkDeep
   },
-  metrics: {
+  previousValue: {
     flex: 1,
+    minHeight: theme.sizes.touchTargetMin,
+    minWidth: theme.spacing[0],
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.md
+  },
+  previousValuePressed: {
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  previousValueText: {
+    ...theme.typography.body.mdStrong,
+    color: theme.colors.content.mute,
+    textAlign: "center"
+  },
+  compactMetrics: {
+    flex: 2,
     minWidth: theme.spacing[0],
     flexDirection: "row",
     gap: theme.spacing.sm
   },
-  metric: {
-    flex: 1,
-    height: "100%",
+  metricField: {
+    flexGrow: 1,
+    flexBasis: "47%",
     minHeight: theme.sizes.touchTargetComfort,
+    minWidth: theme.spacing[0],
     alignItems: "center",
     justifyContent: "center",
     borderRadius: theme.radius.md,
-    overflow: "hidden"
+    overflow: "hidden",
+    backgroundColor: theme.colors.background.canvasSoft
   },
-  metricValueInput: {
-    ...StyleSheet.absoluteFillObject,
+  metricFieldSelected: {
+    backgroundColor: "transparent"
+  },
+  metricFieldCompact: {
+    flex: 1,
+    flexBasis: 0
+  },
+  metricInput: {
     width: "100%",
-    height: "100%",
     minHeight: theme.sizes.touchTargetComfort,
-    padding: theme.spacing[0],
-    paddingTop: theme.spacing.xs,
-    paddingBottom: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing[0],
     margin: theme.spacing[0],
     textAlign: "center",
     textAlignVertical: "center",
@@ -1074,12 +1119,10 @@ const styles = StyleSheet.create({
     color: theme.colors.content.ink,
     backgroundColor: "transparent"
   },
-  metricDisabledText: {
-    color: theme.colors.content.mute
+  metricInputWithTimer: {
+    paddingRight: theme.sizes.buttonSmallIconWidth
   },
-  metricLabel: {
-    marginTop: theme.spacing.xl,
-    ...theme.typography.body.smCaption,
+  metricDisabledText: {
     color: theme.colors.content.mute
   },
   metricFocusBorder: {
@@ -1089,34 +1132,102 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderColor: theme.colors.content.inkDeep
   },
-  status: {
-    width: theme.sizes.approachStatusIcon,
-    height: theme.sizes.approachStatusIcon,
+  timerButton: {
+    position: "absolute",
+    right: theme.spacing.xs,
+    width: theme.sizes.buttonSmallIconWidth,
+    height: theme.sizes.buttonSmallIconHeight,
     alignItems: "center",
-    justifyContent: "center"
+    justifyContent: "center",
+    borderRadius: theme.radius.pill
+  },
+  timerButtonActive: {
+    backgroundColor: theme.colors.content.primaryPale
+  },
+  statusButton: {
+    width: theme.sizes.touchTargetMin,
+    height: theme.sizes.touchTargetMin,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2
   },
   statusCircle: {
     width: theme.sizes.approachStatusIcon,
     height: theme.sizes.approachStatusIcon,
     borderRadius: theme.radius.full,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "center"
+  },
+  statusCircleSelected: {
     backgroundColor: theme.colors.status.positiveDeep
   },
   statusCircleMuted: {
     backgroundColor: theme.colors.content.disabled
   },
-  deleteActionFill: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.status.negative
+  statusCircleDisabled: {
+    opacity: 0.5
   },
-  deleteIconLayer: {
-    width: theme.sizes.approachDeleteWidth,
-    height: "100%",
+  timerPanel: {
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  timerValue: {
+    ...theme.typography.display.xs,
+    color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  timerActions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm
+  },
+  timerAction: {
+    flex: 1,
+    minHeight: theme.sizes.touchTargetMin,
     alignItems: "center",
     justifyContent: "center",
-    alignSelf: "flex-end"
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.background.canvas
+  },
+  timerActionText: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  timerMeta: {
+    ...theme.typography.body.smCaption,
+    color: theme.colors.content.mute,
+    textAlign: "center"
+  },
+  actions: {
+    flexDirection: "row",
+    gap: theme.spacing.sm
+  },
+  actionButton: {
+    flex: 1,
+    height: theme.sizes.buttonLargeHeight,
+    minHeight: theme.sizes.touchTargetMin,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.background.canvasSoft
+  },
+  actionButtonDisabled: {
+    opacity: 0.55
+  },
+  actionButtonPressed: {
+    opacity: 0.82
+  },
+  noteModalBody: {
+    paddingHorizontal: theme.spacing[0],
+    paddingVertical: theme.spacing.xs
+  },
+  noteModalTextArea: {
+    paddingBottom: theme.spacing.md
+  },
+  noteModalAction: {
+    padding: theme.spacing.lg
   }
 });

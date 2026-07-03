@@ -16,7 +16,7 @@
 - `day cell`: pressable date surface.
 - `weekday`: short weekday label.
 - `day number`: numeric date.
-- `current day dot`: optional 4px marker independent from selected state.
+- `current day dot`: optional 4px marker independent from selected state, centered horizontally with a token-derived absolute top offset.
 - `selected fill`: animated fill layer for the selected day.
 
 ## Props
@@ -75,7 +75,7 @@ type CalendarDayStripItem = {
 | selected text/dot | `color/content/on-primary` | `theme.colors.content.onPrimary` |
 | weekday text | `color/content/body` | `theme.colors.content.body` |
 | date text | `color/content/ink` | `theme.colors.content.ink` |
-| weekday typography | `Typography/Caption` | `theme.typography.caption` |
+| weekday typography | `Typography/Body/SM Caption` | `theme.typography.body.smCaption` |
 | date typography | `Typography/Body/MD Strong` | `theme.typography.body.mdStrong` |
 
 ## Motion

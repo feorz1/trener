@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { theme } from "@/theme";
 
@@ -10,6 +11,7 @@ export type HeaderProps = {
   subtitlePosition?: "top" | "bottom";
   size?: HeaderSize;
   width?: "fill";
+  trailingSlot?: ReactNode;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -51,11 +53,10 @@ const subtitleStyles = StyleSheet.create({
   }
 });
 
-export function Header({ title, subtitle, showSubtitle = true, subtitlePosition = "bottom", size = "xl", style }: HeaderProps) {
+export function Header({ title, subtitle, showSubtitle = true, subtitlePosition = "bottom", size = "xl", trailingSlot, style }: HeaderProps) {
   const shouldShowSubtitle = showSubtitle && Boolean(subtitle);
-
-  return (
-    <View style={[styles.root, style]}>
+  const content = (
+    <>
       {shouldShowSubtitle && subtitlePosition === "top" ? (
         <Text numberOfLines={1} style={subtitleStyles[size]}>
           {subtitle}
@@ -69,6 +70,21 @@ export function Header({ title, subtitle, showSubtitle = true, subtitlePosition 
           {subtitle}
         </Text>
       ) : null}
+    </>
+  );
+
+  if (trailingSlot) {
+    return (
+      <View style={[styles.root, styles.rootWithTrailing, style]}>
+        <View style={styles.textStack}>{content}</View>
+        {trailingSlot}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.root, style]}>
+      {content}
     </View>
   );
 }
@@ -81,5 +97,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
     paddingBottom: theme.spacing.md
+  },
+  rootWithTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.md
+  },
+  textStack: {
+    flex: 1,
+    minWidth: theme.spacing[0],
+    justifyContent: "center",
+    gap: theme.spacing.xxs
   }
 });

@@ -11,6 +11,7 @@ See `docs/design-system/figma-token-map.md` for the full table.
 
 ## Background Additions
 
+- `theme.colors.background.border` mirrors Figma `color/background/border`.
 - `theme.colors.background.cardDivider` mirrors Figma `card-divider`.
 
 ## Rule

@@ -39,3 +39,11 @@
 - Keep the divider above adjacent section siblings in stacking order and avoid clipping ancestors at the seam; otherwise the lower masks can be hidden by the following section on Android or web screenshots.
 - It does not fill the neighboring sections; parent surfaces provide their own background.
 - Do not replace the corner SVG paths with remote Figma assets; the Figma asset URLs are temporary.
+
+## Integration Rules
+
+- `Divider` must be a direct sibling between the two surfaces it separates: `top surface -> Divider -> bottom surface`.
+- Do not render `Divider` as the first child inside the lower section, scroll body, or list container. That breaks the corner masks because the upper surface is outside the divider's stack context.
+- Do not fix divider overlap by adding `theme.sizes.dividerCorner` padding to section headers. Header rhythm should stay on normal spacing tokens; the divider owns the visual seam.
+- Do not add extra top radii to the lower section to "help" the divider. The corner masks already form that seam, and duplicate radii create broken double curves.
+- Match existing workout screens before changing the divider tone. `summary`, `session`, `approach`, `workouts/new`, and `workouts/exercises` use `tone="canvasSoft"` for the current workout section seam.
