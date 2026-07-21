@@ -23,6 +23,13 @@ const avatarSizes: Record<AvatarSize, number> = {
   72: theme.sizes.avatar72
 };
 
+const avatarIconSizes: Record<AvatarSize, number> = {
+  40: theme.sizes.avatarIcon40,
+  48: theme.sizes.avatarIcon48,
+  56: theme.sizes.avatarIcon56,
+  72: theme.sizes.avatarIcon72
+};
+
 export function Avatar({
   type = "image",
   size = 56,
@@ -62,7 +69,7 @@ export function Avatar({
   if (type === "icon") {
     return (
       <View accessibilityLabel={accessibilityLabel} accessibilityRole="image" style={[styles.iconAvatar, circleStyle(avatarSize)]}>
-        <Icon name={iconName} size={avatarSize * 0.5} color={theme.colors.content.inkDeep} />
+        <Icon name={iconName} size={avatarIconSizes[size]} color={theme.colors.content.inkDeep} />
       </View>
     );
   }
@@ -211,9 +218,8 @@ const styles = StyleSheet.create({
   iconAvatar: {
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: theme.sizes.avatarRingStroke,
-    borderColor: theme.colors.background.canvasSoft,
-    backgroundColor: theme.colors.background.canvas
+    overflow: "hidden",
+    backgroundColor: theme.colors.background.canvasSoft
   },
   ringShell: {
     alignItems: "center",

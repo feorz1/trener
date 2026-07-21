@@ -135,6 +135,7 @@ export interface ClientRepository {
   getById(id: ClientId): Promise<Client | null>;
   create(input: CreateClientInput): Promise<Client>;
   update(id: ClientId, patch: UpdateClientInput): Promise<Client>;
+  remove(id: ClientId): Promise<void>;
 }
 
 export interface ExerciseRepository {

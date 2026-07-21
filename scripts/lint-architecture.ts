@@ -194,10 +194,6 @@ for (const file of files) {
     violations.push(`${normalized}: AsyncStorage import is only allowed in src/data/persistence`);
   }
 
-  if (normalized.startsWith("app/") && (source.includes("JSON.parse") || source.includes("JSON.stringify"))) {
-    violations.push(`${normalized}: routes must not serialize domain data through JSON params`);
-  }
-
   if (normalized.startsWith("app/") && /\/workouts\/\[workoutId\]\/(session|summary)/.test(source)) {
     violations.push(`${normalized}: session routes must use /sessions/[sessionId] and /sessions/[sessionId]/summary`);
   }

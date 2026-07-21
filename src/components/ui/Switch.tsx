@@ -22,7 +22,7 @@ export function Switch({ selected = false, disabled = false, size = "md", onChan
     }).start();
   }, [selected, translateX]);
 
-  const trackBackgroundColor = selected && !disabled ? theme.colors.content.inkDeep : theme.colors.background.canvasSoft;
+  const trackBackgroundColor = selected && !disabled ? theme.colors.content.controlAccent : theme.colors.background.canvasSoft;
   const thumbBackgroundColor = disabled ? theme.colors.content.mute : theme.colors.background.canvas;
 
   return (
@@ -36,7 +36,7 @@ export function Switch({ selected = false, disabled = false, size = "md", onChan
       style={({ pressed }) => [
         styles.track,
         size === "md" && styles.trackMd,
-        { backgroundColor: pressed && selected && !disabled ? theme.colors.content.ink : trackBackgroundColor }
+        { backgroundColor: pressed && selected && !disabled ? theme.colors.content.primaryActive : trackBackgroundColor }
       ]}
     >
       <Animated.View

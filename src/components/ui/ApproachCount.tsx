@@ -10,7 +10,7 @@ import {
   type TextStyle,
   type ViewStyle
 } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import type { MetricKey, MetricValues, WorkoutResultType } from "@/types";
 import { formatMetricInputValue, parseMetricInput, sanitizeMetricInput, type MetricDefinition } from "@/features/workouts/tracking";
 import { Icon } from "./Icon";
@@ -224,6 +224,7 @@ function Metric({
   onChange: (value: string) => void;
   onFocus?: () => void;
 }) {
+  const { resolvedColorScheme } = useAppTheme();
   const inputRef = useRef<NativeTextInput>(null);
   const wasRequestedToFocusRef = useRef(false);
   const [focused, setFocused] = useState(false);
@@ -273,6 +274,7 @@ function Metric({
       <NativeTextInput
         ref={inputRef}
         accessibilityLabel={accessibilityLabel ?? label}
+        keyboardAppearance={resolvedColorScheme}
         keyboardType={inputType === "integer" || inputType === "duration" ? "number-pad" : "decimal-pad"}
         showSoftInputOnFocus
         onBlur={() => {
@@ -368,6 +370,6 @@ const styles = StyleSheet.create({
     inset: theme.spacing[0],
     borderWidth: 2,
     borderRadius: theme.radius.md,
-    borderColor: theme.colors.content.inkDeep
+    borderColor: theme.colors.content.controlAccent
   }
 });

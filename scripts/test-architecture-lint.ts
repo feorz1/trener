@@ -50,7 +50,17 @@ assertPasses(
     router.push({ pathname: "/sessions/[sessionId]", params: { sessionId: session.id, from: "home" } });
     router.push(route);
     router.push({ pathname: "/workouts/schedule", params: { scheduleRepeatDays: scheduleRepeatDays.join(",") } });
+    router.dismissTo({ pathname: "/workouts/[workoutId]", params: { workoutId: "workout-1", rescheduleConfirmed: "true" } });
     router.setParams({ draftId: draftIdValue, activeDay: "mon" });
+  `
+);
+
+assertPasses(
+  "local JSON serialization outside route params",
+  `
+    const values = { weight: 20, reps: 10 };
+    const localKey = JSON.stringify(values);
+    export { localKey };
   `
 );
 
@@ -94,6 +104,15 @@ assertFails(
   `
     const selectedIds = ["exercise-1"];
     router.push({ pathname: "/workouts/schedule", params: { exerciseIds: selectedIds } });
+  `,
+  "route params must be an object of IDs/primitives"
+);
+
+assertFails(
+  "serialized domain object route param",
+  `
+    const workout = { id: "workout-1", exercises: [] };
+    router.push({ pathname: "/workouts/new", params: { workoutData: JSON.stringify(workout) } });
   `,
   "route params must be an object of IDs/primitives"
 );

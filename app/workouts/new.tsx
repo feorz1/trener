@@ -10,7 +10,6 @@ import {
   Badge,
   Button,
   Divider,
-  Header,
   Icon,
   Loader,
   ListItemGym,
@@ -304,12 +303,15 @@ export default function NewWorkoutScreen() {
     });
   }, [activeWorkoutDay, draftIdValue]);
 
-  const openDayEdit = useCallback(() => {
+  const openScheduleEdit = useCallback(() => {
     if (!draftIdValue) return;
 
     router.push({
-      pathname: "/workouts/day-edit",
-      params: { draftId: draftIdValue }
+      pathname: "/workouts/schedule",
+      params: {
+        draftId: draftIdValue,
+        returnTo: "workout-new"
+      }
     });
   }, [draftIdValue]);
 
@@ -479,7 +481,7 @@ export default function NewWorkoutScreen() {
             size="smallIcon"
             accessibilityLabel="Редактировать дни тренировок"
             icon={<Icon name="edit" size={theme.sizes.buttonIconSmall} color={theme.colors.content.ink} />}
-            onPress={openDayEdit}
+            onPress={openScheduleEdit}
           />
         </View>
         <Variant<RepeatDay>
@@ -519,10 +521,7 @@ export default function NewWorkoutScreen() {
       >
         {hasExercises ? (
           <View style={styles.exerciseSection}>
-            <View style={styles.exerciseHeader}>
-              <Text style={styles.exerciseHeaderTitle}>Упражнения</Text>
-              <Badge label={String(selectedExercises.length)} tone="neutral" size="s" icon={false} />
-            </View>
+            <ExerciseSectionHeader count={selectedExercises.length} />
             <View style={styles.selectedBody}>
               {selectedExercises.length >= 2 ? (
                 <SuperSet
@@ -581,8 +580,8 @@ export default function NewWorkoutScreen() {
             </View>
           </View>
         ) : (
-          <View style={styles.exercises}>
-            <Header title="Упражнения" size="lg" showSubtitle={false} style={styles.sectionHeader} />
+          <View style={styles.exerciseSection}>
+            <ExerciseSectionHeader count={selectedExercises.length} />
             <View style={styles.emptyState}>
               <Icon name="muscle arms" size={theme.sizes.approachHeaderThumb + theme.spacing["3xl"]} color={theme.colors.status.negativeDarkest} />
               <View style={styles.emptyCopy}>
@@ -617,6 +616,15 @@ export default function NewWorkoutScreen() {
         />
       </View>
     </SafeAreaView>
+  );
+}
+
+function ExerciseSectionHeader({ count }: { count: number }) {
+  return (
+    <View style={styles.exerciseHeader}>
+      <Text style={styles.exerciseHeaderTitle}>Упражнения</Text>
+      {count > 0 ? <Badge label={String(count)} tone="neutral" size="s" icon={false} /> : null}
+    </View>
   );
 }
 
@@ -698,15 +706,6 @@ const styles = StyleSheet.create({
   timeFallback: {
     paddingHorizontal: theme.spacing.lg,
     paddingBottom: theme.spacing.lg
-  },
-  exercises: {
-    flex: 1,
-    alignItems: "center",
-    paddingBottom: theme.spacing["3xl"]
-  },
-  sectionHeader: {
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.md
   },
   emptyState: {
     flex: 1,

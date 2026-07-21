@@ -110,7 +110,7 @@ export const trackingPresets: Record<WorkoutResultType, TrackingPreset> = {
   assisted_bodyweight: {
     type: "assisted_bodyweight",
     title: "Упражнение с помощью",
-    metrics: [decimalMetric("assistance", "ПОМОЩЬ"), integerMetric("reps", "ПОВТОРЫ")],
+    metrics: [decimalMetric("assistance", "ПОМОЩЬ, КГ"), integerMetric("reps", "ПОВТОРЫ")],
     layout: "compact"
   },
   weight_reps_rpe: {
@@ -241,6 +241,14 @@ export function getTrackingPreset(type?: WorkoutResultType): TrackingPreset {
   return trackingPresets[normalizeTrackingType(type)];
 }
 
+export function getPrimaryWeightMetricKey(type?: WorkoutResultType): Extract<MetricKey, "weight" | "addedWeight" | "assistance"> | undefined {
+  const metrics = getTrackingPreset(type).metrics;
+  if (metrics.some((metric) => metric.key === "weight")) return "weight";
+  if (metrics.some((metric) => metric.key === "addedWeight")) return "addedWeight";
+  if (metrics.some((metric) => metric.key === "assistance")) return "assistance";
+  return undefined;
+}
+
 export function isMetricCompatible(type: WorkoutResultType | undefined, key: MetricKey) {
   return getTrackingPreset(type).metrics.some((metric) => metric.key === key);
 }
@@ -262,9 +270,10 @@ export function getLegacyValues(input: {
   };
 }
 
-export function valuesToLegacyFields(values: MetricValues) {
+export function valuesToLegacyFields(values: MetricValues, type?: WorkoutResultType) {
+  const weightMetricKey = getPrimaryWeightMetricKey(type);
   return {
-    weight: values.weight,
+    weight: weightMetricKey ? values[weightMetricKey] : values.weight,
     repetitions: values.reps,
     durationSeconds: values.duration,
     distanceMeters: values.distance

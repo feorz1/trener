@@ -1,82 +1,334 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "expo-router";
-import { View, StyleSheet } from "react-native";
-import { Loader } from "@/components/ui";
-import { theme } from "@/theme";
-import { createMemoryCredentialVault } from "./credentialVault";
-import { createDevelopmentAuthProvider } from "./developmentProvider";
-import { restoreAuthSession, signInWithProvider, signOutWithProvider } from "./operations";
-import { initialAuthState, signedOutState } from "./state";
+import { usePathname, useRootNavigationState, useRouter } from "expo-router";
+import { StyleSheet, View } from "react-native";
+import { AppSplashScreen } from "@/features/splash/AppSplashScreen";
+import { clearPendingAccountDeletion, markPendingAccountDeletion, recoverPendingAccountDeletion } from "@/data/persistence/accountDeletionRecovery";
+import { createAuthorizedFetch } from "./api/apiClient";
+import { createDefaultAuthApi } from "./api/authApi";
+import { authConfig, envProvidersAvailability, mergeProviderAvailability } from "./config";
+import { createSecureTokenStorage } from "./services/secureTokenStorage";
+import { createAuthenticatedState, createAuthenticatedStateFromUser, createAuthenticatingState, createAuthErrorState, createUnauthenticatedState, initialAuthState } from "./state";
+import type { AuthApiClient, AuthError, AuthProvidersAvailability, AuthSession, AuthState, TokenStorage } from "./types";
+import { AuthFlowError, createAuthError, normalizeAuthError } from "./utils/authErrors";
+import { isValidEmail, normalizeEmail } from "./utils/email";
 import { getAuthRouteDecision, SIGN_IN_ROUTE } from "./routes";
-import type { AuthCredential, AuthProviderClient, AuthState, CredentialVault, SignInInput, SignOutOptions } from "./types";
+import { deleteRemoteAccountWithRefresh, executeAccountDeletion, type AccountDeletionCleanup } from "./accountDeletion";
 
-type AuthContextValue = {
+export type AuthContextValue = {
   state: AuthState;
-  signInDevelopment: (input?: SignInInput) => Promise<void>;
-  signOut: (options?: SignOutOptions) => Promise<void>;
+  checkSession: () => Promise<void>;
+  loadAuthProviders: () => Promise<void>;
+  startEmailLogin: (email: string) => Promise<void>;
+  verifyEmailCode: (email: string, code: string) => Promise<void>;
+  resendEmailCode: (email: string) => Promise<void>;
+  refreshSession: () => Promise<void>;
+  logout: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  registerAccountDeletionCleanup: (cleanup: AccountDeletionCleanup) => () => void;
+  authorizedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  setAuthSession: (session: AuthSession) => Promise<void>;
+  clearAuthSession: () => Promise<void>;
+  clearAuthError: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const defaultAuthProvider = createDevelopmentAuthProvider();
-const defaultCredentialVault = createMemoryCredentialVault();
+const defaultAuthApi = createDefaultAuthApi();
+const defaultTokenStorage = createSecureTokenStorage();
 
 export function AuthProvider({
   children,
-  provider = defaultAuthProvider,
-  credentialVault = defaultCredentialVault,
-  onClearLocalData
+  authApi = defaultAuthApi,
+  tokenStorage = defaultTokenStorage
 }: {
   children: ReactNode;
-  provider?: AuthProviderClient;
-  credentialVault?: CredentialVault;
-  onClearLocalData?: () => Promise<void>;
+  authApi?: AuthApiClient;
+  tokenStorage?: TokenStorage;
 }) {
   const [state, setState] = useState<AuthState>(initialAuthState);
-  const credentialRef = useRef<AuthCredential | null>(null);
+  const stateRef = useRef(state);
+  const registeredLocalCleanupRef = useRef<AccountDeletionCleanup | null>(null);
+  const accountDeletionPromiseRef = useRef<Promise<void> | null>(null);
+  const remoteDeletedOwnerIdRef = useRef<string | null>(null);
+  const authorizedRequestsPausedRef = useRef(false);
+  const activeAuthorizedRequestsRef = useRef(new Map<Promise<Response>, AbortController>());
+  const sessionCheckPromiseRef = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    stateRef.current = state;
+  }, [state]);
 
-    async function restoreSession() {
-      const restored = await restoreAuthSession(provider, credentialVault);
+  const setProviders = useCallback((providers: AuthProvidersAvailability) => {
+    setState((current) => ({ ...current, providers }));
+  }, []);
 
-      if (cancelled) return;
-
-      credentialRef.current = restored.credential;
-      setState(restored.state);
+  const loadAuthProviders = useCallback(async () => {
+    try {
+      const providers = mergeProviderAvailability(await authApi.getAuthProviders());
+      setProviders(providers);
+    } catch {
+      setProviders(envProvidersAvailability);
     }
+  }, [authApi, setProviders]);
 
-    void restoreSession().catch(() => {
-      if (!cancelled) {
-        credentialRef.current = null;
-        setState(signedOutState("provider_unavailable"));
+  const clearAuthSession = useCallback(async () => {
+    try {
+      await tokenStorage.clearAuthTokens();
+    } finally {
+      setState(createUnauthenticatedState({ providers: stateRef.current.providers }));
+    }
+  }, [tokenStorage]);
+
+  const clearDeletedAccountSession = useCallback(async () => {
+    // Unlike ordinary session expiry, a failed SecureStore purge must keep the
+    // deletion flow retryable. Transition to sign-in only after both token
+    // keys have been removed successfully.
+    await tokenStorage.clearAuthTokens();
+    await clearPendingAccountDeletion();
+    setState(createUnauthenticatedState({ providers: stateRef.current.providers }));
+  }, [tokenStorage]);
+
+  const setAuthSession = useCallback(
+    async (session: AuthSession) => {
+      await Promise.all([tokenStorage.setRefreshToken(session.refreshToken), tokenStorage.setAccessToken(session.accessToken)]);
+      setState(createAuthenticatedState(session, stateRef.current.providers));
+    },
+    [tokenStorage]
+  );
+
+  const checkSession = useCallback(() => {
+    if (sessionCheckPromiseRef.current) return sessionCheckPromiseRef.current;
+    if (authorizedRequestsPausedRef.current) return Promise.resolve();
+
+    const operation = (async () => {
+      setState((current) => ({ ...current, status: "checking", isLoading: true, error: null }));
+
+      try {
+        await recoverPendingAccountDeletion(tokenStorage);
+      } catch (error) {
+        const authError = normalizeAuthError(error, "server_error");
+        setState((current) => createAuthErrorState(authError, current));
+        return;
+      }
+
+      const refreshToken = await tokenStorage.getRefreshToken();
+      if (!refreshToken) {
+        setState(createUnauthenticatedState({ providers: stateRef.current.providers }));
+        return;
+      }
+
+      try {
+        const refreshed = await authApi.refresh(refreshToken);
+        await Promise.all([tokenStorage.setRefreshToken(refreshed.refreshToken), tokenStorage.setAccessToken(refreshed.accessToken)]);
+        const user = await authApi.getMe(refreshed.accessToken);
+        setState(createAuthenticatedStateFromUser(user, refreshed.accessToken, refreshed.expiresAt, stateRef.current.providers));
+      } catch (error) {
+        const authError = normalizeAuthError(error);
+        if (authError.code === "network_error") {
+          setState(createAuthErrorState(authError, stateRef.current));
+          return;
+        }
+        await tokenStorage.clearAuthTokens();
+        setState(createUnauthenticatedState({ error: authError, providers: stateRef.current.providers }));
+      }
+    })();
+
+    const trackedOperation = operation.finally(() => {
+      if (sessionCheckPromiseRef.current === trackedOperation) {
+        sessionCheckPromiseRef.current = null;
+      }
+    });
+    sessionCheckPromiseRef.current = trackedOperation;
+    return trackedOperation;
+  }, [authApi, tokenStorage]);
+
+  const startEmailLogin = useCallback(
+    async (email: string) => {
+      const normalized = normalizeEmail(email);
+      if (!isValidEmail(normalized)) {
+        const error = createAuthError("invalid_email");
+        setState((current) => createUnauthenticatedState({ ...pickAuthFlowState(current), error }));
+        throw new AuthFlowError(error.code, error.message);
+      }
+
+      setState((current) => createAuthenticatingState(current, { pendingEmail: normalized }));
+      try {
+        await authApi.startEmailLogin(normalized);
+        setState((current) => createUnauthenticatedState({ ...pickAuthFlowState(current), pendingEmail: normalized }));
+      } catch (error) {
+        const authError = normalizeAuthError(error, "network_error");
+        setState((current) => createUnauthenticatedState({ ...pickAuthFlowState(current), pendingEmail: normalized, error: authError }));
+        throw new AuthFlowError(authError.code, authError.message, { cause: error });
+      }
+    },
+    [authApi]
+  );
+
+  const verifyEmailCode = useCallback(
+    async (email: string, code: string) => {
+      const normalized = normalizeEmail(email);
+      setState((current) => createAuthenticatingState(current, { pendingEmail: normalized }));
+      try {
+        const session = await authApi.verifyEmailCode(normalized, code);
+        await setAuthSession(session);
+      } catch (error) {
+        const authError = normalizeAuthError(error, "network_error");
+        setState((current) => createUnauthenticatedState({ ...pickAuthFlowState(current), pendingEmail: normalized, error: authError }));
+        throw new AuthFlowError(authError.code, authError.message, { cause: error });
+      }
+    },
+    [authApi, setAuthSession]
+  );
+
+  const resendEmailCode = useCallback(
+    async (email: string) => {
+      await startEmailLogin(email);
+    },
+    [startEmailLogin]
+  );
+
+  const refreshSession = useCallback(async () => {
+    await checkSession();
+  }, [checkSession]);
+
+  const logout = useCallback(async () => {
+    const refreshToken = await tokenStorage.getRefreshToken();
+    try {
+      if (refreshToken) {
+        await authApi.logout(refreshToken);
+      }
+    } finally {
+      await clearAuthSession();
+    }
+  }, [authApi, clearAuthSession, tokenStorage]);
+
+  const registerAccountDeletionCleanup = useCallback((cleanup: AccountDeletionCleanup) => {
+    registeredLocalCleanupRef.current = cleanup;
+    return () => {
+      if (registeredLocalCleanupRef.current === cleanup) {
+        registeredLocalCleanupRef.current = null;
+      }
+    };
+  }, []);
+
+  const clearAuthError = useCallback(() => {
+    setState((current) => ({ ...current, status: current.isAuthenticated ? "authenticated" : "unauthenticated", isLoading: false, error: null }));
+  }, []);
+
+  const baseAuthorizedFetch = useMemo(
+    () =>
+      createAuthorizedFetch({
+        authApi,
+        tokenStorage,
+        getAccessToken: () => stateRef.current.accessToken,
+        setAccessToken: (accessToken, expiresAt) => {
+          setState((current) => ({ ...current, accessToken, expiresAt }));
+        },
+        onSessionExpired: clearAuthSession
+      }),
+    [authApi, clearAuthSession, tokenStorage]
+  );
+
+  const authorizedFetch = useCallback(
+    (input: RequestInfo | URL, init?: RequestInit) => {
+      if (authorizedRequestsPausedRef.current) {
+        return Promise.reject(new AuthFlowError("session_expired"));
+      }
+
+      const controller = new AbortController();
+      const upstreamSignal = init?.signal;
+      const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+      if (upstreamSignal?.aborted) {
+        abortFromUpstream();
+      } else {
+        upstreamSignal?.addEventListener("abort", abortFromUpstream, { once: true });
+      }
+
+      const request = baseAuthorizedFetch(input, { ...init, signal: controller.signal });
+      const trackedRequest = request.finally(() => {
+        upstreamSignal?.removeEventListener("abort", abortFromUpstream);
+        activeAuthorizedRequestsRef.current.delete(trackedRequest);
+      });
+      activeAuthorizedRequestsRef.current.set(trackedRequest, controller);
+      return trackedRequest;
+    },
+    [baseAuthorizedFetch]
+  );
+
+  const deleteAccount = useCallback((): Promise<void> => {
+    if (accountDeletionPromiseRef.current) return accountDeletionPromiseRef.current;
+
+    const ownerId = stateRef.current.isAuthenticated ? stateRef.current.user?.id ?? null : null;
+
+    const operation = executeAccountDeletion({
+      accessToken: stateRef.current.isAuthenticated ? stateRef.current.accessToken : null,
+      ownerId,
+      registeredCleanup: registeredLocalCleanupRef.current,
+      pauseAndDrain: async () => {
+        authorizedRequestsPausedRef.current = true;
+        const activeRequests = [...activeAuthorizedRequestsRef.current.entries()];
+        activeRequests.forEach(([, controller]) => controller.abort());
+        const activeOperations: Promise<unknown>[] = activeRequests.map(([request]) => request);
+        if (sessionCheckPromiseRef.current) activeOperations.push(sessionCheckPromiseRef.current);
+        await Promise.allSettled(activeOperations);
+      },
+      resume: () => {
+        authorizedRequestsPausedRef.current = false;
+      },
+      deleteRemoteAccount: (accessToken) =>
+        deleteRemoteAccountWithRefresh({
+          accessToken,
+          deleteRemoteAccount: (token) => authApi.deleteAccount(token),
+          getRefreshToken: () => tokenStorage.getRefreshToken(),
+          refreshSession: (refreshToken) => authApi.refresh(refreshToken),
+          persistRefreshedSession: async (refreshed) => {
+            await Promise.all([tokenStorage.setRefreshToken(refreshed.refreshToken), tokenStorage.setAccessToken(refreshed.accessToken)]);
+            setState((current) => ({ ...current, accessToken: refreshed.accessToken, expiresAt: refreshed.expiresAt }));
+          }
+        }),
+      clearAuthSession: clearDeletedAccountSession,
+      remoteDeletionConfirmed: Boolean(ownerId && remoteDeletedOwnerIdRef.current === ownerId),
+      markRemoteDeletionConfirmed: async () => {
+        remoteDeletedOwnerIdRef.current = ownerId;
+        if (ownerId) await markPendingAccountDeletion(ownerId);
+      },
+      markDeletionComplete: () => {
+        remoteDeletedOwnerIdRef.current = null;
       }
     });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [credentialVault, provider]);
+    const trackedOperation = operation.finally(() => {
+      if (accountDeletionPromiseRef.current === trackedOperation) {
+        accountDeletionPromiseRef.current = null;
+      }
+    });
+    accountDeletionPromiseRef.current = trackedOperation;
+    return trackedOperation;
+  }, [authApi, clearDeletedAccountSession, tokenStorage]);
 
-  const signInDevelopment = useCallback(
-    async (input?: SignInInput) => {
-      const next = await signInWithProvider(provider, credentialVault, input);
-      credentialRef.current = next.credential;
-      setState(next.state);
-    },
-    [credentialVault, provider]
+  useEffect(() => {
+    void loadAuthProviders();
+    void checkSession();
+  }, [checkSession, loadAuthProviders]);
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      state,
+      checkSession,
+      loadAuthProviders,
+      startEmailLogin,
+      verifyEmailCode,
+      resendEmailCode,
+      refreshSession,
+      logout,
+      deleteAccount,
+      registerAccountDeletionCleanup,
+      authorizedFetch,
+      setAuthSession,
+      clearAuthSession,
+      clearAuthError
+    }),
+    [authorizedFetch, checkSession, clearAuthError, clearAuthSession, deleteAccount, loadAuthProviders, logout, refreshSession, registerAccountDeletionCleanup, resendEmailCode, setAuthSession, startEmailLogin, state, verifyEmailCode]
   );
-
-  const signOut = useCallback(
-    async (options: SignOutOptions = {}) => {
-      const next = await signOutWithProvider({ provider, credentialVault, credential: credentialRef.current, options, onClearLocalData });
-      credentialRef.current = next.credential;
-      setState(next.state);
-    },
-    [credentialVault, onClearLocalData, provider]
-  );
-
-  const value = useMemo(() => ({ state, signInDevelopment, signOut }), [signInDevelopment, signOut, state]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -85,27 +337,54 @@ export function AuthRouteBoundary({ children }: { children: ReactNode }) {
   const { state } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
+  const rootNavigationState = useRootNavigationState();
   const decision = getAuthRouteDecision(state, pathname);
 
   useEffect(() => {
+    if (!authConfig.authEnabled || !rootNavigationState?.key) return;
     if (decision === "redirect_to_sign_in") {
+      if (router.canDismiss()) router.dismissAll();
       router.replace(SIGN_IN_ROUTE);
     }
     if (decision === "redirect_to_app") {
       router.replace("/");
     }
-  }, [decision, router]);
+    if (decision === "redirect_to_connection_error") {
+      router.replace("/auth/connection-error");
+    }
+  }, [decision, rootNavigationState?.key, router]);
 
-  if (state.status === "loading" || decision !== "allow") {
-    return (
-      <View style={styles.loadingScreen}>
-        <Loader size="medium" tone="brand" />
-      </View>
-    );
+  if (!authConfig.authEnabled) return children;
+
+  if (state.status === "checking" || decision !== "allow") {
+    if (decision !== "allow") {
+      return (
+        <View style={styles.boundaryRoot}>
+          <View style={styles.boundaryContent}>{children}</View>
+          <View style={styles.boundaryOverlay}>
+            <AppSplashScreen />
+          </View>
+        </View>
+      );
+    }
+    return <AppSplashScreen />;
   }
 
   return children;
 }
+
+const styles = StyleSheet.create({
+  boundaryRoot: {
+    flex: 1
+  },
+  boundaryContent: {
+    flex: 1,
+    opacity: 0
+  },
+  boundaryOverlay: {
+    ...StyleSheet.absoluteFillObject
+  }
+});
 
 export function useAuth() {
   const context = useContext(AuthContext);
@@ -115,11 +394,10 @@ export function useAuth() {
   return context;
 }
 
-const styles = StyleSheet.create({
-  loadingScreen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.background.canvasSoft
-  }
-});
+function pickAuthFlowState(state: AuthState): Pick<AuthState, "pendingEmail" | "providers"> & { error?: AuthError | null } {
+  return {
+    pendingEmail: state.pendingEmail,
+    providers: state.providers,
+    error: state.error
+  };
+}

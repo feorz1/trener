@@ -19,6 +19,14 @@ export function cloneClient(client: Client): Client {
   return {
     ...client,
     restrictions: client.restrictions ? [...client.restrictions] : undefined,
+    intake: client.intake
+      ? {
+          ...client.intake,
+          healthConstraints: client.intake.healthConstraints ? [...client.intake.healthConstraints] : undefined,
+          exerciseRestrictions: client.intake.exerciseRestrictions ? [...client.intake.exerciseRestrictions] : undefined,
+          sports: client.intake.sports ? [...client.intake.sports] : undefined
+        }
+      : undefined,
     metrics: { ...client.metrics }
   };
 }

@@ -32,13 +32,13 @@ type Props = {
 const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; iconColor: string }> = {
   error: {
     backgroundColor: theme.colors.status.negativeBg,
-    color: theme.colors.background.canvas,
+    color: theme.colors.status.negativeContent,
     iconColor: theme.colors.status.negative
   },
   info: {
     backgroundColor: theme.colors.accent.cyan,
-    color: theme.colors.content.ink,
-    iconColor: theme.colors.content.ink
+    color: theme.colors.accent.onCyan,
+    iconColor: theme.colors.accent.onCyan
   },
   success: {
     backgroundColor: theme.colors.content.primaryPale,
@@ -57,8 +57,8 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
   },
   planned: {
     backgroundColor: theme.colors.content.primaryPale,
-    color: theme.colors.content.primary,
-    iconColor: theme.colors.content.primary
+    color: theme.colors.content.inkDeep,
+    iconColor: theme.colors.content.inkDeep
   },
   inProgress: {
     backgroundColor: theme.colors.status.warning,
@@ -72,7 +72,7 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
   },
   cancelled: {
     backgroundColor: theme.colors.status.negativeBg,
-    color: theme.colors.background.canvas,
+    color: theme.colors.status.negativeContent,
     iconColor: theme.colors.status.negative
   },
   moved: {
@@ -87,7 +87,7 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
   },
   negative: {
     backgroundColor: theme.colors.status.negativeBg,
-    color: theme.colors.background.canvas,
+    color: theme.colors.status.negativeContent,
     iconColor: theme.colors.status.negative
   },
   negativeSoft: {
@@ -97,8 +97,8 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
   },
   negativeSolid: {
     backgroundColor: theme.colors.status.negative,
-    color: theme.colors.background.canvas,
-    iconColor: theme.colors.background.canvas
+    color: theme.colors.status.onNegative,
+    iconColor: theme.colors.status.onNegative
   },
   warningDeepSoft: {
     backgroundColor: theme.colors.status.warningDeepSoft,
@@ -107,8 +107,8 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
   },
   warningDeep: {
     backgroundColor: theme.colors.status.warningDeep,
-    color: theme.colors.background.canvas,
-    iconColor: theme.colors.background.canvas
+    color: theme.colors.status.onWarningDeep,
+    iconColor: theme.colors.status.onWarningDeep
   },
   primary: {
     backgroundColor: theme.colors.content.primary,
@@ -116,9 +116,9 @@ const toneStyles: Record<BadgeTone, { backgroundColor: string; color: string; ic
     iconColor: theme.colors.content.inkDeep
   },
   select: {
-    backgroundColor: theme.colors.content.inkDeep,
-    color: theme.colors.content.primary,
-    iconColor: theme.colors.content.primary
+    backgroundColor: theme.colors.brand.dark,
+    color: theme.colors.brand.primary,
+    iconColor: theme.colors.brand.primary
   }
 };
 

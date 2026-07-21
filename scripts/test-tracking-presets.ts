@@ -41,6 +41,7 @@ for (const [type, values, expected] of expectedFormats) {
 assert.equal(normalizeTrackingType("reps"), "reps_only");
 assert.equal(normalizeTrackingType("duration"), "duration_hold");
 assert.equal(normalizeTrackingType("distance_duration"), "distance_time");
+assert.equal(getTrackingPreset("assisted_bodyweight").metrics[0]?.shortLabel, "ПОМОЩЬ, КГ");
 assert.equal(formatPreviousSetValue("weight_reps", { weight: 80, reps: 8, rpe: 10 }), "80×8");
 assert.deepEqual(pickCompatibleValues({ weight: 80, reps: 8, rpe: 10 }, "weight_reps"), { weight: 80, reps: 8 });
 

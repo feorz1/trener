@@ -1,9 +1,10 @@
 import { router, useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type SetStateAction } from "react";
 import { Alert as NativeAlert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Alert, Approach, Badge, Button, Divider, Header, Loader, Navigation, ProgressBar, type ApproachSet, type ApproachSetValuePatch } from "@/components/ui";
-import { useClient, useDataMutation, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
+import { useClient, useDataContext, useDataMutation, usePreviousExercisePerformance, useResultActions, useSession, useSessionActions, useSessionResults, useWorkout } from "@/data";
+import { getSessionSetKey, mergeSessionExercises, normalizeSessionSetIndexes, type SessionExercise } from "@/features/workouts/sessionExerciseMerge";
 import { defaultWorkoutResultType, formatTimerDuration, type SessionResultSet } from "@/features/workouts/sessionResult";
 import {
   getLegacyValues,
@@ -18,7 +19,7 @@ import {
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
-import type { Workout } from "@/types";
+import type { Workout, WorkoutSessionExercise } from "@/types";
 
 const kgUnit = "кг";
 
@@ -26,20 +27,12 @@ type RouteParams = {
   sessionId?: string | string[];
 };
 
-type SessionExercise = Omit<Workout["exercises"][number], "sets"> & {
-  sets: SessionResultSet[];
-};
-
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function normalizeSetIndexes<T extends ApproachSet>(sets: T[]) {
-  return sets.map((set, index) => ({ ...set, index: index + 1 }));
-}
-
 function buildSessionExerciseSets(workoutSets: Workout["exercises"][number]["sets"], resultType = defaultWorkoutResultType) {
-  return normalizeSetIndexes(
+  return normalizeSessionSetIndexes(
     [...workoutSets]
       .sort((left, right) => left.order - right.order)
       .map((set) => ({
@@ -58,7 +51,7 @@ function buildSessionExerciseSets(workoutSets: Workout["exercises"][number]["set
         durationSeconds: set.actualDurationSeconds ?? set.targetDurationSeconds,
         distanceMeters: set.actualDistanceMeters ?? set.targetDistanceMeters,
         unit: kgUnit,
-        state: set.completed ? "selected" : "default",
+        state: set.completed ? "selected" as const : "default" as const,
         logged: Boolean(set.actualReps || set.actualWeightKg || set.actualDurationSeconds || set.actualDistanceMeters)
       }))
   );
@@ -72,28 +65,10 @@ function buildSessionWorkout(workout?: Workout) {
   }));
 }
 
-function mergeSessionExercises(current: SessionExercise[], incoming: SessionExercise[]) {
-  if (current.length === 0) return incoming;
-
-  return incoming.map((incomingExercise) => {
-    const currentExercise = current.find((exercise) => exercise.id === incomingExercise.id);
-    if (!currentExercise) return incomingExercise;
-
-    const incomingSetIds = new Set(incomingExercise.sets.map((set) => set.id));
-    const localSets = currentExercise.sets.filter((set) => !incomingSetIds.has(set.id));
-
-    if (localSets.length === 0) return incomingExercise;
-
-    return {
-      ...incomingExercise,
-      sets: normalizeSetIndexes([...incomingExercise.sets, ...localSets])
-    };
-  });
-}
-
 export default function WorkoutSessionScreen() {
   const { sessionId: rawSessionId } = useLocalSearchParams<RouteParams>();
   const sessionId = firstParam(rawSessionId);
+  const { sessionTimerPersistence } = useDataContext();
   const sessionQuery = useSession(sessionId);
   const { session } = sessionQuery;
   const workoutQuery = useWorkout(session?.workoutId);
@@ -115,8 +90,21 @@ export default function WorkoutSessionScreen() {
           .sort((left, right) => left.setIndex - right.setIndex);
         const workoutExercise = workout?.exercises.find((item) => item.exerciseId === exercise.exerciseId);
         const resultType = exercise.resultTypeSnapshot ?? workoutExercise?.resultType ?? defaultWorkoutResultType;
-        const sets: SessionResultSet[] = exerciseResults.length > 0
-          ? exerciseResults.map((result) => ({
+        const workoutSets = buildSessionExerciseSets(workoutExercise?.sets ?? [], resultType);
+        const highestResultSetIndex = exerciseResults.reduce((highest, result) => Math.max(highest, result.setIndex), 0);
+        const plannedSetCount = Math.max(1, exercise.plannedSets ?? workoutSets.length, highestResultSetIndex);
+        const plannedSets: SessionResultSet[] = Array.from({ length: plannedSetCount }, (_, index) => {
+          const setIndex = index + 1;
+          return workoutSets.find((set) => set.index === setIndex) ?? {
+            id: `${exercise.id}-planned-set-${setIndex}`,
+            index: setIndex,
+            resultType,
+            unit: kgUnit,
+            state: "default" as const,
+            logged: false
+          };
+        });
+        const resultSets: SessionResultSet[] = exerciseResults.map((result) => ({
               id: result.setId ?? result.id,
               index: result.setIndex,
               resultType: result.resultType ?? resultType,
@@ -134,8 +122,8 @@ export default function WorkoutSessionScreen() {
               unit: result.unit ?? kgUnit,
               state: result.completed ? "selected" as const : "default" as const,
               logged: Boolean(result.repetitions || result.weight || result.durationSeconds || result.distanceMeters)
-            }))
-          : buildSessionExerciseSets(workoutExercise?.sets ?? [], resultType);
+            }));
+        const sets = normalizeSessionSetIndexes([...plannedSets, ...resultSets]);
 
         return {
           id: exercise.id,
@@ -143,7 +131,7 @@ export default function WorkoutSessionScreen() {
           exerciseName: exercise.exerciseNameSnapshot ?? exercise.exerciseName,
           resultType,
           comment: exercise.comment,
-          sets: normalizeSetIndexes(sets.length > 0 ? sets : [{ id: `${exercise.id}-set-1`, index: 1, resultType, unit: kgUnit, state: "default", logged: false }])
+          sets: normalizeSessionSetIndexes(sets.length > 0 ? sets : [{ id: `${exercise.id}-set-1`, index: 1, resultType, unit: kgUnit, state: "default", logged: false }])
         };
       });
     },
@@ -152,15 +140,57 @@ export default function WorkoutSessionScreen() {
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
   const [sessionExercises, setSessionExercises] = useState(initialSessionExercises);
-  const [activeTimer, setActiveTimer] = useState<SetTimerState | null>(null);
+  const [activeTimer, setActiveTimerState] = useState<SetTimerState | null>(null);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const activeTimerRef = useRef<SetTimerState | null>(null);
+  const timerHydrationGenerationRef = useRef(0);
   const sessionStartedAtRef = useRef(session?.startedAt ? new Date(session.startedAt).getTime() : Date.now());
   const nextSetId = useRef(1);
+  const finishingRef = useRef(false);
+  const pendingSetSavesRef = useRef(new Set<Promise<void>>());
+  const pendingSetKeysRef = useRef(new Set<string>());
+  const deletedSetIndexesByExerciseRef = useRef(new Map<string, Set<number>>());
+  const setSaveErrorsRef = useRef(new Map<string, Error>());
+  const setSaveSequenceRef = useRef(new Map<string, number>());
   const completeSessionMutation = useDataMutation(async (id: string) => sessionActions.complete(id));
   const isLoading = sessionQuery.isLoading || workoutQuery.isLoading || clientQuery.isLoading || resultsQuery.isLoading;
   const queryError = sessionQuery.error ?? workoutQuery.error ?? clientQuery.error ?? resultsQuery.error;
+  const isCompleting = isFinishing || completeSessionMutation.isSubmitting;
 
   useEffect(() => {
-    setSessionExercises((current) => mergeSessionExercises(current, initialSessionExercises));
+    const generation = timerHydrationGenerationRef.current + 1;
+    timerHydrationGenerationRef.current = generation;
+    activeTimerRef.current = null;
+    setActiveTimerState(null);
+    if (!sessionId) return;
+
+    void sessionTimerPersistence.load(sessionId).then((timer) => {
+      if (timerHydrationGenerationRef.current !== generation) return;
+      activeTimerRef.current = timer;
+      setActiveTimerState(timer);
+    }).catch(() => undefined);
+
+    return () => {
+      timerHydrationGenerationRef.current += 1;
+    };
+  }, [sessionId, sessionTimerPersistence]);
+
+  const setActiveTimer = useCallback((action: SetStateAction<SetTimerState | null>) => {
+    timerHydrationGenerationRef.current += 1;
+    const current = activeTimerRef.current;
+    const next = typeof action === "function" ? action(current) : action;
+    activeTimerRef.current = next;
+    setActiveTimerState(next);
+    if (sessionId) {
+      void sessionTimerPersistence.save(sessionId, next).catch(() => undefined);
+    }
+  }, [sessionId, sessionTimerPersistence]);
+
+  useEffect(() => {
+    setSessionExercises((current) => mergeSessionExercises(current, initialSessionExercises, {
+      preserveLocalSetKeys: pendingSetKeysRef.current,
+      deletedSetIndexesByExercise: deletedSetIndexesByExerciseRef.current
+    }));
     sessionStartedAtRef.current = session?.startedAt ? new Date(session.startedAt).getTime() : Date.now();
     nextSetId.current = 1;
   }, [initialSessionExercises, session?.startedAt]);
@@ -176,7 +206,7 @@ export default function WorkoutSessionScreen() {
 
   const updateExerciseSets = useCallback((exerciseId: string, nextSets: ApproachSet[]) => {
     setSessionExercises((current) =>
-      current.map((exercise) => (exercise.id === exerciseId ? { ...exercise, sets: normalizeSetIndexes(nextSets) } : exercise))
+      current.map((exercise) => (exercise.id === exerciseId ? { ...exercise, sets: normalizeSessionSetIndexes(nextSets) } : exercise))
     );
   }, []);
 
@@ -184,7 +214,11 @@ export default function WorkoutSessionScreen() {
     (exercise: SessionExercise, set: SessionResultSet) => {
       if (!sessionId) return;
 
-      void resultActions.upsertSetResult({
+      const saveKey = getSessionSetKey(exercise.id, set.id);
+      const sequence = (setSaveSequenceRef.current.get(saveKey) ?? 0) + 1;
+      setSaveSequenceRef.current.set(saveKey, sequence);
+      pendingSetKeysRef.current.add(saveKey);
+      const save = resultActions.upsertSetResult({
         sessionId,
         sessionExerciseItemId: exercise.id,
         exerciseId: exercise.exerciseId,
@@ -199,7 +233,27 @@ export default function WorkoutSessionScreen() {
         distanceMeters: set.values?.distance ?? set.distanceMeters,
         unit: set.unit,
         completed: set.state === "selected"
-      }).catch(() => undefined);
+      }).then(
+        () => {
+          if (setSaveSequenceRef.current.get(saveKey) === sequence) {
+            setSaveErrorsRef.current.delete(saveKey);
+          }
+        },
+        (error: unknown) => {
+          const saveError = error instanceof Error ? error : new Error("Не удалось сохранить результат подхода");
+          if (setSaveSequenceRef.current.get(saveKey) === sequence) {
+            setSaveErrorsRef.current.set(saveKey, saveError);
+          }
+          throw saveError;
+        }
+      );
+      pendingSetSavesRef.current.add(save);
+      void save
+        .finally(() => {
+          pendingSetSavesRef.current.delete(save);
+        })
+        .catch(() => undefined);
+      return save;
     },
     [resultActions, sessionId]
   );
@@ -208,7 +262,7 @@ export default function WorkoutSessionScreen() {
     (exerciseId: string, setId: string, state: ApproachSet["state"]) => {
       const exercise = sessionExercises.find((item) => item.id === exerciseId);
       if (!exercise) return;
-      const nextSets = normalizeSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, state } : set)));
+      const nextSets = normalizeSessionSetIndexes(exercise.sets.map((set) => (set.id === setId ? { ...set, state } : set)));
       const changedSet = nextSets.find((set) => set.id === setId);
       setSessionExercises((current) =>
         current.map((item) => (item.id === exerciseId ? { ...item, sets: nextSets } : item))
@@ -222,7 +276,7 @@ export default function WorkoutSessionScreen() {
     (exerciseId: string, setId: string, patch: ApproachSetValuePatch) => {
       const exercise = sessionExercises.find((item) => item.id === exerciseId);
       if (!exercise) return;
-      const nextSets = normalizeSetIndexes(exercise.sets.map((set) => {
+      const nextSets = normalizeSessionSetIndexes(exercise.sets.map((set) => {
         if (set.id !== setId) return set;
         const { replaceValues, ...setPatch } = patch;
         const currentValues = getLegacyValues({
@@ -237,7 +291,7 @@ export default function WorkoutSessionScreen() {
             ? { ...patch.values }
             : { ...currentValues, ...patch.values }
           : currentValues;
-        const legacy = valuesToLegacyFields(values);
+        const legacy = valuesToLegacyFields(values, exercise.resultType ?? defaultWorkoutResultType);
         return {
           ...set,
           ...setPatch,
@@ -265,24 +319,46 @@ export default function WorkoutSessionScreen() {
     [updateExerciseSets]
   );
 
+  const persistSessionExercisePatch = useCallback((exerciseId: string, patch: Partial<WorkoutSessionExercise>) => {
+    if (!sessionId || !session) return Promise.resolve();
+    const exercises = session.exercises.map((exercise) => exercise.id === exerciseId ? { ...exercise, ...patch } : exercise);
+    return sessionActions.update(sessionId, { exercises }).then(() => undefined).catch(() => undefined);
+  }, [session, sessionActions, sessionId]);
+
   const handleNoteChange = useCallback((exerciseId: string, nextNote: string) => {
     setSessionExercises((current) =>
       current.map((exercise) => (exercise.id === exerciseId ? { ...exercise, comment: nextNote } : exercise))
     );
-  }, []);
+    persistSessionExercisePatch(exerciseId, { comment: nextNote });
+  }, [persistSessionExercisePatch]);
 
   const handleDeleteSet = useCallback((exerciseId: string, setId: string) => {
-    const result = results.find((item) => item.setId === setId || item.id === setId);
-    if (result) {
-      void resultActions.remove(result.id).catch(() => undefined);
+    const exercise = sessionExercises.find((item) => item.id === exerciseId);
+    const deletedSet = exercise?.sets.find((set) => set.id === setId);
+    const saveKey = getSessionSetKey(exerciseId, setId);
+    setSaveErrorsRef.current.delete(saveKey);
+    setSaveSequenceRef.current.delete(saveKey);
+    pendingSetKeysRef.current.delete(saveKey);
+    if (deletedSet) {
+      const deletedIndexes = deletedSetIndexesByExerciseRef.current.get(exerciseId) ?? new Set<number>();
+      deletedIndexes.add(deletedSet.index);
+      deletedSetIndexesByExerciseRef.current.set(exerciseId, deletedIndexes);
     }
+    const result = results.find((item) => {
+      if (item.setId === setId || item.id === setId) return true;
+      if (!exercise || !deletedSet || item.setIndex !== deletedSet.index) return false;
+      if (item.sessionExerciseItemId) return item.sessionExerciseItemId === exerciseId;
+      return item.exerciseId === exercise.exerciseId;
+    });
+    const resultRemoval = result ? resultActions.remove(result.id) : Promise.resolve();
 
+    const nextSets = normalizeSessionSetIndexes(exercise?.sets.filter((set) => set.id !== setId) ?? []);
     setSessionExercises((current) =>
-      current.map((exercise) =>
-        exercise.id !== exerciseId ? exercise : { ...exercise, sets: normalizeSetIndexes(exercise.sets.filter((set) => set.id !== setId)) }
-      )
+      current.map((item) => item.id !== exerciseId ? item : { ...item, sets: nextSets })
     );
-  }, [resultActions, results]);
+    const plannedSetsUpdate = persistSessionExercisePatch(exerciseId, { plannedSets: nextSets.length });
+    void Promise.allSettled([resultRemoval, plannedSetsUpdate]);
+  }, [persistSessionExercisePatch, resultActions, results, sessionExercises]);
 
   const handleRemoveLastSet = useCallback((exerciseId: string) => {
     const exercise = sessionExercises.find((item) => item.id === exerciseId);
@@ -295,6 +371,12 @@ export default function WorkoutSessionScreen() {
     const exercise = sessionExercises.find((item) => item.id === exerciseItemId);
     if (!exercise || !sessionId) return;
 
+    const saveKeyPrefix = `${exerciseItemId}:`;
+    for (const saveKey of setSaveSequenceRef.current.keys()) {
+      if (!saveKey.startsWith(saveKeyPrefix)) continue;
+      setSaveSequenceRef.current.delete(saveKey);
+      setSaveErrorsRef.current.delete(saveKey);
+    }
     setActiveTimer((current) => (current?.exerciseId === exerciseItemId ? null : current));
     setSessionExercises((current) => current.filter((item) => item.id !== exerciseItemId));
 
@@ -308,7 +390,7 @@ export default function WorkoutSessionScreen() {
       });
 
     void sessionActions.removeExercise(sessionId, exercise.exerciseId).catch(() => undefined);
-  }, [resultActions, results, sessionActions, sessionExercises, sessionId]);
+  }, [resultActions, results, sessionActions, sessionExercises, sessionId, setActiveTimer]);
 
   const handleAddSet = useCallback((exerciseId: string) => {
     const exercise = sessionExercises.find((item) => item.id === exerciseId);
@@ -321,7 +403,7 @@ export default function WorkoutSessionScreen() {
       durationSeconds: lastSet?.durationSeconds,
       distanceMeters: lastSet?.distanceMeters
     });
-    const legacy = valuesToLegacyFields(copiedValues);
+    const legacy = valuesToLegacyFields(copiedValues, exercise.resultType ?? defaultWorkoutResultType);
     const nextSet: SessionResultSet = {
       id: `${exercise.id}-set-${Date.now()}-${nextSetId.current++}`,
       index: exercise.sets.length + 1,
@@ -334,14 +416,13 @@ export default function WorkoutSessionScreen() {
       durationSeconds: legacy.durationSeconds,
       distanceMeters: legacy.distanceMeters
     };
-    const nextSets = normalizeSetIndexes([...exercise.sets, nextSet]);
+    const nextSets = normalizeSessionSetIndexes([...exercise.sets, nextSet]);
     setSessionExercises((current) =>
       current.map((item) => (item.id === exerciseId ? { ...item, sets: nextSets } : item))
     );
-    if (hasAnyMetricValue(copiedValues)) {
-      persistSet({ ...exercise, sets: nextSets }, nextSet);
-    }
-  }, [persistSet, sessionExercises]);
+    persistSet({ ...exercise, sets: nextSets }, nextSet);
+    persistSessionExercisePatch(exerciseId, { plannedSets: nextSets.length });
+  }, [persistSessionExercisePatch, persistSet, sessionExercises]);
 
   const updateTimerSetValue = useCallback(
     (timer: SetTimerState, seconds: number) => {
@@ -376,12 +457,12 @@ export default function WorkoutSessionScreen() {
         accumulatedSeconds: 0
       });
     },
-    [activeTimer, session?.workoutId]
+    [activeTimer, session?.workoutId, setActiveTimer]
   );
 
   const pauseTimer = useCallback(() => {
     setActiveTimer((current) => current ? { ...current, status: "paused", accumulatedSeconds: getTimerElapsedSeconds(current), startedAt: undefined, endsAt: undefined } : current);
-  }, []);
+  }, [setActiveTimer]);
 
   const resumeTimer = useCallback(() => {
     setActiveTimer((current) => {
@@ -395,7 +476,7 @@ export default function WorkoutSessionScreen() {
         endsAt: current.mode === "countdown" ? now + remaining * 1000 : undefined
       };
     });
-  }, []);
+  }, [setActiveTimer]);
 
   const finishTimer = useCallback(() => {
     setActiveTimer((current) => {
@@ -406,25 +487,43 @@ export default function WorkoutSessionScreen() {
       updateTimerSetValue(current, elapsed);
       return null;
     });
-  }, [updateTimerSetValue]);
+  }, [setActiveTimer, updateTimerSetValue]);
 
   const resetTimer = useCallback(() => {
     setActiveTimer(null);
-  }, []);
+  }, [setActiveTimer]);
 
   const completeSession = useCallback(async () => {
-    if (!sessionId || completeSessionMutation.isSubmitting) return;
+    if (!sessionId || finishingRef.current || completeSessionMutation.isSubmitting) return;
 
-    const completedSession = await completeSessionMutation.mutate(sessionId).catch(() => null);
-    if (!completedSession) return;
-
-    router.replace({
-      pathname: "/sessions/[sessionId]/summary",
-      params: {
-        sessionId
+    finishingRef.current = true;
+    setIsFinishing(true);
+    try {
+      while (pendingSetSavesRef.current.size > 0) {
+        await Promise.allSettled(Array.from(pendingSetSavesRef.current));
       }
-    });
-  }, [completeSessionMutation, sessionId]);
+
+      const saveError = setSaveErrorsRef.current.values().next().value;
+      if (saveError) {
+        NativeAlert.alert("Подходы не сохранены", saveError.message);
+        return;
+      }
+
+      const completedSession = await completeSessionMutation.mutate(sessionId).catch(() => null);
+      if (!completedSession) return;
+      setActiveTimer(null);
+
+      router.replace({
+        pathname: "/sessions/[sessionId]/summary",
+        params: {
+          sessionId
+        }
+      });
+    } finally {
+      finishingRef.current = false;
+      setIsFinishing(false);
+    }
+  }, [completeSessionMutation, sessionId, setActiveTimer]);
 
   const finishSession = useCallback(() => {
     const hasLoggedIncompleteSets = sessionExercises.some((exercise) => exercise.sets.some(isLoggedIncompleteSet));
@@ -541,8 +640,8 @@ export default function WorkoutSessionScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: footerPaddingBottom }]}>
-        <Button label="Добавить упражнение" type="secondaryNeutral" size="large" width="fill" state={completeSessionMutation.isSubmitting ? "disabled" : "active"} onPress={addExercise} />
-        <Button label={finishLabel} type="primary" size="large" width="fill" state={completeSessionMutation.isSubmitting ? "loading" : "active"} onPress={finishSession} />
+        <Button label="Добавить упражнение" type="secondaryNeutral" size="large" width="fill" state={isCompleting ? "disabled" : "active"} onPress={addExercise} />
+        <Button label={finishLabel} type="primary" size="large" width="fill" state={isCompleting ? "loading" : "active"} onPress={finishSession} />
       </View>
     </SafeAreaView>
   );

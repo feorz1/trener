@@ -155,6 +155,8 @@ assert.throws(
 assert.equal(API_OPERATION_CONTRACTS["clients.list"].method, "query");
 assert.equal(API_OPERATION_CONTRACTS["clients.list"].idempotency, "forbidden");
 assert.equal(API_OPERATION_CONTRACTS["clients.list"].cachePolicy, "stale_while_revalidate");
+assert.equal(API_OPERATION_CONTRACTS["clients.remove"].method, "mutation");
+assert.equal(API_OPERATION_CONTRACTS["clients.remove"].idempotency, "required");
 assert.equal(API_OPERATION_CONTRACTS["sessions.start"].method, "mutation");
 assert.equal(API_OPERATION_CONTRACTS["sessions.start"].idempotency, "required");
 assert.equal(API_OPERATION_CONTRACTS["sessions.start"].cachePolicy, "no_store");

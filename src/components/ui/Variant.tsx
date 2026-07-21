@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 
 const MIN_COLUMNS = 1;
 const MAX_COLUMNS = 7;
@@ -71,6 +71,8 @@ export function Variant<T extends string>({
   inset = "default",
   style
 }: VariantProps<T>) {
+  const { resolvedColors } = useAppTheme();
+
   if (items.length > MAX_ITEMS) {
     throw new Error("Variant supports up to 25 items.");
   }
@@ -105,6 +107,7 @@ export function Variant<T extends string>({
                   style={({ pressed }) => [
                     styles.option,
                     selected && styles.optionSelected,
+                    { borderColor: selected ? resolvedColors.content.primaryPale : resolvedColors.background.canvasSoft },
                     pressed && !itemDisabled && !selected && styles.optionPressed,
                     itemDisabled && styles.optionDisabled
                   ]}
@@ -115,6 +118,9 @@ export function Variant<T extends string>({
                 </Pressable>
               );
             })}
+            {Array.from({ length: resolvedColumns - row.length }, (_, emptyIndex) => (
+              <View key={`empty-${rowIndex}-${emptyIndex}`} style={styles.emptyOption} />
+            ))}
           </View>
         ))}
       </View>
@@ -149,12 +155,12 @@ const styles = StyleSheet.create({
     color: theme.colors.content.ink
   },
   grid: {
-    gap: theme.spacing.xs
+    gap: theme.spacing.sm
   },
   row: {
     flexDirection: "row",
     alignItems: "stretch",
-    gap: theme.spacing.xs
+    gap: theme.spacing.sm
   },
   option: {
     flex: 1,
@@ -167,11 +173,19 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     borderWidth: 2,
     borderRadius: theme.radius.md,
-    borderColor: theme.colors.background.canvasSoft,
     backgroundColor: theme.colors.background.canvasSoft
   },
+  emptyOption: {
+    flex: 1,
+    minWidth: theme.spacing[0],
+    height: theme.sizes.variantOptionHeight,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderWidth: 2,
+    borderRadius: theme.radius.md,
+    opacity: 0
+  },
   optionSelected: {
-    borderColor: theme.colors.content.primaryPale,
     backgroundColor: theme.colors.content.primaryPale
   },
   optionPressed: {

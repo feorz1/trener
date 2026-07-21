@@ -5,24 +5,18 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "trainer",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.trainerfoundation",
-      "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Allow Trainer Foundation to connect to the local development server.",
-        "NSBonjourServices": [
-          "_expo._tcp",
-          "_react-native-metro._tcp"
-        ]
-      }
+      "bundleIdentifier": "com.anonymous.trainerfoundation"
     },
     "android": {
       "adaptiveIcon": {

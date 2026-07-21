@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
+  findNodeHandle,
   Keyboard,
   LayoutAnimation,
   Modal as NativeModal,
@@ -108,6 +110,7 @@ export function Modal({
 }: ModalProps) {
   const immediatePressHandled = useRef(false);
   const immediatePressResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const titleRef = useRef<Text>(null);
   useEffect(
     () => () => {
       if (immediatePressResetTimer.current) {
@@ -171,14 +174,16 @@ export function Modal({
     <View style={[styles.root, presentation === "overlay" && styles.overlayRootCard, style]}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{title}</Text>
+          <Text ref={titleRef} accessibilityRole="header" style={styles.title}>
+            {title}
+          </Text>
           {showSubline ? <Text style={styles.subline}>{subline}</Text> : null}
         </View>
         {showCloseButton ? (
           <Button
             type="secondaryNeutral"
             size="mediumIcon"
-            accessibilityLabel="Close modal"
+            accessibilityLabel="Закрыть"
             {...closePressHandlers}
             icon={<Icon name="close" size={theme.sizes.buttonIconMedium} color={theme.colors.content.ink} />}
           />
@@ -197,7 +202,7 @@ export function Modal({
 
   if (presentation === "overlay") {
     return (
-      <ModalOverlay visible={visible} onClose={onClose}>
+      <ModalOverlay visible={visible} onClose={onClose} initialFocusRef={titleRef}>
         {modalCard}
       </ModalOverlay>
     );
@@ -214,13 +219,48 @@ function getOverlayActionConfig(
   return { ...action, ...getPressHandlers(action.onPress) };
 }
 
-function ModalOverlay({ visible, onClose, children }: { visible: boolean; onClose?: () => void; children: ReactNode }) {
+function ModalOverlay({
+  visible,
+  onClose,
+  children,
+  initialFocusRef
+}: {
+  visible: boolean;
+  onClose?: () => void;
+  children: ReactNode;
+  initialFocusRef: RefObject<Text | null>;
+}) {
   const [mounted, setMounted] = useState(visible);
   const [renderedChildren, setRenderedChildren] = useState(children);
   const { height: windowHeight } = useWindowDimensions();
   const progress = useRef(new Animated.Value(visible ? 1 : 0)).current;
   const keyboardOffset = useRef(new Animated.Value(0)).current;
   const keyboardHideResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const accessibilityFocusFrame = useRef<number | null>(null);
+
+  const focusInitialElement = useCallback(() => {
+    if (!visible || Platform.OS === "web") return;
+
+    if (accessibilityFocusFrame.current !== null) {
+      cancelAnimationFrame(accessibilityFocusFrame.current);
+    }
+    accessibilityFocusFrame.current = requestAnimationFrame(() => {
+      accessibilityFocusFrame.current = null;
+      const reactTag = findNodeHandle(initialFocusRef.current);
+      if (reactTag !== null) {
+        AccessibilityInfo.setAccessibilityFocus(reactTag);
+      }
+    });
+  }, [initialFocusRef, visible]);
+
+  useEffect(
+    () => () => {
+      if (accessibilityFocusFrame.current !== null) {
+        cancelAnimationFrame(accessibilityFocusFrame.current);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (!visible) return;
@@ -238,8 +278,15 @@ function ModalOverlay({ visible, onClose, children }: { visible: boolean; onClos
         duration: MODAL_OPEN_DURATION_MS,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true
-      }).start();
+      }).start(({ finished }) => {
+        if (finished) focusInitialElement();
+      });
       return;
+    }
+
+    if (accessibilityFocusFrame.current !== null) {
+      cancelAnimationFrame(accessibilityFocusFrame.current);
+      accessibilityFocusFrame.current = null;
     }
 
     Animated.timing(progress, {
@@ -250,7 +297,7 @@ function ModalOverlay({ visible, onClose, children }: { visible: boolean; onClos
     }).start(({ finished }) => {
       if (finished) setMounted(false);
     });
-  }, [progress, visible]);
+  }, [focusInitialElement, progress, visible]);
 
   useEffect(() => {
     if (!mounted) {
@@ -316,8 +363,13 @@ function ModalOverlay({ visible, onClose, children }: { visible: boolean; onClos
 
   return (
     <NativeModal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.overlayBackdrop, { opacity: backdropOpacity }]} />
+      <View accessibilityViewIsModal onAccessibilityEscape={onClose} style={styles.overlay}>
+        <Animated.View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={[StyleSheet.absoluteFill, styles.overlayBackdrop, { opacity: backdropOpacity }]}
+        />
         <Pressable accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill} onPress={onClose} />
         <Animated.View style={[styles.overlaySheet, { bottom: theme.spacing.xl, transform: [{ translateY: sheetTranslateY }] }]}>
           {renderedChildren}
@@ -401,7 +453,7 @@ const styles = StyleSheet.create({
     flex: 1
   },
   overlayBackdrop: {
-    backgroundColor: theme.colors.content.ink
+    backgroundColor: theme.colors.background.overlay
   },
   overlaySheet: {
     position: "absolute",

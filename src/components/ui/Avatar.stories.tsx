@@ -58,3 +58,13 @@ export const CanonicalVariants: Story = {
     </View>
   )
 };
+
+export const IconSizes: Story = {
+  render: () => (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: theme.spacing.lg }}>
+      {avatarSizes.map((size) => (
+        <Avatar key={size} type="icon" size={size} iconName="checkmark" />
+      ))}
+    </View>
+  )
+};

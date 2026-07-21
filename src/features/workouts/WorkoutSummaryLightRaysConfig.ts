@@ -35,26 +35,54 @@ export const workoutSummaryLightRaysDefaultConfig: WorkoutSummaryLightRaysConfig
   },
   layers: [
     {
-      intensity: 1.8299999237060547,
-      color: theme.colors.content.primary,
-      rayPosition: [0.5099999904632568, -0.34],
-      speed: 2,
+      intensity: 1.83,
+      color: theme.colors.accent.rayPrimary,
+      rayPosition: [0.51, -0.27],
+      speed: 1.65,
       depthAttenuation: 0.72,
-      rayLength: 0.8299999833106995,
-      rayDirection: [0.06, 1],
-      rayWidth: 3,
-      numRays: 10
+      rayLength: 0.55,
+      rayDirection: [-0.7, -0.09],
+      rayWidth: 0.9,
+      numRays: 3
     },
     {
-      intensity: 0.5799999833106995,
-      color: theme.colors.content.primaryActive,
+      intensity: 0.36,
+      color: theme.colors.accent.raySecondary,
       rayPosition: [0.56, -0.38],
       speed: 0.34,
       depthAttenuation: 0.72,
       rayLength: 1,
-      rayDirection: [-0.06, 1],
-      rayWidth: 1.2,
+      rayDirection: [0, 1],
+      rayWidth: 1,
       numRays: 3
+    }
+  ]
+};
+
+export const workoutSplashLightRaysConfig: WorkoutSummaryLightRaysConfig = {
+  ...workoutSummaryLightRaysDefaultConfig,
+  layers: [
+    {
+      intensity: 2.3,
+      color: theme.colors.accent.rayPrimary,
+      rayPosition: [1, -0.38],
+      speed: 1.7,
+      depthAttenuation: 0.72,
+      rayLength: 1.4,
+      rayDirection: [0.06, 1],
+      rayWidth: 4.5,
+      numRays: 10
+    },
+    {
+      intensity: 0.85,
+      color: theme.colors.accent.raySecondary,
+      rayPosition: [1, -0.38],
+      speed: 1.6,
+      depthAttenuation: 0.72,
+      rayLength: 1.4,
+      rayDirection: [-0.06, 1],
+      rayWidth: 6,
+      numRays: 10
     }
   ]
 };

@@ -9,6 +9,8 @@ export class PersistenceCoordinator {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private writeChain: Promise<void> = Promise.resolve();
   private status: PersistenceStatus = "idle";
+  private paused = false;
+  private closed = false;
 
   constructor(
     private readonly adapter: PersistenceAdapter,
@@ -20,6 +22,7 @@ export class PersistenceCoordinator {
   }
 
   scheduleSave(state: LocalDataState) {
+    if (this.paused || this.closed) return;
     this.pendingState = state;
     this.status = "dirty";
 
@@ -33,6 +36,8 @@ export class PersistenceCoordinator {
   }
 
   saveImmediately(state: LocalDataState) {
+    if (this.closed) return Promise.reject(new Error("Persistence coordinator is closed"));
+    if (this.paused) return Promise.reject(new Error("Persistence coordinator is paused"));
     this.pendingState = state;
     return this.flush();
   }
@@ -67,6 +72,31 @@ export class PersistenceCoordinator {
       });
 
     await this.writeChain;
+  }
+
+  async pauseAndDrain() {
+    if (this.closed) return;
+    this.paused = true;
+    await this.flush();
+  }
+
+  resume() {
+    if (!this.closed) {
+      this.paused = false;
+    }
+  }
+
+  async closeAndClear() {
+    this.paused = true;
+    this.closed = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    this.pendingState = null;
+    await this.writeChain.catch(() => undefined);
+    await this.adapter.clear();
+    this.status = "idle";
   }
 
   cancelPending() {

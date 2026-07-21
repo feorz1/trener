@@ -77,6 +77,22 @@ export default function ExerciseSelectionScreen() {
   const [customOnlySelected, setCustomOnlySelected] = useState(false);
   const [restrictedExercisePending, setRestrictedExercisePending] = useState<Exercise | null>(null);
   const archiveExerciseMutation = useDataMutation(async (exerciseId: string) => exerciseActions.archive(exerciseId));
+  const saveSelectionMutation = useDataMutation(async () => {
+    if (draftId && draft) {
+      await workouts.setDraftExercises(draftId, selectedIds, { day: draftDay });
+      router.back();
+      return;
+    }
+
+    if (sessionId && session) {
+      for (const exerciseId of selectedIds) {
+        if (!existingExerciseIds.has(exerciseId)) {
+          await sessions.addExercise(sessionId, exerciseId);
+        }
+      }
+      router.back();
+    }
+  });
   const normalizedSearch = search.trim().toLowerCase();
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedMuscleSet = useMemo(() => new Set(selectedMuscles), [selectedMuscles]);
@@ -146,21 +162,8 @@ export default function ExerciseSelectionScreen() {
     });
   }, [draftDay, draftId, sessionId]);
 
-  const saveSelection = async () => {
-    if (draftId && draft) {
-      await workouts.setDraftExercises(draftId, selectedIds, { day: draftDay });
-      router.back();
-      return;
-    }
-
-    if (sessionId && session) {
-      for (const exerciseId of selectedIds) {
-        if (!existingExerciseIds.has(exerciseId)) {
-          await sessions.addExercise(sessionId, exerciseId);
-        }
-      }
-      router.back();
-    }
+  const saveSelection = () => {
+    void saveSelectionMutation.mutate().catch(() => undefined);
   };
 
   const archiveExercise = useCallback(async (exerciseId: string) => {
@@ -245,6 +248,7 @@ export default function ExerciseSelectionScreen() {
       ) : (
         <>
           <View style={styles.filter}>
+            {saveSelectionMutation.error ? <Alert tone="negative" layout="compact" width="fill" title={saveSelectionMutation.error.message} /> : null}
             {archiveExerciseMutation.error ? <Alert tone="negative" layout="compact" width="fill" title={archiveExerciseMutation.error.message} /> : null}
             <Search value={search} width="fill" placeholder="Поиск упражнений" onChangeText={setSearch} onClear={() => setSearch("")} />
             <ScrollView
@@ -303,7 +307,7 @@ export default function ExerciseSelectionScreen() {
               type="primary"
               size="large"
               width="fill"
-              state={selectedIds.length > 0 ? "active" : "disabled"}
+              state={saveSelectionMutation.isSubmitting ? "loading" : selectedIds.length > 0 ? "active" : "disabled"}
               onPress={saveSelection}
             />
           </View>

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { ActiveSessionConflictError, DataError, createDataMutationGuard, getDataQueryState, toDataError } from "../src/data/contracts";
 import { localReducer } from "../src/data/local/localReducer";
+import { cloneClient } from "../src/data/local/localState";
 import {
   selectActiveSession,
   selectActiveSessionConflict,
@@ -29,6 +30,30 @@ import { LOCAL_OWNER_ID, type OwnerId, type QuickValue, type Workout, type Worko
 const seed = createInitialState();
 const clientId = seed.clientIds[0];
 const exerciseId = seed.exerciseIds[0];
+
+const profiledClient = {
+  ...seed.clientsById[clientId],
+  id: "client-profile-integration",
+  restrictions: ["Без осевых нагрузок"],
+  intake: {
+    healthConstraints: ["Травмы спины"],
+    exerciseRestrictions: ["Без осевых нагрузок"],
+    sports: ["Футбол"],
+    sleep: "6-8 часов"
+  }
+};
+const clonedProfiledClient = cloneClient(profiledClient);
+clonedProfiledClient.intake?.healthConstraints?.push("Проблемы с коленями");
+clonedProfiledClient.intake?.exerciseRestrictions?.push("Без прыжков");
+clonedProfiledClient.intake?.sports?.push("Плавание");
+assert.deepEqual(profiledClient.intake.healthConstraints, ["Травмы спины"]);
+assert.deepEqual(profiledClient.intake.exerciseRestrictions, ["Без осевых нагрузок"]);
+assert.deepEqual(profiledClient.intake.sports, ["Футбол"]);
+
+const stateWithProfiledClient = localReducer(seed, { type: "client/upsert", client: profiledClient });
+const hydratedProfiledClientState = hydrateDataState(serializeDataState(stateWithProfiledClient));
+assert.deepEqual(hydratedProfiledClientState.clientsById[profiledClient.id].intake, profiledClient.intake);
+assert.deepEqual(hydratedProfiledClientState.clientsById[profiledClient.id].restrictions, profiledClient.restrictions);
 
 const draft: Workout = {
   id: "workout-integration-draft",
@@ -119,6 +144,18 @@ const completedHydrated = hydrateDataState(serializeDataState(completedState));
 assert.equal(completedHydrated.resultIds.filter((id) => id === result.id).length, 1);
 assert.equal(completedHydrated.resultsById[result.id].completed, true);
 
+const replacedResult = {
+  ...result,
+  id: "result-integration-replaced",
+  weight: 24,
+  repetitions: 9
+};
+const replacedState = localReducer(stateWithResult, { type: "result/upsert", result: replacedResult });
+assert.equal(replacedState.resultsById[result.id], undefined);
+assert.equal(replacedState.resultIds.includes(result.id), false);
+assert.equal(replacedState.resultsById[replacedResult.id].weight, 24);
+assert.equal(replacedState.resultsById[replacedResult.id].repetitions, 9);
+
 const stateWithAlternateDraft = localReducer(stateWithSession, { type: "workout/upsert", workout: alternateDraft });
 assert.equal(selectActiveSession(stateWithAlternateDraft, LOCAL_OWNER_ID)?.id, session.id);
 assert.equal(selectActiveSessionForWorkout(stateWithAlternateDraft, LOCAL_OWNER_ID, draft.id)?.id, session.id);
@@ -127,6 +164,23 @@ assert.equal(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID
 assert.equal(selectLatestWorkoutDraft(stateWithAlternateDraft, LOCAL_OWNER_ID)?.id, alternateDraft.id);
 const stateAfterDraftDiscard = localReducer(stateWithAlternateDraft, { type: "workout/remove", workoutId: alternateDraft.id });
 assert.equal(selectLatestWorkoutDraft(stateAfterDraftDiscard, LOCAL_OWNER_ID)?.id, draft.id);
+
+const clientScopedQuickValue: QuickValue = {
+  id: "quick-value-client-remove",
+  ownerId: LOCAL_OWNER_ID,
+  exerciseId,
+  clientId,
+  metric: "weight",
+  values: [20],
+  updatedAt: "2026-06-19T10:45:00.000Z"
+};
+const stateBeforeClientRemove = localReducer(stateWithResult, { type: "quickValue/upsert", quickValue: clientScopedQuickValue });
+const stateAfterClientRemove = localReducer(stateBeforeClientRemove, { type: "client/remove", clientId });
+assert.equal(selectClientById(stateAfterClientRemove, clientId, LOCAL_OWNER_ID), null);
+assert.equal(selectWorkoutById(stateAfterClientRemove, draft.id, LOCAL_OWNER_ID), null);
+assert.equal(selectSessionById(stateAfterClientRemove, session.id, LOCAL_OWNER_ID), null);
+assert.deepEqual(selectResultsBySession(stateAfterClientRemove, session.id, LOCAL_OWNER_ID), []);
+assert.equal(selectQuickValue(stateAfterClientRemove, { ownerId: LOCAL_OWNER_ID, exerciseId, metric: "weight", clientId }), null);
 
 const conflict = new ActiveSessionConflictError(selectActiveSessionConflict(stateWithAlternateDraft, LOCAL_OWNER_ID, alternateDraft.id)!);
 assert.equal(conflict.name, "ActiveSessionConflictError");
@@ -288,6 +342,46 @@ const hydratedResultTypeQuickValues = hydrateDataState(serializeDataState(stateW
 
 assert.deepEqual(selectQuickValue(hydratedResultTypeQuickValues, { ownerId: LOCAL_OWNER_ID, exerciseId, metric: "duration", clientId })?.values, [75, 90]);
 assert.deepEqual(selectQuickValue(hydratedResultTypeQuickValues, { ownerId: LOCAL_OWNER_ID, exerciseId, metric: "distance", clientId })?.values, [400, 500]);
+
+const pikeExerciseId = "pike-push-up";
+const pikeWorkout: Workout = {
+  ...draft,
+  id: "workout-hydrate-result-type",
+  exercises: [
+    {
+      id: "workout-exercise-pike",
+      exerciseId: pikeExerciseId,
+      exerciseName: "Отжимания уголком",
+      order: 1,
+      sets: [{ id: "set-pike", order: 1, targetReps: 12, completed: false }]
+    }
+  ]
+};
+const pikeSession: WorkoutSession = {
+  ...session,
+  id: "session-hydrate-result-type",
+  workoutId: pikeWorkout.id,
+  exercises: [{ id: "session-exercise-pike", exerciseId: pikeExerciseId, exerciseName: "Отжимания уголком", order: 1 }]
+};
+const pikeResult: WorkoutResult = {
+  id: "result-hydrate-result-type",
+  ownerId: LOCAL_OWNER_ID,
+  sessionId: pikeSession.id,
+  sessionExerciseItemId: "session-exercise-pike",
+  exerciseId: pikeExerciseId,
+  setIndex: 1,
+  repetitions: 12,
+  completed: true
+};
+const hydratedPikeState = hydrateDataState(serializeDataState([
+  { type: "workout/upsert" as const, workout: pikeWorkout },
+  { type: "session/upsert" as const, session: pikeSession },
+  { type: "result/upsert" as const, result: pikeResult }
+].reduce(localReducer, seed)));
+
+assert.equal(hydratedPikeState.workoutsById[pikeWorkout.id].exercises[0].resultType, "reps_only");
+assert.equal(hydratedPikeState.sessionsById[pikeSession.id].exercises[0].resultTypeSnapshot, "reps_only");
+assert.equal(hydratedPikeState.resultsById[pikeResult.id].resultType, "reps_only");
 
 const snapshotWorkout: Workout = {
   ...draft,

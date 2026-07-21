@@ -17,7 +17,7 @@ import {
   type TextStyle,
   type ViewStyle
 } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import type { MetricKey, MetricValues, WorkoutResultType } from "@/types";
 import {
   formatDuration,
@@ -525,6 +525,7 @@ function ApproachHeader({
   onEdit: () => void;
   onDeleteExercise?: () => void;
 }) {
+  const { resolvedColorScheme } = useAppTheme();
   const editButton = (
     <Button
       accessibilityLabel="Редактировать упражнение"
@@ -560,7 +561,7 @@ function ApproachHeader({
           actions={exerciseMenuActions}
           isAnchoredToRight
           shouldOpenOnLongPress={false}
-          themeVariant="light"
+          themeVariant={resolvedColorScheme}
           onPressAction={handleMenuAction}
         >
           {editButton}
@@ -804,6 +805,7 @@ function MetricInput({
   onFocus: () => void;
   onStartTimer?: () => void;
 }) {
+  const { resolvedColorScheme } = useAppTheme();
   const inputRef = useRef<NativeTextInput>(null);
   const [focused, setFocused] = useState(false);
   const [selection, setSelection] = useState({ start: value.length, end: value.length });
@@ -827,6 +829,7 @@ function MetricInput({
         ref={inputRef}
         accessibilityLabel={metric.label}
         editable={!disabled}
+        keyboardAppearance={resolvedColorScheme}
         keyboardType={metric.inputType === "duration" ? "numbers-and-punctuation" : "decimal-pad"}
         onBlur={() => setFocused(false)}
         onChangeText={onChange}
@@ -854,7 +857,7 @@ function MetricInput({
           }}
           style={({ pressed }) => [styles.timerButton, timerActive && styles.timerButtonActive, pressed && styles.actionButtonPressed]}
         >
-          <Icon name="clock" size={theme.sizes.buttonIconSmall} color={timerActive ? theme.colors.content.inkDeep : theme.colors.content.body} />
+          <Icon name="clock" size={theme.sizes.buttonIconSmall} color={timerActive ? theme.colors.content.controlAccent : theme.colors.content.body} />
         </Pressable>
       ) : null}
       {focused ? <View pointerEvents="none" style={styles.metricFocusBorder} /> : null}
@@ -1130,7 +1133,7 @@ const styles = StyleSheet.create({
     inset: theme.spacing[0],
     borderWidth: 2,
     borderRadius: theme.radius.md,
-    borderColor: theme.colors.content.inkDeep
+    borderColor: theme.colors.content.controlAccent
   },
   timerButton: {
     position: "absolute",

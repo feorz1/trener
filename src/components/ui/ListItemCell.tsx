@@ -104,10 +104,34 @@ export function ListItemCell({
   leadingSlot,
   trailingSlot,
   style,
+  accessible,
   accessibilityLabel,
+  accessibilityRole,
+  accessibilityState,
+  accessibilityValue,
   ...pressableProps
 }: ListItemCellProps) {
   const isDisabled = disabled || state === "disabled";
+  const isRowInteractive = Boolean(pressableProps.onPress);
+  const isRowAccessible = accessible ?? isRowInteractive;
+  const inferredAccessibilityRole = isRowInteractive
+    ? trailing === "checkbox"
+      ? "checkbox"
+      : trailing === "radio"
+        ? "radio"
+        : trailing === "switch"
+          ? "switch"
+        : "button"
+    : undefined;
+  const inferredSelectionState =
+    isRowInteractive && (trailing === "checkbox" || trailing === "radio" || trailing === "switch") ? { checked: selected } : undefined;
+  const resolvedAccessibilityState = isRowInteractive
+    ? {
+        ...inferredSelectionState,
+        ...accessibilityState,
+        disabled: isDisabled || accessibilityState?.disabled === true
+      }
+    : accessibilityState;
   const textColor = isDisabled ? theme.colors.content.mute : theme.colors.content.ink;
   const secondaryColor = isDisabled ? theme.colors.content.mute : theme.colors.content.body;
   const radiusStyle = useAnimatedGroupedListItemRadius(groupPosition);
@@ -116,9 +140,11 @@ export function ListItemCell({
     <Animated.View style={[styles.itemShell, radiusStyle, style]}>
       <Pressable
         {...pressableProps}
-        accessibilityLabel={accessibilityLabel ?? title}
-        accessibilityRole={pressableProps.onPress ? "button" : undefined}
-        accessibilityState={{ disabled: isDisabled }}
+        accessible={isRowAccessible}
+        accessibilityLabel={accessibilityLabel ?? (isRowAccessible ? title : undefined)}
+        accessibilityRole={accessibilityRole ?? inferredAccessibilityRole}
+        accessibilityState={resolvedAccessibilityState}
+        accessibilityValue={accessibilityValue}
         disabled={isDisabled}
         style={({ pressed }) => {
           const isPressed = state === "pressed" || (pressed && !isDisabled);
@@ -157,6 +183,7 @@ export function ListItemCell({
             badgeTone,
             selected,
             isDisabled,
+            isRowInteractive,
             checkboxState,
             radioState,
             onSelectedChange
@@ -203,6 +230,7 @@ function renderTrailing({
   badgeTone,
   selected,
   isDisabled,
+  isRowInteractive,
   checkboxState,
   radioState,
   onSelectedChange
@@ -215,15 +243,51 @@ function renderTrailing({
   badgeTone: BadgeTone;
   selected: boolean;
   isDisabled: boolean;
+  isRowInteractive: boolean;
   checkboxState: CheckboxState;
   radioState: RadioState;
   onSelectedChange?: (selected: boolean) => void;
 }) {
   if (trailing === "none") return null;
   if (trailing === "button") return <Button type="secondaryNeutral" size="small" label={buttonLabel} disabled={isDisabled} />;
-  if (trailing === "checkbox") return <Checkbox selected={selected} state={isDisabled ? "disabled" : checkboxState} showLabel={false} onChange={onSelectedChange} />;
-  if (trailing === "radio") return <Radio selected={selected} state={isDisabled ? "disabled" : radioState} showLabel={false} onChange={onSelectedChange} />;
-  if (trailing === "switch") return <Switch selected={selected} disabled={isDisabled} onChange={onSelectedChange} />;
+  if (trailing === "checkbox") {
+    return (
+      <Checkbox
+        accessible={!isRowInteractive}
+        accessibilityElementsHidden={isRowInteractive}
+        importantForAccessibility={isRowInteractive ? "no" : "auto"}
+        selected={selected}
+        state={isDisabled ? "disabled" : checkboxState}
+        showLabel={false}
+        onChange={onSelectedChange}
+      />
+    );
+  }
+  if (trailing === "radio") {
+    return (
+      <Radio
+        accessible={!isRowInteractive}
+        accessibilityElementsHidden={isRowInteractive}
+        importantForAccessibility={isRowInteractive ? "no" : "auto"}
+        selected={selected}
+        state={isDisabled ? "disabled" : radioState}
+        showLabel={false}
+        onChange={onSelectedChange}
+      />
+    );
+  }
+  if (trailing === "switch") {
+    return (
+      <Switch
+        accessible={!isRowInteractive}
+        accessibilityElementsHidden={isRowInteractive}
+        importantForAccessibility={isRowInteractive ? "no" : "auto"}
+        selected={selected}
+        disabled={isDisabled}
+        onChange={onSelectedChange}
+      />
+    );
+  }
   if (trailing === "badge") return <Badge label={badgeLabel} tone={badgeTone} />;
   if (trailing === "text") return <Text style={[styles.trailingText, isDisabled && styles.disabledText]}>{trailingText}</Text>;
 
@@ -265,7 +329,8 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    minWidth: theme.spacing[0]
+    minWidth: theme.spacing[0],
+    gap: theme.spacing.xxs
   },
   eyebrow: {
     ...theme.typography.body.sm

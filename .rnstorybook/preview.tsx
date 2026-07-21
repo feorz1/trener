@@ -1,18 +1,20 @@
 import type { Preview } from "@storybook/react-native";
 import type { ComponentType } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { theme } from "../src/theme";
+import { ThemeProvider, theme } from "../src/theme";
 
 const webPreviewPadding = 200;
 
 const preview: Preview = {
   decorators: [
     (Story: ComponentType) => (
-      <ScrollView style={styles.canvas} contentContainerStyle={styles.canvasContent}>
-        <View style={styles.previewSurface}>
-          <Story />
-        </View>
-      </ScrollView>
+      <ThemeProvider>
+        <ScrollView style={styles.canvas} contentContainerStyle={styles.canvasContent}>
+          <View style={styles.previewSurface}>
+            <Story />
+          </View>
+        </ScrollView>
+      </ThemeProvider>
     )
   ],
   parameters: {

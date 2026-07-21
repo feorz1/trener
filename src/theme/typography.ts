@@ -76,7 +76,7 @@ export const typography = {
     md: {
       fontFamily: fontFamilies.regular,
       fontSize: 16,
-      lineHeight: 24,
+      lineHeight: 20,
       fontWeight: "400",
       letterSpacing: -0.32
     },

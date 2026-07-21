@@ -26,9 +26,9 @@ export function Chip({
   ...pressableProps
 }: ChipProps) {
   const isSelected = selected && !disabled;
-  const backgroundColor = isSelected ? theme.colors.content.inkDeep : theme.colors.background.canvasSoft;
-  const color = disabled ? theme.colors.content.mute : isSelected ? theme.colors.content.primary : theme.colors.content.body;
-  const iconColor = isSelected ? theme.colors.content.primary : theme.colors.content.body;
+  const backgroundColor = isSelected ? theme.colors.brand.dark : theme.colors.background.canvasSoft;
+  const color = disabled ? theme.colors.content.mute : isSelected ? theme.colors.brand.primary : theme.colors.content.body;
+  const iconColor = isSelected ? theme.colors.brand.primary : theme.colors.content.body;
 
   return (
     <Pressable

@@ -46,6 +46,7 @@ Canonical mobile modal container for titled dialogs with body content and footer
 | title text | `color/content/ink` | `theme.colors.content.ink` |
 | subline text | `color/content/ink` | `theme.colors.content.ink` |
 | body text | `color/content/ink` | `theme.colors.content.ink` |
+| overlay dimming | `color/background/overlay` | `theme.colors.background.overlay` |
 | header top / horizontal padding | `spacing/xl` | `theme.spacing.xl` |
 | header bottom padding | `spacing/md` | `theme.spacing.md` |
 | header gap | `spacing/lg` | `theme.spacing.lg` |
@@ -75,6 +76,9 @@ Canonical mobile modal container for titled dialogs with body content and footer
 - Overlay modals must lift above the native keyboard while preserving the `spacing/xl` gap so body inputs remain editable immediately after focus.
 - Overlay modals animate layout changes when their internal content changes, including bottom-sheet height changes between steps.
 - Closing the overlay preserves the last rendered content while animating the sheet down before unmounting.
+- Overlay modals isolate their accessibility tree with `accessibilityViewIsModal`; the visual backdrop and dismiss hit area stay hidden from assistive technologies.
+- When an overlay finishes opening, VoiceOver/TalkBack focus moves to the modal title, which exposes the header role.
+- Overlay modals support the iOS Accessibility Escape gesture through `onClose`, and the icon-only close action uses a localized accessibility label.
 - All styling must come from `src/theme`.
 
 ## Examples

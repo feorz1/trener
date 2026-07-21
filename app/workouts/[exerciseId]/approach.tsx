@@ -159,7 +159,7 @@ function buildApproachSet(set: WorkoutSet, index: number, resultType: WorkoutRes
     }),
     resultType
   );
-  const legacy = valuesToLegacyFields(values);
+  const legacy = valuesToLegacyFields(values, resultType);
   return {
     id: set.id,
     index: index + 1,
@@ -366,7 +366,7 @@ export default function ExerciseApproachScreen() {
           if (set.id !== setId) return set;
 
           const nextValues = pickCompatibleValues(patch.values ?? getSetValues(set), resultType);
-          const legacy = valuesToLegacyFields(nextValues);
+      const legacy = valuesToLegacyFields(nextValues, resultType);
           const nextSet = {
             ...set,
             ...patch,

@@ -95,7 +95,13 @@ export default function WorkoutClientSelectSheet() {
               title={client.name}
               leading="none"
               density="compact"
-              trailingSlot={<Radio selected={selected} showLabel={false} onChange={() => setSelectedClientId(client.id)} />}
+              trailingSlot={
+                <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+                  <Radio selected={selected} showLabel={false} />
+                </View>
+              }
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
               onPress={() => setSelectedClientId(client.id)}
             />
           );

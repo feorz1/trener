@@ -41,7 +41,7 @@ Canonical binary selection control for forms, filters, and checklist-like choice
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| selected box background | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected box background | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | check mark | `color/background/canvas` | `theme.colors.background.canvas` |
 | unchecked box background | `color/background/canvas` | `theme.colors.background.canvas` |
 | unchecked border | `color/content/mute` | `theme.colors.content.mute` |

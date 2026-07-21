@@ -14,6 +14,7 @@ node_modules/
 # Package-local dependencies and build output
 figma-plugin/node_modules/
 figma-plugin/dist/
+admin/dist/
 
 # Codex/local runtime state
 .codex/

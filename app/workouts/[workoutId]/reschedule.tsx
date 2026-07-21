@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, Navigation, Select } from "@/components/ui";
+import { Button, Navigation, Select, Variant } from "@/components/ui";
 import { buildSlotDateTime, getAvailableWorkoutSlots } from "@/features/workouts/availableSlots";
 import { getDateKey, isCalendarSlot, parseDateKey, startOfDay, type CalendarSlot } from "@/features/workouts/scheduleOptions";
 import { useWorkout, useWorkoutActions, useWorkouts } from "@/data";
@@ -43,6 +43,15 @@ export default function RescheduleWorkoutScreen() {
     () => getAvailableWorkoutSlots({ date: selectedDate, workouts: allWorkouts, excludeWorkoutId: workoutId }),
     [allWorkouts, selectedDate, workoutId]
   );
+  const slotItems = useMemo(
+    () =>
+      availableSlots.map((slot) => ({
+        key: slot,
+        label: slot,
+        accessibilityLabel: `Выбрать ${slot}`
+      })),
+    [availableSlots]
+  );
   const effectiveSelectedSlot = selectedSlot && availableSlots.includes(selectedSlot) ? selectedSlot : undefined;
   const nextDate = useMemo(() => buildSlotDateTime(selectedDate, effectiveSelectedSlot), [effectiveSelectedSlot, selectedDate]);
   const canSave = Boolean(workout && nextDate && !saving);
@@ -65,18 +74,6 @@ export default function RescheduleWorkoutScreen() {
     });
   };
 
-  const openTimeSheet = () => {
-    if (!selectedDate) return;
-    router.push({
-      pathname: "/workouts/reschedule-slot-select",
-      params: {
-        ...(workoutId ? { workoutId } : {}),
-        date: getDateKey(selectedDate),
-        ...(effectiveSelectedSlot ? { selectedSlot: effectiveSelectedSlot } : {})
-      }
-    });
-  };
-
   const save = async () => {
     if (!workoutId || !nextDate || !canSave) return;
     setSaving(true);
@@ -86,7 +83,13 @@ export default function RescheduleWorkoutScreen() {
         startsAt: nextDate.toISOString(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
       });
-      router.back();
+      router.dismissTo({
+        pathname: "/workouts/[workoutId]",
+        params: {
+          workoutId,
+          rescheduleConfirmed: "true"
+        }
+      });
     } catch {
       setError("Не удалось перенести тренировку.");
     } finally {
@@ -110,16 +113,25 @@ export default function RescheduleWorkoutScreen() {
       <Navigation title="Перенос тренировки" onBack={() => router.back()} />
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" {...scrollProps}>
-        <Select label="Дата" value={formatDateValue(selectedDate)} width="fill" placeholder="Выберите дату" showMessage={false} onPress={openDateSheet} />
-        <Select
-          label="Время"
-          value={effectiveSelectedSlot}
-          width="fill"
-          placeholder={selectedDate ? "Выберите время" : "Сначала выберите дату"}
-          showMessage={false}
-          disabled={!selectedDate}
-          onPress={openTimeSheet}
-        />
+        <Select label="Дата" value={formatDateValue(selectedDate)} width="fill" placeholder="Выберите дату переноса" showMessage={false} onPress={openDateSheet} />
+        {selectedDate ? (
+          slotItems.length > 0 ? (
+            <Variant<CalendarSlot>
+              label="Время"
+              items={slotItems}
+              value={effectiveSelectedSlot}
+              columns={4}
+              width="fill"
+              showMessage={false}
+              onChange={setSelectedSlot}
+            />
+          ) : (
+            <View style={styles.emptySlots}>
+              <Text style={styles.emptySlotsLabel}>Время</Text>
+              <Text style={styles.emptySlotsText}>На эту дату свободных слотов нет.</Text>
+            </View>
+          )
+        ) : null}
         {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </ScrollView>
 
@@ -138,13 +150,28 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   content: {
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.lg
+    gap: theme.spacing[0],
+    paddingVertical: theme.spacing[0]
   },
   errorText: {
     ...theme.typography.body.sm,
     paddingHorizontal: theme.spacing.lg,
     color: theme.colors.status.negative
+  },
+  emptySlots: {
+    alignSelf: "stretch",
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md
+  },
+  emptySlotsLabel: {
+    ...theme.typography.body.smStrong,
+    color: theme.colors.content.ink
+  },
+  emptySlotsText: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body
   },
   footer: {
     gap: theme.spacing.sm,

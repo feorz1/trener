@@ -206,7 +206,7 @@ Do not build screens from ad hoc Figma layers when a canonical component exists 
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| primary background | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| primary background | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | primary text/icon | `color/content/primary` | `theme.colors.content.primary` |
 | secondary background | `color/content/primary` | `theme.colors.content.primary` |
 | secondary text/icon | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
@@ -257,7 +257,7 @@ Do not build screens from ad hoc Figma layers when a canonical component exists 
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| brand tone | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| brand tone | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | inverse tone | `color/content/primary` | `theme.colors.content.primary` |
 | negative tone | `color/status/negative` | `theme.colors.status.negative` |
 | neutral tone | `color/content/body` | `theme.colors.content.body` |
@@ -355,8 +355,8 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 | fallback background | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
 | initials background | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | initials text | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
-| icon background | `color/background/canvas` | `theme.colors.background.canvas` |
-| icon stroke | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
+| icon background | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
+| icon glyph sizes | component size tokens | `theme.sizes.avatarIcon40`, `theme.sizes.avatarIcon48`, `theme.sizes.avatarIcon56`, `theme.sizes.avatarIcon72` |
 | badge indicator | `color/content/primary` | `theme.colors.content.primary` |
 | notification indicator | `color/status/negative` | `theme.colors.status.negative` |
 | radius | `radius/full` | dynamic full radius from size |
@@ -369,6 +369,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 - If `source` is missing, it renders a themed placeholder or initials depending on `type`.
 - The flag reference is not part of the canonical component API.
 - Only `40`, `48`, `56`, and `72` size variants are canonical.
+- Icon variants use the `canvas-soft` surface without a stroke and map to `22`, `32`, `36`, and `48` px glyphs.
 - `Count` and `Pair` use white separation rings between overlapping avatars.
 - `Badge` indicator sits on the bottom-right side of the avatar.
 - `Notification` indicator sits on the top-right side of the avatar.
@@ -412,6 +413,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 | secondary text | `color/content/body` | `theme.colors.content.body` |
 | disabled text | `color/content/mute` | `theme.colors.content.mute` |
 | padding / gap | `spacing/lg` | `theme.spacing.lg` |
+| content gap | `spacing/xxs` | `theme.spacing.xxs` |
 | leading avatar size | component size token | `theme.sizes.avatar40` |
 | trailing icon size | component size token | `theme.sizes.listItemCellIcon` |
 | title typography | `Typography/Body/MD Strong` | `theme.typography.body.mdStrong` |
@@ -422,6 +424,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 - Reuse existing canonical components inside slots: `Avatar`, `Button`, `Checkbox`, `Radio`, `Icon`, `Switch`, and `Badge`.
 - Figma visibility and text changes must be component properties, not duplicated one-off rows.
 - Code must expose slot props instead of creating separate row components per action type.
+- Non-interactive rows must not hide nested controls from the accessibility tree.
 - All styling must come from `src/theme`.
 
 ## Badge
@@ -531,7 +534,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| selected box background | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected box background | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | check mark | `color/background/canvas` | `theme.colors.background.canvas` |
 | unchecked box background | `color/background/canvas` | `theme.colors.background.canvas` |
 | unchecked border | `color/content/mute` | `theme.colors.content.mute` |
@@ -596,7 +599,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| selected outline / dot | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected outline / dot | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | control background | `color/background/canvas` | `theme.colors.background.canvas` |
 | unchecked outline | `color/content/mute` | `theme.colors.content.mute` |
 | error outline / dot | `color/status/negative` | `theme.colors.status.negative` |
@@ -727,7 +730,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 | primary text | `color/content/ink` | `theme.colors.content.ink` |
 | helper text | `color/content/body` | `theme.colors.content.body` |
 | placeholder/disabled text | `color/content/mute` | `theme.colors.content.mute` |
-| focus border | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| focus border | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | error border/message | `color/status/negative` | `theme.colors.status.negative` |
 | positive message | `color/status/positive-deep` | `theme.colors.status.positiveDeep` |
 | warning message | `color/status/warning-content` | `theme.colors.status.warningContent` |
@@ -796,7 +799,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 | helper text | `color/content/body` | `theme.colors.content.body` |
 | placeholder text | `color/content/mute` | `theme.colors.content.mute` |
 | default border | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
-| focus border | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| focus border | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | error border/message | `color/status/negative` | `theme.colors.status.negative` |
 | disabled fill/text | `color/background/canvas-soft`, `color/content/mute` | `theme.colors.background.canvasSoft`, `theme.colors.content.mute` |
 | root gap | `spacing/sm` | `theme.spacing.sm` |
@@ -851,7 +854,7 @@ Canonical Avatar sizes are supported: `40`, `48`, `56`, and `72`.
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| selected track | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected track | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | off/disabled track | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | thumb default | `color/background/canvas` | `theme.colors.background.canvas` |
 | thumb disabled | `color/content/mute` | `theme.colors.content.mute` |

@@ -26,6 +26,7 @@ export type CreateClientInput = {
   nextWorkoutAt?: string;
   notes?: string;
   metrics?: Partial<Client["metrics"]>;
+  intake?: Client["intake"];
 };
 
 export type UpdateClientInput = Partial<Omit<Client, "id" | "ownerId">>;
@@ -73,7 +74,7 @@ export type SetDraftExercisesOptions = {
 export type UpdateWorkoutDraftExerciseInput = Partial<Omit<Workout["exercises"][number], "id" | "exerciseId">>;
 
 export type UpdateSessionInput = Partial<
-  Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "startedTimezone" | "completedAt" | "completedTimezone" | "durationSeconds" | "workoutTitleSnapshot">
+  Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "startedTimezone" | "completedAt" | "completedTimezone" | "durationSeconds" | "workoutTitleSnapshot" | "exercises">
 >;
 
 export type UpsertWorkoutResultInput = {

@@ -35,7 +35,7 @@ Canonical action control for primary, secondary, neutral, destructive, tertiary,
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| primary background | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| primary background | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | primary text/icon | `color/content/primary` | `theme.colors.content.primary` |
 | secondary background | `color/content/primary` | `theme.colors.content.primary` |
 | secondary text/icon | `color/content/ink-deep` | `theme.colors.content.inkDeep` |

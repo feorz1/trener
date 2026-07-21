@@ -8,7 +8,7 @@ import {
   type TextStyle,
   View
 } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import { Icon } from "./Icon";
 
 export type SearchState = "empty" | "default" | "focus";
@@ -34,6 +34,7 @@ export function Search({
   onFocus,
   ...textInputProps
 }: SearchProps) {
+  const { resolvedColorScheme, resolvedColors } = useAppTheme();
   const [focused, setFocused] = useState(false);
   const resolvedState: SearchState = focused || state === "focus" ? "focus" : value ? "default" : state;
   const hasValue = Boolean(value);
@@ -45,10 +46,17 @@ export function Search({
   };
 
   return (
-    <View style={[styles.root, width === "fill" && styles.rootFill, resolvedState === "focus" && styles.rootFocus]}>
+    <View
+      style={[
+        styles.root,
+        width === "fill" && styles.rootFill,
+        { borderColor: resolvedState === "focus" ? resolvedColors.content.controlAccent : resolvedColors.background.canvasSoft }
+      ]}
+    >
       <Icon name="search" size={theme.spacing.xl} color={theme.colors.content.mute} />
       <TextInput
         {...textInputProps}
+        keyboardAppearance={resolvedColorScheme}
         onBlur={(event) => {
           setFocused(false);
           onBlur?.(event);
@@ -98,16 +106,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     borderWidth: theme.spacing.xxs,
-    borderColor: theme.colors.background.canvasSoft,
     borderRadius: theme.radius.xl,
     backgroundColor: theme.colors.background.canvasSoft
   },
   rootFill: {
     width: "auto",
     alignSelf: "stretch"
-  },
-  rootFocus: {
-    borderColor: theme.colors.content.inkDeep
   },
   input: {
     fontFamily: theme.typography.body.md.fontFamily,

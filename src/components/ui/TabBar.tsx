@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { Animated, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import { Icon, type IconName } from "./Icon";
 
 export type TabBarItem = {
@@ -49,6 +49,7 @@ export function TabBar({
   style,
   onValueChange
 }: TabBarProps) {
+  const { resolvedColorScheme } = useAppTheme();
   const visibleItems = items.slice(0, 5);
   const hasFixedItems = visibleItems.length <= 3;
   const selectedIndex = visibleItems.findIndex((item) => item.value === selectedValue);
@@ -80,7 +81,7 @@ export function TabBar({
         <View pointerEvents="none" style={styles.shadowPlate} />
         <LiquidGlassView
           animated
-          colorScheme="light"
+          colorScheme={resolvedColorScheme}
           effect="regular"
           style={[styles.glassRoot, !isLiquidGlassSupported && styles.fallbackGlassRoot, webGlassBlur]}
           tintColor={theme.colors.background.glass}
@@ -93,7 +94,11 @@ export function TabBar({
               ) : null}
               {visibleItems.map((item, index) => {
                 const selected = item.value === selectedValue;
-                const contentColor = item.disabled ? theme.colors.content.disabled : theme.colors.content.inkDeep;
+                const contentColor = item.disabled
+                  ? theme.colors.content.disabled
+                  : selected
+                    ? theme.colors.content.controlAccent
+                    : theme.colors.content.body;
 
               return (
                 <Pressable

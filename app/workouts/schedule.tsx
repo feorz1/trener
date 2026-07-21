@@ -4,12 +4,10 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Alert, Button, Loader, Navigation, Select, Variant } from "@/components/ui";
 import { useDataMutation, useWorkoutActions, useWorkoutDraft } from "@/data";
-import { isCalendarSlot, parseDateKey, repeatDayLabels, repeatOptions, type CalendarSlot, type RepeatDay } from "@/features/workouts/scheduleOptions";
+import { parseDateKey, repeatDayLabels, repeatOptions, type RepeatDay } from "@/features/workouts/scheduleOptions";
+import { buildScheduleDraftPatch, withDefaultScheduleTimes, type ScheduleTimes } from "@/features/workouts/scheduleDraft";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
-
-type ScheduleTimes = Partial<Record<RepeatDay, CalendarSlot>>;
-const defaultCalendarSlot: CalendarSlot = "17:00";
 
 const dayItems = repeatOptions.map((option) => ({
   key: option.key,
@@ -42,38 +40,13 @@ function getNativeWeekdayDay(date?: Date): RepeatDay | undefined {
   return "saturday";
 }
 
-function parseDays(value?: string) {
-  if (!value) return [];
-
-  const daySet = new Set(repeatOptions.map((option) => option.key));
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item): item is RepeatDay => daySet.has(item as RepeatDay));
-}
-
-function withDefaultScheduleTimes(days: RepeatDay[], scheduleTimes: ScheduleTimes) {
-  return days.reduce<ScheduleTimes>(
-    (nextTimes, day) => ({
-      ...nextTimes,
-      [day]: nextTimes[day] ?? defaultCalendarSlot
-    }),
-    { ...scheduleTimes }
-  );
-}
-
-function buildStartsAt(date: Date | undefined, time: string | undefined) {
-  const value = date ? new Date(date) : new Date();
-  const [hours, minutes] = (time ?? "17:00").split(":").map(Number);
-  value.setHours(Number.isFinite(hours) ? hours : 17, Number.isFinite(minutes) ? minutes : 0, 0, 0);
-  return value.toISOString();
-}
-
 export default function ScheduleWorkoutScreen() {
-  const { draftId } = useLocalSearchParams<{
+  const { draftId, returnTo } = useLocalSearchParams<{
     draftId?: string;
+    returnTo?: string;
   }>();
   const draftIdValue = firstParam(draftId);
+  const shouldReturnToWorkoutNew = firstParam(returnTo) === "workout-new";
   const workouts = useWorkoutActions();
   const draftQuery = useWorkoutDraft(draftIdValue);
   const { draft } = draftQuery;
@@ -87,16 +60,19 @@ export default function ScheduleWorkoutScreen() {
   const [scheduleTimes, setScheduleTimes] = useState<ScheduleTimes>(() => withDefaultScheduleTimes(initialDays, (draft?.scheduleTimes ?? {}) as ScheduleTimes));
   const { scrollProps } = useConditionalScroll();
   const canContinue = selectedDays.length > 0;
+  const buildDraftUpdate = useCallback(() => {
+    const patch = buildScheduleDraftPatch({ selectedDate, selectedDays, scheduleTimes });
+    if (!shouldReturnToWorkoutNew) return patch;
+
+    return {
+      ...patch,
+      exercises: draft?.exercises.filter((exercise) => !exercise.day || selectedDays.includes(exercise.day)) ?? []
+    };
+  }, [draft?.exercises, scheduleTimes, selectedDate, selectedDays, shouldReturnToWorkoutNew]);
   const continueAction = useCallback(async () => {
     if (!canContinue || !draftIdValue) return null;
-    const firstDay = selectedDays[0];
-    const effectiveScheduleTimes = withDefaultScheduleTimes(selectedDays, scheduleTimes);
-    return workouts.updateDraft(draftIdValue, {
-      startsAt: buildStartsAt(selectedDate, firstDay ? effectiveScheduleTimes[firstDay] : undefined),
-      repeatDays: selectedDays,
-      scheduleTimes: effectiveScheduleTimes
-    });
-  }, [canContinue, draftIdValue, scheduleTimes, selectedDate, selectedDays, workouts]);
+    return workouts.updateDraft(draftIdValue, buildDraftUpdate());
+  }, [buildDraftUpdate, canContinue, draftIdValue, workouts]);
   const continueMutation = useDataMutation(continueAction);
 
   useEffect(() => {
@@ -121,11 +97,18 @@ export default function ScheduleWorkoutScreen() {
     });
   };
 
-  const openTimeSheet = (day: RepeatDay) => {
+  const openTimeSheet = async (day: RepeatDay) => {
+    if (!draftIdValue) return;
+
+    const nextDraft = await workouts
+      .updateDraft(draftIdValue, buildDraftUpdate())
+      .catch(() => null);
+    if (!nextDraft) return;
+
     router.push({
       pathname: "/workouts/slot-select",
       params: {
-        ...(draftIdValue ? { draftId: draftIdValue } : {}),
+        draftId: draftIdValue,
         slotDay: day
       }
     });
@@ -136,12 +119,19 @@ export default function ScheduleWorkoutScreen() {
     const updatedDraft = await continueMutation.mutate().catch(() => null);
     if (!updatedDraft) return;
 
-    router.replace({
+    const route = {
       pathname: "/workouts/new",
       params: {
         draftId: draftIdValue
       }
-    });
+    } as const;
+
+    if (shouldReturnToWorkoutNew) {
+      router.dismissTo(route);
+      return;
+    }
+
+    router.push(route);
   };
 
   if (draftQuery.isLoading) {
@@ -181,7 +171,9 @@ export default function ScheduleWorkoutScreen() {
               placeholder="Выбери время"
               width="fill"
               showMessage={false}
-              onPress={() => openTimeSheet(day)}
+              onPress={() => {
+                void openTimeSheet(day);
+              }}
             />
           ))}
         </View>

@@ -11,7 +11,7 @@ import {
   type TextStyle,
   type ViewStyle
 } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme, type ThemeColors } from "@/theme";
 import { Icon } from "./Icon";
 
 export type InputState =
@@ -37,6 +37,7 @@ export type InputProps = Omit<TextInputProps, "editable" | "onChange" | "style" 
   showMessage?: boolean;
   showClearButton?: boolean;
   width?: "fixed" | "fill";
+  prefixAccessibilityLabel?: string;
   onClear?: () => void;
   onChangePrefixText?: (value: string) => void;
   onChangeText?: (value: string) => void;
@@ -45,26 +46,27 @@ export type InputProps = Omit<TextInputProps, "editable" | "onChange" | "style" 
 const stateColor: Record<InputState, string> = {
   empty: theme.colors.content.mute,
   default: theme.colors.content.body,
-  focus: theme.colors.content.inkDeep,
+  focus: theme.colors.content.controlAccent,
   error: theme.colors.status.negative,
   positive: theme.colors.status.positiveDeep,
-  warning: theme.colors.status.warningContent,
+  warning: theme.colors.status.warningText,
   disabled: theme.colors.content.mute,
-  prefixFocus: theme.colors.content.inkDeep,
-  valueFocus: theme.colors.content.inkDeep
+  prefixFocus: theme.colors.content.controlAccent,
+  valueFocus: theme.colors.content.controlAccent
 } as const;
 
-const stateBorderColor: Record<InputState, string> = {
-  empty: theme.colors.background.canvasSoft,
-  default: theme.colors.background.canvasSoft,
-  focus: theme.colors.content.inkDeep,
-  error: theme.colors.status.negative,
-  positive: theme.colors.background.canvasSoft,
-  warning: theme.colors.background.canvasSoft,
-  disabled: theme.colors.background.canvasSoft,
-  prefixFocus: theme.colors.content.inkDeep,
-  valueFocus: theme.colors.content.inkDeep
-} as const;
+function resolveInputBorderColor(state: InputState, resolvedColors: ThemeColors) {
+  switch (state) {
+    case "focus":
+    case "prefixFocus":
+    case "valueFocus":
+      return resolvedColors.content.controlAccent;
+    case "error":
+      return resolvedColors.status.negative;
+    default:
+      return resolvedColors.background.canvasSoft;
+  }
+}
 
 const statusMessages: Record<"error" | "positive" | "warning", string> = {
   error: "Проверьте значение",
@@ -88,8 +90,13 @@ export function Input({
   onChangePrefixText,
   placeholder = "Значение",
   onChangeText,
+  accessibilityHint,
+  accessibilityLabel,
+  accessibilityState,
+  prefixAccessibilityLabel,
   ...textInputProps
 }: InputProps) {
+  const { resolvedColorScheme } = useAppTheme();
   const prefixInputRef = useRef<NativeTextInput>(null);
   const valueInputRef = useRef<NativeTextInput>(null);
   const [focusedField, setFocusedField] = useState<"prefix" | "value" | null>(null);
@@ -114,6 +121,10 @@ export function Input({
   const showStatus = !!statusState && !focusedField;
   const resolvedMessage = message ?? (statusState ? statusMessages[statusState] : "Подсказка");
   const showMessageRow = showMessage && !!resolvedMessage;
+  const accessibilityMessage = statusState || (showMessage && message) ? resolvedMessage : undefined;
+  const resolvedAccessibilityHint = accessibilityHint ?? accessibilityMessage;
+  const resolvedAccessibilityState = { ...accessibilityState, disabled };
+  const valueAccessibilityLabel = accessibilityLabel ?? (doubleField ? `${label}, номер` : label);
   const inputTextColor = disabled
     ? theme.colors.content.mute
     : value
@@ -125,6 +136,7 @@ export function Input({
     onChangeText?.("");
   };
   const moveCaretToEnd = (inputRef: React.RefObject<NativeTextInput | null>, text?: string) => {
+    if (!inputRef.current || typeof inputRef.current.setNativeProps !== "function") return;
     const end = text?.length ?? theme.spacing[0];
     const selection = { start: end, end };
 
@@ -143,6 +155,10 @@ export function Input({
           <FieldFrame state={prefixState} style={styles.prefixField}>
             <NativeTextInput
               ref={prefixInputRef}
+              accessibilityHint={resolvedAccessibilityHint}
+              accessibilityLabel={prefixAccessibilityLabel ?? `${label}, код страны`}
+              accessibilityState={{ disabled }}
+              keyboardAppearance={resolvedColorScheme}
               editable={!disabled}
               onBlur={() => setFocusedField(null)}
               onChangeText={onChangePrefixText}
@@ -160,6 +176,10 @@ export function Input({
             <NativeTextInput
               ref={valueInputRef}
               {...textInputProps}
+              accessibilityHint={resolvedAccessibilityHint}
+              accessibilityLabel={valueAccessibilityLabel}
+              accessibilityState={resolvedAccessibilityState}
+              keyboardAppearance={resolvedColorScheme}
               editable={!disabled}
               onBlur={(event) => {
                 setFocusedField(null);
@@ -184,6 +204,10 @@ export function Input({
           <NativeTextInput
             ref={valueInputRef}
             {...textInputProps}
+            accessibilityHint={resolvedAccessibilityHint}
+            accessibilityLabel={valueAccessibilityLabel}
+            accessibilityState={resolvedAccessibilityState}
+            keyboardAppearance={resolvedColorScheme}
             editable={!disabled}
             onBlur={(event) => {
               setFocusedField(null);
@@ -207,7 +231,11 @@ export function Input({
       {showMessageRow ? (
         <View style={styles.messageRow}>
           {showStatus && statusState ? <View style={[styles.statusMarker, { backgroundColor: stateColor[statusState] }]} /> : null}
-          <Text style={[styles.message, showStatus && statusState && { color: stateColor[statusState] }, disabled && styles.disabledText]}>
+          <Text
+            accessibilityLiveRegion={showStatus ? "polite" : "none"}
+            accessibilityRole={showStatus ? "alert" : undefined}
+            style={[styles.message, showStatus && statusState && { color: stateColor[statusState] }, disabled && styles.disabledText]}
+          >
             {resolvedMessage}
           </Text>
         </View>
@@ -225,10 +253,12 @@ function ClearButton({ onPress }: { onPress: () => void }) {
 }
 
 function FieldFrame({ children, state, style }: { children: ReactNode; state: InputState; style?: ViewStyle }) {
+  const { resolvedColors } = useAppTheme();
+
   return (
     <View style={[styles.field, getFieldSurfaceStyle(state), style]}>
       {children}
-      <View pointerEvents="none" style={[styles.fieldBorder, { borderColor: stateBorderColor[state] }]} />
+      <View pointerEvents="none" style={[styles.fieldBorder, { borderColor: resolveInputBorderColor(state, resolvedColors) }]} />
     </View>
   );
 }
@@ -277,17 +307,18 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body.md.fontSize,
     fontWeight: theme.typography.body.md.fontWeight,
     letterSpacing: theme.typography.body.md.letterSpacing,
+    includeFontPadding: false,
     flex: 1,
     minWidth: theme.spacing[0],
     alignSelf: "stretch",
-    height: theme.typography.body.md.lineHeight,
-    minHeight: theme.typography.body.md.lineHeight,
+    height: theme.typography.body.md.lineHeight + theme.spacing.xs,
+    minHeight: theme.typography.body.md.lineHeight + theme.spacing.xs,
     padding: theme.spacing[0],
     margin: theme.spacing[0],
     textAlignVertical: "center"
   },
   prefixInput: {
-    textAlign: "center"
+    textAlign: "left"
   },
   fieldBorder: {
     ...StyleSheet.absoluteFillObject,

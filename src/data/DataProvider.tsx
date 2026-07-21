@@ -4,6 +4,10 @@ import type { DataLayer } from "./contracts";
 import { ActiveSessionConflictError, DataError, DataNotFoundError } from "./contracts";
 import { createId } from "./createId";
 import { LOCAL_OWNER_ID } from "./types";
+import type { DataApi, DataApiClientInput, DataApiWorkoutResultsInput, DataApiWorkoutSession, DataApiWorkoutSessionInput } from "./api/dataApi";
+import { mapClient as mapRemoteClient, mapExercise as mapRemoteExercise, mapResults as mapRemoteResults, mapSession as mapRemoteSession, mapWorkout as mapRemoteWorkout } from "./remote/bootstrap";
+import { SessionResultWriteQueue } from "./remote/sessionResultWriteQueue";
+import { createSessionTimerPersistence, type SessionTimerPersistence } from "./persistence/SessionTimerPersistence";
 import type {
   CreateClientInput,
   CreateExerciseInput,
@@ -20,7 +24,9 @@ import type {
   UpdateWorkoutDraftInput,
   UpsertWorkoutResultInput,
   Workout,
-  WorkoutResultType
+  WorkoutResult,
+  WorkoutResultType,
+  WorkoutSession
 } from "./types";
 import { localReducer, type LocalDataAction } from "./local/localReducer";
 import type { LocalDataState } from "./local/localState";
@@ -29,13 +35,17 @@ import { assertUniqueActiveExerciseName, normalizeExercisePatch } from "./local/
 import { buildWorkoutResultFromSet, buildWorkoutResultFromUpsertInput } from "./local/resultBuilders";
 import { selectActiveSessionConflict, selectActiveSessionForWorkout, selectCompletedSessionsByClient, selectPreviousExercisePerformance } from "./local/localSelectors";
 import { getAdjacentConnectionIds, getSupersetConnectionIds, preserveSupersetConnectionsAfterReorder, sortWorkoutExercisesByOrder, syncSupersetConnectionsForScope } from "./local/supersetConnections";
-import { createInitialState } from "./seeds/mockSeed";
-import { CURRENT_SCHEMA_VERSION, localPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
+import { createProductionState } from "./seeds/productionSeed";
+import { CURRENT_SCHEMA_VERSION, createLocalPersistenceAdapter, migrateSnapshot, hydrateDataState, PersistenceCoordinator, type PersistenceAdapter, type PersistenceStatus } from "./persistence";
+import { getPrimaryWeightMetricKey, getLegacyValues } from "@/features/workouts/tracking";
+import { normalizeEditDraftSchedule } from "@/features/workouts/scheduleDraft";
 import { theme } from "@/theme";
-import { Button, Loader } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { AppSplashScreen } from "@/features/splash/AppSplashScreen";
 
 type HydrationStatus = "idle" | "loading" | "ready" | "error";
 type SaveMode = "debounced" | "immediate";
+type AccountDeletionPhase = "active" | "preparing" | "prepared" | "committing" | "committed";
 
 type DataContextValue = {
   state: LocalDataState;
@@ -45,6 +55,10 @@ type DataContextValue = {
   hydrationError: Error | null;
   persistenceStatus: PersistenceStatus;
   retryHydration: () => void;
+  sessionTimerPersistence: SessionTimerPersistence;
+  prepareAccountDeletion: () => Promise<void>;
+  clearAccountData: () => Promise<void>;
+  rollbackAccountDeletion: () => Promise<void>;
 };
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -64,8 +78,33 @@ function optionalTrim(value?: string) {
 }
 
 function optionalTrimList<T extends string>(values?: T[]) {
-  const trimmed = values?.map((value) => value.trim()).filter(Boolean) as T[] | undefined;
+  const trimmed = values ? trimList(values) : undefined;
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function trimList<T extends string>(values: T[]) {
+  return values.map((value) => value.trim()).filter(Boolean) as T[];
+}
+
+function normalizeClientIntake(intake: CreateClientInput["intake"] | UpdateClientInput["intake"]): CreateClientInput["intake"] {
+  if (!intake) return undefined;
+
+  return {
+    ...(intake.ageYears !== undefined ? { ageYears: intake.ageYears } : {}),
+    ...(intake.targetWeightKg !== undefined ? { targetWeightKg: intake.targetWeightKg } : {}),
+    ...(intake.healthConstraints !== undefined ? { healthConstraints: trimList(intake.healthConstraints) } : {}),
+    ...(intake.exerciseRestrictions !== undefined ? { exerciseRestrictions: trimList(intake.exerciseRestrictions) } : {}),
+    ...(intake.activityLevel !== undefined ? { activityLevel: intake.activityLevel.trim() } : {}),
+    ...(intake.sleep !== undefined ? { sleep: intake.sleep.trim() } : {}),
+    ...(intake.workoutsPerWeek !== undefined ? { workoutsPerWeek: intake.workoutsPerWeek } : {}),
+    ...(intake.trainingExperience !== undefined ? { trainingExperience: intake.trainingExperience.trim() } : {}),
+    ...(intake.sports !== undefined ? { sports: trimList(intake.sports) } : {})
+  };
+}
+
+function mergeClientIntake(current: CreateClientInput["intake"], patch: UpdateClientInput["intake"]): CreateClientInput["intake"] {
+  if (!patch) return current;
+  return { ...current, ...normalizeClientIntake(patch) };
 }
 
 function requiredTrim(value: string, fallback: string) {
@@ -205,18 +244,207 @@ function getSnapshotSchemaVersion(value: unknown) {
   return typeof version === "number" ? version : undefined;
 }
 
+function localClientStatusToRemote(status?: CreateClientInput["status"] | UpdateClientInput["status"]): "active" | "archived" | undefined {
+  if (status === "paused") return "archived";
+  if (status === "active" || status === "new") return "active";
+  return undefined;
+}
+
+function toRemoteClientIntake(intake: NonNullable<CreateClientInput["intake"]>) {
+  const remoteIntake = {
+    ...(intake.ageYears !== undefined ? { ageYears: intake.ageYears } : {}),
+    ...(intake.targetWeightKg !== undefined ? { targetWeightKg: intake.targetWeightKg } : {}),
+    ...(intake.healthConstraints !== undefined ? { healthConstraints: trimList(intake.healthConstraints) } : {}),
+    ...(intake.exerciseRestrictions !== undefined ? { exerciseRestrictions: trimList(intake.exerciseRestrictions) } : {}),
+    ...(intake.activityLevel !== undefined ? { activityLevel: intake.activityLevel.trim() } : {}),
+    ...(intake.sleep !== undefined ? { sleep: intake.sleep.trim() } : {}),
+    ...(intake.workoutsPerWeek !== undefined ? { workoutsPerWeek: intake.workoutsPerWeek } : {}),
+    ...(intake.trainingExperience !== undefined ? { trainingExperience: intake.trainingExperience.trim() } : {}),
+    ...(intake.sports !== undefined ? { sports: trimList(intake.sports) } : {})
+  };
+  return Object.keys(remoteIntake).length > 0 ? remoteIntake : undefined;
+}
+
+function toRemoteClientProfile(input: CreateClientInput | UpdateClientInput): NonNullable<DataApiClientInput["profile"]> | undefined {
+  const intake = input.intake !== undefined ? toRemoteClientIntake(input.intake) : undefined;
+  const profile: NonNullable<DataApiClientInput["profile"]> = {
+    ...(input.telegram !== undefined ? { telegram: input.telegram.trim() } : {}),
+    ...(input.gender !== undefined ? { gender: input.gender } : {}),
+    ...(input.goal !== undefined ? { goal: input.goal.trim() } : {}),
+    ...(input.restrictions !== undefined ? { restrictions: trimList(input.restrictions) } : {}),
+    ...(input.metrics !== undefined
+      ? {
+          metrics: {
+            ...(input.metrics.weightKg !== undefined ? { weightKg: input.metrics.weightKg } : {}),
+            ...(input.metrics.heightCm !== undefined ? { heightCm: input.metrics.heightCm } : {}),
+            ...(input.metrics.attendanceRate !== undefined ? { attendanceRate: input.metrics.attendanceRate } : {})
+          }
+        }
+      : {}),
+    ...(intake !== undefined ? { intake } : {})
+  };
+  return Object.keys(profile).length > 0 ? profile : undefined;
+}
+
+function toRemoteClientInput(input: CreateClientInput | UpdateClientInput): DataApiClientInput {
+  const profile = toRemoteClientProfile(input);
+  return {
+    ...(input.name !== undefined ? { name: requiredTrim(input.name, "Новый клиент") } : {}),
+    ...(input.phone !== undefined ? { phone: optionalTrim(input.phone) ?? null } : {}),
+    ...(input.email !== undefined ? { email: optionalTrim(input.email) ?? null } : {}),
+    ...(input.birthDate !== undefined ? { birthDate: optionalTrim(input.birthDate) ?? null } : {}),
+    ...(input.notes !== undefined ? { notes: optionalTrim(input.notes) ?? null } : {}),
+    ...(profile ? { profile } : {}),
+    ...(input.status !== undefined ? { status: localClientStatusToRemote(input.status) } : {})
+  };
+}
+
+function toRemoteExerciseInput(input: CreateExerciseInput) {
+  return {
+    name: requiredTrim(input.name, "Новое упражнение"),
+    muscleGroup: optionalTrimList(input.primaryMuscles)?.[0] ?? null,
+    equipment: optionalTrim(input.equipment) ?? null,
+    description: optionalTrim(input.notes) ?? optionalTrim(input.coachNotes) ?? null
+  };
+}
+
+function toRemoteExercisePatch(input: Partial<CreateExerciseInput>) {
+  return {
+    ...(input.name !== undefined ? { name: requiredTrim(input.name, "Новое упражнение") } : {}),
+    ...(input.primaryMuscles !== undefined ? { muscleGroup: optionalTrimList(input.primaryMuscles)?.[0] ?? null } : {}),
+    ...(input.equipment !== undefined ? { equipment: optionalTrim(input.equipment) ?? null } : {}),
+    ...(input.notes !== undefined || input.coachNotes !== undefined ? { description: optionalTrim(input.notes) ?? optionalTrim(input.coachNotes) ?? null } : {})
+  };
+}
+
+function workoutToRemoteItems(workout: Workout): NonNullable<DataApiWorkoutSessionInput["items"]> {
+  return workout.exercises.map((exercise, index) => {
+    const firstSetValues = getLegacyValues({
+      values: exercise.sets[0]?.values,
+      weight: exercise.sets[0]?.targetWeightKg,
+      reps: exercise.sets[0]?.targetReps,
+      durationSeconds: exercise.sets[0]?.targetDurationSeconds,
+      distanceMeters: exercise.sets[0]?.targetDistanceMeters
+    });
+    const weightMetricKey = getPrimaryWeightMetricKey(exercise.resultType);
+
+    return {
+      exerciseId: exercise.exerciseId,
+      order: exercise.order ?? index + 1,
+      titleSnapshot: exercise.exerciseName,
+      plannedSets: exercise.sets.length || null,
+      plannedReps: exercise.sets[0]?.targetReps ?? firstSetValues.reps ?? null,
+      plannedWeight: weightMetricKey ? firstSetValues[weightMetricKey] ?? null : null,
+      plannedDurationSec: exercise.sets[0]?.targetDurationSeconds ?? firstSetValues.duration ?? null,
+      notes: exercise.comment ?? null
+    };
+  });
+}
+
+function workoutToRemoteSessionInput(workout: Workout, status: DataApiWorkoutSessionInput["status"] = "planned"): DataApiWorkoutSessionInput & { title: string } {
+  return {
+    clientId: workout.clientId ?? null,
+    title: workout.title || "Тренировка",
+    status,
+    scheduledAt: normalizeIsoDate(workout.startsAt, "Дата тренировки"),
+    notes: workout.focus || null,
+    items: workoutToRemoteItems(workout)
+  };
+}
+
+function sessionExercisesToRemoteItems(exercises: WorkoutSession["exercises"]): NonNullable<DataApiWorkoutSessionInput["items"]> {
+  return exercises.map((exercise, index) => ({
+    id: exercise.id,
+    exerciseId: exercise.exerciseId,
+    order: exercise.order ?? index + 1,
+    titleSnapshot: exercise.exerciseNameSnapshot ?? exercise.exerciseName,
+    plannedSets: exercise.plannedSets ?? null,
+    plannedReps: exercise.plannedRepetitions ?? null,
+    plannedWeight: exercise.plannedWeight ?? null,
+    notes: exercise.comment ?? null
+  }));
+}
+
+function remoteSessionActions(session: DataApiWorkoutSession, ownerId: OwnerId): LocalDataAction[] {
+  const actions: LocalDataAction[] = [{ type: "workout/upsert", workout: mapRemoteWorkout(session, ownerId) }];
+  const localSession = mapRemoteSession(session, ownerId);
+  if (localSession) {
+    actions.push({ type: "session/upsert", session: localSession });
+    actions.push(...mapRemoteResults(session, ownerId).map((result) => ({ type: "result/upsert" as const, result })));
+  }
+  return actions;
+}
+
+function toRemoteSetResult(result: WorkoutResult) {
+  const values = getLegacyValues({
+    values: result.values,
+    weight: result.weight,
+    repetitions: result.repetitions,
+    durationSeconds: result.durationSeconds,
+    distanceMeters: result.distanceMeters
+  });
+  const weightMetricKey = getPrimaryWeightMetricKey(result.resultType);
+  return {
+    id: result.id,
+    setNumber: result.setIndex,
+    reps: values.reps ?? null,
+    weight: weightMetricKey ? values[weightMetricKey] ?? null : null,
+    durationSec: values.duration ?? null,
+    distanceMeters: values.distance ?? null,
+    completed: result.completed
+  };
+}
+
+function resultsToRemoteInput(results: WorkoutResult[]): DataApiWorkoutResultsInput {
+  const byItem = new Map<string, DataApiWorkoutResultsInput["items"][number]>();
+  for (const result of results) {
+    const itemId = result.sessionExerciseItemId;
+    if (!itemId) continue;
+    const item = byItem.get(itemId) ?? { id: itemId, setResults: [] };
+    item.setResults.push(toRemoteSetResult(result));
+    byItem.set(itemId, item);
+  }
+
+  for (const item of byItem.values()) {
+    item.setResults.sort((left, right) => left.setNumber - right.setNumber);
+  }
+  return { items: Array.from(byItem.values()) };
+}
+
+function toRemoteResultsInput(state: LocalDataState, ownerId: OwnerId, input: UpsertWorkoutResultInput, resultId: string): DataApiWorkoutResultsInput {
+  const currentResults = state.resultIds
+    .map((id) => state.resultsById[id])
+    .filter((result) => result.ownerId === ownerId && result.sessionId === input.sessionId && result.id !== resultId);
+  const nextResult = buildWorkoutResultFromUpsertInput({ id: resultId, ownerId, upsert: input });
+  const resultsBySet = new Map<string, typeof nextResult>();
+  for (const result of [...currentResults, nextResult]) {
+    const itemId = result.sessionExerciseItemId;
+    if (!itemId) continue;
+    resultsBySet.set(`${itemId}:${result.setIndex}`, result);
+  }
+  return resultsToRemoteInput(Array.from(resultsBySet.values()));
+}
+
 export function DataProvider({
   children,
-  persistenceAdapter = localPersistenceAdapter,
-  currentOwnerId = LOCAL_OWNER_ID
+  persistenceAdapter,
+  currentOwnerId = LOCAL_OWNER_ID,
+  bootstrapRemoteData,
+  dataApi
 }: {
   children: ReactNode;
   persistenceAdapter?: PersistenceAdapter;
   currentOwnerId?: OwnerId;
+  bootstrapRemoteData?: () => Promise<LocalDataState | null>;
+  dataApi?: DataApi;
 }) {
-  const [state, dispatch] = useReducer(localReducer, undefined, createInitialState);
+  const effectivePersistenceAdapter = useMemo(() => persistenceAdapter ?? createLocalPersistenceAdapter(currentOwnerId), [currentOwnerId, persistenceAdapter]);
+  const [state, dispatch] = useReducer(localReducer, undefined, createProductionState);
   const stateRef = useRef(state);
-  const coordinatorRef = useRef(new PersistenceCoordinator(persistenceAdapter));
+  const coordinatorRef = useRef(new PersistenceCoordinator(effectivePersistenceAdapter));
+  const sessionWriteQueueRef = useRef(new SessionResultWriteQueue());
+  const sessionTimerPersistence = useMemo(() => createSessionTimerPersistence(currentOwnerId), [currentOwnerId]);
+  const accountDeletionPhaseRef = useRef<AccountDeletionPhase>("active");
   const [hydrationStatus, setHydrationStatus] = useState<HydrationStatus>("idle");
   const hydrationStatusRef = useRef<HydrationStatus>("idle");
   const [persistenceStatus, setPersistenceStatus] = useState<PersistenceStatus>("idle");
@@ -227,8 +455,8 @@ export function DataProvider({
   }, [state]);
 
   useEffect(() => {
-    coordinatorRef.current = new PersistenceCoordinator(persistenceAdapter);
-  }, [persistenceAdapter]);
+    coordinatorRef.current = new PersistenceCoordinator(effectivePersistenceAdapter);
+  }, [effectivePersistenceAdapter]);
 
   const updateHydrationStatus = useCallback((status: HydrationStatus) => {
     hydrationStatusRef.current = status;
@@ -237,25 +465,44 @@ export function DataProvider({
 
   const hydrateLocalData = useCallback(
     async (isCancelled: () => boolean = () => false) => {
+      const isBlocked = () => accountDeletionPhaseRef.current !== "active";
+      if (isBlocked()) return;
       updateHydrationStatus("loading");
       setHydrationError(null);
 
       try {
-        const rawSnapshot = await persistenceAdapter.load();
+        const rawSnapshot = await effectivePersistenceAdapter.load();
         const snapshot = rawSnapshot ? migrateSnapshot(rawSnapshot) : null;
-        const nextState = snapshot ? hydrateDataState(snapshot) : createInitialState();
+        let nextState = snapshot ? hydrateDataState(snapshot) : createProductionState();
         const shouldWriteCurrentSnapshot = !rawSnapshot || getSnapshotSchemaVersion(rawSnapshot) !== CURRENT_SCHEMA_VERSION;
 
-        if (isCancelled()) return;
+        if (isCancelled() || isBlocked()) return;
 
         stateRef.current = nextState;
         dispatch({ type: "state/replace", state: nextState });
 
-        if (shouldWriteCurrentSnapshot) {
+        if (bootstrapRemoteData) {
+          try {
+            const remoteState = await bootstrapRemoteData();
+            if (remoteState && !isCancelled() && !isBlocked()) {
+              nextState = remoteState;
+              stateRef.current = nextState;
+              dispatch({ type: "state/replace", state: nextState });
+              await coordinatorRef.current.saveImmediately(nextState);
+            }
+          } catch (error) {
+            if (!snapshot) throw error;
+            if (__DEV__) {
+              console.warn("Remote data bootstrap failed; using local cache", error);
+            }
+          }
+        }
+
+        if (shouldWriteCurrentSnapshot && !isBlocked()) {
           await coordinatorRef.current.saveImmediately(nextState);
         }
 
-        if (isCancelled()) return;
+        if (isCancelled() || isBlocked()) return;
 
         updateHydrationStatus("ready");
         setPersistenceStatus(coordinatorRef.current.getStatus());
@@ -263,16 +510,19 @@ export function DataProvider({
         if (__DEV__) {
           console.warn("Local data hydration failed", error);
         }
-        if (isCancelled()) return;
+        if (isCancelled() || isBlocked()) return;
         setHydrationError(error instanceof Error ? error : new Error("Local data hydration failed"));
         updateHydrationStatus("error");
         setPersistenceStatus(coordinatorRef.current.getStatus());
       }
     },
-    [persistenceAdapter, updateHydrationStatus]
+    [bootstrapRemoteData, effectivePersistenceAdapter, updateHydrationStatus]
   );
 
   const commitActions = useCallback(async (actions: LocalDataAction[], mode: SaveMode = "debounced") => {
+    if (accountDeletionPhaseRef.current !== "active") {
+      throw new DataError("validation", "Удаление аккаунта уже выполняется", { retryable: false });
+    }
     const nextState = actions.reduce(localReducer, stateRef.current);
     stateRef.current = nextState;
     actions.forEach(dispatch);
@@ -315,16 +565,74 @@ export function DataProvider({
   }, [hydrationStatus]);
 
   const resetLocalData = useCallback(async () => {
-    const nextState = createInitialState();
+    const nextState = createProductionState();
 
-    await persistenceAdapter.clear();
+    await effectivePersistenceAdapter.clear();
     stateRef.current = nextState;
     dispatch({ type: "state/replace", state: nextState });
     await coordinatorRef.current.saveImmediately(nextState);
     setHydrationError(null);
     updateHydrationStatus("ready");
     setPersistenceStatus(coordinatorRef.current.getStatus());
-  }, [persistenceAdapter, updateHydrationStatus]);
+  }, [effectivePersistenceAdapter, updateHydrationStatus]);
+
+  const prepareAccountDeletion = useCallback(async () => {
+    if (accountDeletionPhaseRef.current !== "active") {
+      throw new Error("Account deletion cleanup is already active");
+    }
+
+    accountDeletionPhaseRef.current = "preparing";
+    try {
+      await sessionWriteQueueRef.current.pauseAndDrain();
+      await coordinatorRef.current.pauseAndDrain();
+      await sessionTimerPersistence.pauseAndDrain();
+      accountDeletionPhaseRef.current = "prepared";
+    } catch (error) {
+      accountDeletionPhaseRef.current = "active";
+      sessionWriteQueueRef.current.resume();
+      coordinatorRef.current.resume();
+      sessionTimerPersistence.resume();
+      throw error;
+    }
+  }, [sessionTimerPersistence]);
+
+  const rollbackAccountDeletion = useCallback(async () => {
+    if (accountDeletionPhaseRef.current === "committed") return;
+    accountDeletionPhaseRef.current = "active";
+    sessionWriteQueueRef.current.resume();
+    coordinatorRef.current.resume();
+    sessionTimerPersistence.resume();
+  }, [sessionTimerPersistence]);
+
+  const clearAccountData = useCallback(async () => {
+    if (accountDeletionPhaseRef.current === "committed") return;
+    if (accountDeletionPhaseRef.current !== "prepared" && accountDeletionPhaseRef.current !== "committing") {
+      throw new Error("Account deletion cleanup was not prepared");
+    }
+
+    accountDeletionPhaseRef.current = "committing";
+    const sessionIds = [...stateRef.current.sessionIds];
+    try {
+      await sessionWriteQueueRef.current.close();
+      // Timer cleanup reads owner snapshots to classify legacy v1 keys, so it
+      // must finish before the owner snapshot itself is removed.
+      await sessionTimerPersistence.closeAndClearOwner(sessionIds);
+      await coordinatorRef.current.closeAndClear();
+    } catch (error) {
+      // All cleanup primitives are idempotent. Keep the phase retryable after
+      // the server has already confirmed deletion.
+      accountDeletionPhaseRef.current = "prepared";
+      throw error;
+    }
+
+    const nextState = createProductionState();
+    stateRef.current = nextState;
+    dispatch({ type: "state/replace", state: nextState });
+    setHydrationError(null);
+    updateHydrationStatus("ready");
+    setPersistenceStatus("idle");
+    accountDeletionPhaseRef.current = "committed";
+  }, [sessionTimerPersistence, updateHydrationStatus]);
 
   const data = useMemo<DataLayer>(() => {
     return {
@@ -342,6 +650,13 @@ export function DataProvider({
           return isOwned(client, currentOwnerId) ? cloneClient(client) : null;
         },
         async create(input: CreateClientInput) {
+          if (dataApi) {
+            const remoteInput = toRemoteClientInput(input);
+            const client = mapRemoteClient(await dataApi.createClient({ ...remoteInput, name: requiredTrim(input.name, "Новый клиент") }), currentOwnerId);
+            await commitActions([{ type: "client/upsert", client }], "immediate");
+            return cloneClient(client);
+          }
+
           const now = new Date().toISOString();
           const name = requiredTrim(input.name, "Новый клиент");
           const client = {
@@ -358,7 +673,8 @@ export function DataProvider({
             avatarInitials: input.avatarInitials ?? getInitials(name),
             nextWorkoutAt: input.nextWorkoutAt ?? new Date().toISOString(),
             notes: optionalTrim(input.notes) ?? "",
-            restrictions: optionalTrimList(input.restrictions),
+            restrictions: input.restrictions !== undefined ? trimList(input.restrictions) : undefined,
+            intake: normalizeClientIntake(input.intake),
             createdAt: now,
             updatedAt: now,
             metrics: {
@@ -374,6 +690,12 @@ export function DataProvider({
           const currentState = stateRef.current;
           const current = ensureOwned(currentState.clientsById[id], "Client", id, currentOwnerId);
 
+          if (dataApi) {
+            const client = mapRemoteClient(await dataApi.updateClient(id, toRemoteClientInput(patch)), currentOwnerId);
+            await commitActions([{ type: "client/upsert", client }], "immediate");
+            return cloneClient(client);
+          }
+
           const client = {
             ...current,
             ...patch,
@@ -386,13 +708,23 @@ export function DataProvider({
             gender: patch.gender !== undefined ? patch.gender : current.gender,
             goal: patch.goal !== undefined ? optionalTrim(patch.goal) ?? "" : current.goal,
             notes: patch.notes !== undefined ? optionalTrim(patch.notes) ?? "" : current.notes,
-            restrictions: patch.restrictions !== undefined ? optionalTrimList(patch.restrictions) : current.restrictions,
+            restrictions: patch.restrictions !== undefined ? trimList(patch.restrictions) : current.restrictions,
+            intake: patch.intake !== undefined ? mergeClientIntake(current.intake, patch.intake) : current.intake,
             createdAt: current.createdAt,
             updatedAt: new Date().toISOString(),
             metrics: patch.metrics ? { ...current.metrics, ...patch.metrics } : current.metrics
           };
           await commitActions([{ type: "client/upsert", client }], "immediate");
           return cloneClient(client);
+        },
+        async remove(id) {
+          ensureOwned(stateRef.current.clientsById[id], "Client", id, currentOwnerId);
+
+          if (dataApi) {
+            await dataApi.deleteClient(id);
+          }
+
+          await commitActions([{ type: "client/remove", clientId: id }], "immediate");
         }
       },
       exercises: {
@@ -409,6 +741,14 @@ export function DataProvider({
           return isOwned(exercise, currentOwnerId) ? cloneExercise(exercise) : null;
         },
         async create(input: CreateExerciseInput) {
+          if (dataApi) {
+            const remoteInput = toRemoteExerciseInput(input);
+            assertUniqueActiveExerciseName(stateRef.current, { ownerId: currentOwnerId, name: remoteInput.name });
+            const exercise = mapRemoteExercise(await dataApi.createExercise(remoteInput), currentOwnerId);
+            await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
+            return cloneExercise(exercise);
+          }
+
           const now = new Date().toISOString();
           const name = requiredTrim(input.name, "Новое упражнение");
           assertUniqueActiveExerciseName(stateRef.current, { ownerId: currentOwnerId, name });
@@ -445,6 +785,12 @@ export function DataProvider({
             assertUniqueActiveExerciseName(currentState, { ownerId: currentOwnerId, name, excludeExerciseId: id });
           }
 
+          if (dataApi) {
+            const exercise = mapRemoteExercise(await dataApi.updateExercise(id, toRemoteExercisePatch(normalizedPatch)), currentOwnerId);
+            await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
+            return cloneExercise(exercise);
+          }
+
           const exercise = cloneExercise({
             ...current,
             ...normalizedPatch,
@@ -471,6 +817,11 @@ export function DataProvider({
           const current = ensureOwned(stateRef.current.exercisesById[id], "Exercise", id, currentOwnerId);
           if (current.source !== "custom") {
             throw new DataError("validation", "Можно архивировать только свои упражнения", { retryable: false });
+          }
+          if (dataApi) {
+            const exercise = mapRemoteExercise(await dataApi.deleteExercise(id), currentOwnerId);
+            await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
+            return cloneExercise(exercise);
           }
           const exercise = cloneExercise({
             ...current,
@@ -673,22 +1024,30 @@ export function DataProvider({
           const existingDraft = currentState.workoutIds
             .map((id) => currentState.workoutsById[id])
             .find((workout) => workout.ownerId === currentOwnerId && workout.status === "draft" && workout.sourceWorkoutId === workoutId);
-          if (existingDraft) return cloneWorkout(existingDraft);
+          if (existingDraft) {
+            const normalizedDraft = normalizeEditDraftSchedule(existingDraft);
+            if (normalizedDraft !== existingDraft) {
+              await commitActions([{ type: "workout/upsert", workout: normalizedDraft }], "immediate");
+            }
+            return cloneWorkout(normalizedDraft);
+          }
 
           const now = new Date().toISOString();
-          const draft = cloneWorkout({
-            ...source,
-            id: createId("workout"),
-            status: "draft",
-            sourceWorkoutId: source.id,
-            createdAt: now,
-            updatedAt: now,
-            exercises: source.exercises.map((exercise) => ({
-              ...exercise,
-              id: createId("workout-exercise"),
-              sets: exercise.sets.map((set) => ({ ...set, id: createId("set") }))
-            }))
-          });
+          const draft = cloneWorkout(
+            normalizeEditDraftSchedule({
+              ...source,
+              id: createId("workout"),
+              status: "draft",
+              sourceWorkoutId: source.id,
+              createdAt: now,
+              updatedAt: now,
+              exercises: source.exercises.map((exercise) => ({
+                ...exercise,
+                id: createId("workout-exercise"),
+                sets: exercise.sets.map((set) => ({ ...set, id: createId("set") }))
+              }))
+            })
+          );
           await commitActions([{ type: "workout/upsert", workout: draft }], "immediate");
           return cloneWorkout(draft);
         },
@@ -701,6 +1060,15 @@ export function DataProvider({
           const source = ensureOwned(currentState.workoutsById[sourceWorkoutId], "Workout", sourceWorkoutId, currentOwnerId);
           ensureWorkoutCanChangePlan(currentState, currentOwnerId, source);
           const publishMeta = validateDraftForPublish(currentState, currentOwnerId, draft);
+
+          if (dataApi) {
+            const remoteSession = await dataApi.updateWorkoutSession(sourceWorkoutId, {
+              ...workoutToRemoteSessionInput({ ...draft, startsAt: publishMeta.startsAt, timezone: publishMeta.timezone, status: "planned" }, "planned"),
+              scheduledAt: publishMeta.startsAt
+            });
+            await commitActions([...remoteSessionActions(remoteSession, currentOwnerId), { type: "workout/remove", workoutId: draft.id }], "immediate");
+            return cloneWorkout(mapRemoteWorkout(remoteSession, currentOwnerId));
+          }
 
           const workout = cloneWorkout({
             ...source,
@@ -731,6 +1099,14 @@ export function DataProvider({
           const current = ensureWorkoutDraft(ensureOwned(currentState.workoutsById[draftId], "Workout draft", draftId, currentOwnerId), draftId);
           if (current.sourceWorkoutId) return this.applyEditDraft(draftId);
           const publishMeta = validateDraftForPublish(currentState, currentOwnerId, current);
+          if (dataApi) {
+            const remoteSession = await dataApi.createWorkoutSession({
+              ...workoutToRemoteSessionInput({ ...current, startsAt: publishMeta.startsAt, timezone: publishMeta.timezone, status: "planned" }, "planned"),
+              scheduledAt: publishMeta.startsAt
+            });
+            await commitActions([...remoteSessionActions(remoteSession, currentOwnerId), { type: "workout/remove", workoutId: current.id }], "immediate");
+            return cloneWorkout(mapRemoteWorkout(remoteSession, currentOwnerId));
+          }
           const workout = cloneWorkout({
             ...current,
             title: current.title || "Тренировка",
@@ -753,6 +1129,14 @@ export function DataProvider({
           const startsAt = new Date(input.startsAt);
           if (Number.isNaN(startsAt.getTime())) throw new Error("Invalid workout date");
 
+          if (dataApi) {
+            const remoteSession = await dataApi.updateWorkoutSession(workoutId, {
+              scheduledAt: startsAt.toISOString()
+            });
+            await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+            return cloneWorkout(mapRemoteWorkout(remoteSession, currentOwnerId));
+          }
+
           const workout = cloneWorkout({
             ...current,
             startsAt: startsAt.toISOString(),
@@ -767,6 +1151,12 @@ export function DataProvider({
           const current = ensureOwned(currentState.workoutsById[workoutId], "Workout", workoutId, currentOwnerId);
           if (current.status !== "planned") throw new Error("Only planned workout can be cancelled");
           if (hasActiveSession(currentState, currentOwnerId, workoutId)) throw new Error("Workout has active session");
+
+          if (dataApi) {
+            const remoteSession = await dataApi.cancelWorkoutSession(workoutId);
+            await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+            return cloneWorkout(mapRemoteWorkout(remoteSession, currentOwnerId));
+          }
 
           const workout = cloneWorkout({
             ...current,
@@ -804,6 +1194,14 @@ export function DataProvider({
 
           const conflictingSession = selectActiveSessionConflict(currentState, currentOwnerId, workoutId);
           if (conflictingSession) throw new ActiveSessionConflictError(conflictingSession);
+
+          if (dataApi) {
+            const remoteSession = await dataApi.startWorkoutSession(workoutId);
+            const localSession = mapRemoteSession(remoteSession, currentOwnerId);
+            if (!localSession) throw new DataError("unknown", "Не удалось начать тренировку", { retryable: true });
+            await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+            return cloneSession(localSession);
+          }
 
           const now = new Date().toISOString();
           const sessionExercises = workout.exercises.map((exercise, index) => ({
@@ -859,6 +1257,27 @@ export function DataProvider({
           if (!isAvailableExercise(currentState.exercisesById[exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", exerciseId);
           if (current.exercises.some((exercise) => exercise.exerciseId === exerciseId)) return cloneSession(current);
 
+          if (dataApi) {
+            const remoteSession = await dataApi.updateWorkoutSession(sessionId, {
+              items: [
+                ...sessionExercisesToRemoteItems(current.exercises),
+                {
+                  exerciseId,
+                  order: current.exercises.length + 1,
+                  titleSnapshot: getExerciseName(currentState, exerciseId, currentOwnerId),
+                  plannedSets: null,
+                  plannedReps: null,
+                  plannedWeight: null,
+                  notes: null
+                }
+              ]
+            });
+            const localSession = mapRemoteSession(remoteSession, currentOwnerId);
+            if (!localSession) throw new DataError("unknown", "Не удалось добавить упражнение", { retryable: true });
+            await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+            return cloneSession(localSession);
+          }
+
           const session = cloneSession({
             ...current,
             updatedAt: new Date().toISOString(),
@@ -879,6 +1298,21 @@ export function DataProvider({
         },
         async removeExercise(sessionId, exerciseId) {
           const current = ensureOwned(stateRef.current.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
+
+          if (dataApi) {
+            const remoteSession = await dataApi.updateWorkoutSession(sessionId, {
+              items: sessionExercisesToRemoteItems(
+                current.exercises
+                  .filter((exercise) => exercise.exerciseId !== exerciseId)
+                  .map((exercise, index) => ({ ...exercise, order: index + 1 }))
+              )
+            });
+            const localSession = mapRemoteSession(remoteSession, currentOwnerId);
+            if (!localSession) throw new DataError("unknown", "Не удалось удалить упражнение", { retryable: true });
+            await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+            return cloneSession(localSession);
+          }
+
           const session = cloneSession({
             ...current,
             updatedAt: new Date().toISOString(),
@@ -888,6 +1322,19 @@ export function DataProvider({
           return cloneSession(session);
         },
         async update(sessionId, patch: UpdateSessionInput) {
+          if (dataApi && patch.exercises) {
+            return sessionWriteQueueRef.current.enqueue(sessionId, async () => {
+              ensureOwned(stateRef.current.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
+              const remoteSession = await dataApi.updateWorkoutSession(sessionId, {
+                items: sessionExercisesToRemoteItems(patch.exercises ?? [])
+              });
+              const localSession = mapRemoteSession(remoteSession, currentOwnerId);
+              if (!localSession) throw new DataError("unknown", "Не удалось сохранить тренировку", { retryable: true });
+              await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+              return cloneSession(localSession);
+            });
+          }
+
           const current = ensureOwned(stateRef.current.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
           const session = cloneSession({ ...current, ...patch, updatedAt: new Date().toISOString() });
           await commitActions([{ type: "session/upsert", session }]);
@@ -898,6 +1345,15 @@ export function DataProvider({
           const current = ensureOwned(currentState.sessionsById[sessionId], "Session", sessionId, currentOwnerId);
           if (current.status === "completed") return cloneSession(current);
           if (current.status !== "active") throw new Error("Only active session can be completed");
+
+          if (dataApi) {
+            const remoteSession = await dataApi.completeWorkoutSession(sessionId);
+            const localSession = mapRemoteSession(remoteSession, currentOwnerId);
+            if (!localSession) throw new DataError("unknown", "Не удалось завершить тренировку", { retryable: true });
+            await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+            return cloneSession(localSession);
+          }
+
           const durationSeconds = Math.max(0, Math.floor((Date.now() - new Date(current.startedAt).getTime()) / 1000));
           const completedAt = new Date().toISOString();
           const workout = currentState.workoutsById[current.workoutId];
@@ -921,10 +1377,31 @@ export function DataProvider({
             .map(cloneResult);
         },
         async upsertSetResult(input: UpsertWorkoutResultInput) {
+          if (dataApi) {
+            return sessionWriteQueueRef.current.enqueue(input.sessionId, async () => {
+              const currentState = stateRef.current;
+              if (!isOwned(currentState.sessionsById[input.sessionId], currentOwnerId)) throw new DataNotFoundError("Session", input.sessionId);
+              if (!isOwned(currentState.exercisesById[input.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", input.exerciseId);
+              const existing = currentState.resultIds
+                .map((id) => currentState.resultsById[id])
+                .find((result) => {
+                  if (result.ownerId !== currentOwnerId || result.sessionId !== input.sessionId || result.setIndex !== input.setIndex) return false;
+                  if (input.sessionExerciseItemId || result.sessionExerciseItemId) return result.sessionExerciseItemId === input.sessionExerciseItemId;
+                  return result.exerciseId === input.exerciseId;
+                });
+              const resultId = existing?.id ?? createId("result");
+              const remoteSession = await dataApi.upsertWorkoutSessionResults(input.sessionId, toRemoteResultsInput(currentState, currentOwnerId, input, resultId));
+              const remoteResults = mapRemoteResults(remoteSession, currentOwnerId);
+              await commitActions(remoteSessionActions(remoteSession, currentOwnerId), "immediate");
+              const result = remoteResults.find((item) => item.id === resultId) ?? remoteResults.find((item) => item.setIndex === input.setIndex && item.sessionExerciseItemId === input.sessionExerciseItemId);
+              if (!result) throw new DataError("unknown", "Не удалось сохранить результат подхода", { retryable: true });
+              return cloneResult(result);
+            });
+          }
+
           const currentState = stateRef.current;
           if (!isOwned(currentState.sessionsById[input.sessionId], currentOwnerId)) throw new DataNotFoundError("Session", input.sessionId);
           if (!isOwned(currentState.exercisesById[input.exerciseId], currentOwnerId)) throw new DataNotFoundError("Exercise", input.exerciseId);
-
           const existing = currentState.resultIds
             .map((id) => currentState.resultsById[id])
             .find((result) => {
@@ -932,8 +1409,9 @@ export function DataProvider({
               if (input.sessionExerciseItemId || result.sessionExerciseItemId) return result.sessionExerciseItemId === input.sessionExerciseItemId;
               return result.exerciseId === input.exerciseId;
             });
+          const resultId = existing?.id ?? createId("result");
           const result = buildWorkoutResultFromUpsertInput({
-            id: existing?.id ?? createId("result"),
+            id: resultId,
             ownerId: currentOwnerId,
             upsert: input,
             existing
@@ -942,8 +1420,51 @@ export function DataProvider({
           return cloneResult(result);
         },
         async remove(resultId) {
-          if (!isOwned(stateRef.current.resultsById[resultId], currentOwnerId)) throw new DataNotFoundError("Result", resultId);
-          await commitActions([{ type: "result/remove", resultId }], "immediate");
+          const initial = stateRef.current.resultsById[resultId];
+          if (!isOwned(initial, currentOwnerId)) throw new DataNotFoundError("Result", resultId);
+
+          const removeAndReindex = (currentState: LocalDataState, target: WorkoutResult) => {
+            const isSameScope = (result: WorkoutResult) =>
+              result.ownerId === currentOwnerId &&
+              result.sessionId === target.sessionId &&
+              (target.sessionExerciseItemId || result.sessionExerciseItemId
+                ? result.sessionExerciseItemId === target.sessionExerciseItemId
+                : result.exerciseId === target.exerciseId);
+            const scopedResults = currentState.resultIds.map((id) => currentState.resultsById[id]).filter(isSameScope);
+            const remainingResults = scopedResults
+              .filter((result) => result.id !== resultId)
+              .sort((left, right) => left.setIndex - right.setIndex)
+              .map((result, index) => ({ ...result, setIndex: index + 1 }));
+            const actions: LocalDataAction[] = [
+              ...scopedResults.map((result) => ({ type: "result/remove" as const, resultId: result.id })),
+              ...remainingResults.map((result) => ({ type: "result/upsert" as const, result }))
+            ];
+            return { scopedResults, remainingResults, actions };
+          };
+
+          if (dataApi) {
+            await sessionWriteQueueRef.current.enqueue(initial.sessionId, async () => {
+              const currentState = stateRef.current;
+              const target = currentState.resultsById[resultId];
+              if (!isOwned(target, currentOwnerId)) return;
+              const { scopedResults, remainingResults } = removeAndReindex(currentState, target);
+              const session = ensureOwned(currentState.sessionsById[target.sessionId], "Session", target.sessionId, currentOwnerId);
+              const itemId = target.sessionExerciseItemId ?? session.exercises.find((exercise) => exercise.exerciseId === target.exerciseId)?.id;
+              if (!itemId) throw new DataError("validation", "Не удалось определить упражнение для удаления подхода", { retryable: false });
+              const remoteSession = await dataApi.upsertWorkoutSessionResults(target.sessionId, {
+                items: [{ id: itemId, setResults: remainingResults.map(toRemoteSetResult) }]
+              });
+              const remoteActions = remoteSessionActions(remoteSession, currentOwnerId);
+              await commitActions([
+                ...scopedResults.map((result) => ({ type: "result/remove" as const, resultId: result.id })),
+                ...remoteActions
+              ], "immediate");
+            });
+            return;
+          }
+
+          const { actions } = removeAndReindex(stateRef.current, initial);
+          await commitActions(actions, "immediate");
         }
       },
       quickValues: {
@@ -979,24 +1500,45 @@ export function DataProvider({
         }
       }
     };
-  }, [commitActions, currentOwnerId]);
+  }, [commitActions, currentOwnerId, dataApi]);
 
   const retryHydration = useCallback(() => {
     void hydrateLocalData();
   }, [hydrateLocalData]);
 
   const value = useMemo(
-    () => ({ state, data, currentOwnerId, hydrationStatus, hydrationError, persistenceStatus, retryHydration }),
-    [currentOwnerId, data, hydrationError, hydrationStatus, persistenceStatus, retryHydration, state]
+    () => ({
+      state,
+      data,
+      currentOwnerId,
+      hydrationStatus,
+      hydrationError,
+      persistenceStatus,
+      retryHydration,
+      sessionTimerPersistence,
+      prepareAccountDeletion,
+      clearAccountData,
+      rollbackAccountDeletion
+    }),
+    [
+      clearAccountData,
+      currentOwnerId,
+      data,
+      hydrationError,
+      hydrationStatus,
+      persistenceStatus,
+      prepareAccountDeletion,
+      retryHydration,
+      rollbackAccountDeletion,
+      sessionTimerPersistence,
+      state
+    ]
   );
 
   if (hydrationStatus === "idle" || hydrationStatus === "loading") {
     return (
       <DataContext.Provider value={value}>
-        <View style={styles.statusScreen}>
-          <Loader size="medium" tone="brand" />
-          <Text style={styles.statusTitle}>Загружаем данные</Text>
-        </View>
+        <AppSplashScreen />
       </DataContext.Provider>
     );
   }
@@ -1039,7 +1581,7 @@ const styles = StyleSheet.create({
   },
   statusTitle: {
     ...theme.typography.body.lg,
-    color: theme.colors.content.primary,
+    color: theme.colors.content.inkDeep,
     textAlign: "center"
   },
   statusCopy: {
