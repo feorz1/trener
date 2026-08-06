@@ -8,6 +8,7 @@ ENV_EXAMPLE="$REPO_ROOT/.env.production.example"
 RUNBOOK="$REPO_ROOT/deploy/runbooks/production-release.md"
 WORKFLOW="$REPO_ROOT/.github/workflows/release-readiness.yml"
 POSTGRES_RUNNER="$REPO_ROOT/scripts/run-postgres-integration.mjs"
+ADMIN_NGINX="$REPO_ROOT/admin/nginx.conf"
 
 fail() {
   printf 'release ops config test failed: %s\n' "$1" >&2
@@ -26,7 +27,7 @@ done
 
 bash -n "$REPO_ROOT/scripts/fixtures/preflight-bin/psql" || fail "preflight fixture has invalid bash syntax"
 
-for required_file in "$COMPOSE" "$ENV_EXAMPLE" "$RUNBOOK" "$WORKFLOW"; do
+for required_file in "$COMPOSE" "$ENV_EXAMPLE" "$RUNBOOK" "$WORKFLOW" "$ADMIN_NGINX"; do
   [[ -f "$required_file" ]] || fail "required file is missing: $required_file"
 done
 
@@ -39,6 +40,10 @@ grep -q '^  caddy:$' "$COMPOSE" || fail "Caddy release ordering is absent"
 grep -q 'RELEASE_IMAGE_TAG:?set RELEASE_IMAGE_TAG' "$COMPOSE" || fail "immutable release tag is not fail-closed"
 grep -q 'VITE_ADMIN_API_BASE_URL:?set VITE_ADMIN_API_BASE_URL' "$REPO_ROOT/docker-compose.prod.yml" \
   || fail "admin production API origin is not fail-closed"
+grep -q '^[[:space:]]*absolute_redirect off;' "$ADMIN_NGINX" \
+  || fail "admin root redirect may downgrade HTTPS behind Caddy"
+grep -q '^[[:space:]]*return 302 /admin/dashboard;' "$ADMIN_NGINX" \
+  || fail "admin root redirect must remain origin-relative"
 if grep -R -E 'TEST_DATABASE_URL="?\$\{?DATABASE_URL|TEST_DATABASE_URL=.*DATABASE_URL' \
   "$REPO_ROOT/deploy/scripts" "$REPO_ROOT/.github/workflows" >/dev/null; then
   fail "TEST_DATABASE_URL falls back to DATABASE_URL"
