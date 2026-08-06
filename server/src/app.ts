@@ -1,7 +1,9 @@
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
+import { isIP } from "node:net";
 import type { AuthServerConfig } from "./config";
 import { AuthApiError, toErrorPayload } from "./errors";
+import { hashSecret } from "./security";
 import { AuthService } from "./services/authService";
 import type { EmailSender, OAuthProvider, OAuthProviderAdapter } from "./types";
 import type { AuthRepository } from "./repositories/AuthRepository";
@@ -13,6 +15,7 @@ import { createAdminRepository } from "./admin/createAdminRepository";
 import { registerAdminRoutes } from "./admin/routes";
 import type { AdminRepository } from "./admin/types";
 import type { AccountDeletionRepository } from "./accountDeletion/types";
+import { registerPublicInformationRoutes } from "./publicInformationRoutes";
 
 type BuildApiInput = {
   config: AuthServerConfig;
@@ -26,10 +29,18 @@ type BuildApiInput = {
 
 export function buildApi({ config, repository, emailSender, oauthAdapters, accountDeletionRepository, dataRepository, adminRepository }: BuildApiInput) {
   const app = Fastify({
+    trustProxy: config.trustedProxyCidrs.length > 0 ? config.trustedProxyCidrs : false,
     logger: config.isProduction
       ? {
           level: "info",
-          redact: ["req.url", "req.headers.authorization", "req.body.refreshToken", "req.body.code", "req.body.ticket"]
+          redact: [
+            "req.url",
+            "req.headers.authorization",
+            "req.body.refreshToken",
+            "req.body.code",
+            "req.body.ticket",
+            "req.body.recoverySecret"
+          ]
         }
       : false
   });
@@ -74,21 +85,23 @@ export function buildApi({ config, repository, emailSender, oauthAdapters, accou
     time: new Date().toISOString()
   }));
 
+  registerPublicInformationRoutes(app);
+
   app.get("/auth/providers", async () => authService.getProviders());
 
   app.post("/auth/email/start", async (request) => {
     const body = readBody<{ email?: unknown }>(request);
-    return authService.startEmailLogin(readRequiredString(body.email), requestMeta(request));
+    return authService.startEmailLogin(readRequiredString(body.email), requestMeta(request, config));
   });
 
   app.post("/auth/email/verify", async (request) => {
     const body = readBody<{ email?: unknown; code?: unknown }>(request);
-    return authService.verifyEmailCode(readRequiredString(body.email), readRequiredString(body.code), requestMeta(request));
+    return authService.verifyEmailCode(readRequiredString(body.email), readRequiredString(body.code), requestMeta(request, config));
   });
 
   app.get<{ Params: { provider: OAuthProvider }; Querystring: { return_to?: string } }>("/auth/oauth/:provider/start", async (request, reply) => {
     const provider = readOAuthProvider(request.params.provider);
-    const authorizationUrl = await authService.startOAuth(provider, request.query.return_to ?? "app", requestMeta(request));
+    const authorizationUrl = await authService.startOAuth(provider, request.query.return_to ?? "app", requestMeta(request, config));
     if (request.headers.accept?.includes("application/json")) {
       return { authorizationUrl };
     }
@@ -103,12 +116,12 @@ export function buildApi({ config, repository, emailSender, oauthAdapters, accou
 
   app.post("/auth/ticket/exchange", async (request) => {
     const body = readBody<{ ticket?: unknown }>(request);
-    return authService.exchangeLoginTicket(readRequiredString(body.ticket), requestMeta(request));
+    return authService.exchangeLoginTicket(readRequiredString(body.ticket), requestMeta(request, config));
   });
 
   app.post("/auth/refresh", async (request) => {
     const body = readBody<{ refreshToken?: unknown }>(request);
-    return authService.refresh(readRequiredString(body.refreshToken), requestMeta(request));
+    return authService.refresh(readRequiredString(body.refreshToken), requestMeta(request, config));
   });
 
   app.post("/auth/logout", async (request) => {
@@ -117,9 +130,9 @@ export function buildApi({ config, repository, emailSender, oauthAdapters, accou
   });
 
   app.delete("/auth/account", async (request, reply) => {
-    const token = readBearerToken(request.headers.authorization);
-    const body = readBody<{ confirmation?: unknown }>(request);
-    await authService.deleteAccount(token, body.confirmation);
+    const token = readOptionalBearerToken(request.headers.authorization);
+    const body = readBody<{ confirmation?: unknown; operationId?: unknown; recoverySecret?: unknown }>(request);
+    await authService.deleteAccount(token, body.confirmation, body.operationId, body.recoverySecret);
     return reply.status(204).send();
   });
 
@@ -155,12 +168,38 @@ function logSanitizedError(
   }
 }
 
-function requestMeta(request: FastifyRequest) {
+function requestMeta(request: FastifyRequest, config: AuthServerConfig) {
   return {
-    ip: request.ip,
+    ip: hashSecret(`auth-rate:${readClientIp(request)}`, config.tokens.refreshPepper),
     userAgent: request.headers["user-agent"] ?? null,
     deviceId: typeof request.headers["x-device-id"] === "string" ? request.headers["x-device-id"] : null
   };
+}
+
+export function normalizeClientIp(value: string | undefined) {
+  const candidate = value?.trim();
+  if (!candidate) return null;
+  const version = isIP(candidate);
+  if (version === 4) {
+    return candidate.split(".").map((part) => String(Number(part))).join(".");
+  }
+  if (version !== 6) return null;
+
+  const normalized = new URL(`http://[${candidate}]/`).hostname.slice(1, -1).toLowerCase();
+  const mappedIpv4 = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!mappedIpv4) return normalized;
+  const value32 = (Number.parseInt(mappedIpv4[1], 16) * 0x1_0000 + Number.parseInt(mappedIpv4[2], 16)) >>> 0;
+  return [value32 >>> 24, (value32 >>> 16) & 0xff, (value32 >>> 8) & 0xff, value32 & 0xff].join(".");
+}
+
+function readClientIp(request: FastifyRequest) {
+  let proxyResolvedIp: string | undefined;
+  try {
+    proxyResolvedIp = request.ip;
+  } catch {
+    proxyResolvedIp = undefined;
+  }
+  return normalizeClientIp(proxyResolvedIp) ?? normalizeClientIp(request.socket.remoteAddress) ?? "unknown";
 }
 
 function readBody<T>(request: FastifyRequest): T {
@@ -181,4 +220,9 @@ function readBearerToken(header: string | undefined) {
   const match = header?.match(/^Bearer\s+(.+)$/i);
   if (!match) throw new AuthApiError("session_expired", 401);
   return match[1];
+}
+
+function readOptionalBearerToken(header: string | undefined) {
+  const match = header?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] ?? null;
 }

@@ -7,7 +7,7 @@ function readBooleanEnv(value: string | undefined, fallback: boolean) {
 
 const nodeEnv = process.env.NODE_ENV ?? "development";
 const isProduction = nodeEnv === "production";
-const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || (!isProduction ? "http://127.0.0.1:3000" : undefined);
+const apiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || (!isProduction ? "https://api.trener-app.com" : undefined);
 const requestedMockAuth = readBooleanEnv(process.env.EXPO_PUBLIC_USE_MOCK_AUTH ?? process.env.EXPO_PUBLIC_AUTH_MOCK_ENABLED, false);
 
 export const authConfig = {

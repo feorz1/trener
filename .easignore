@@ -1,0 +1,59 @@
+# Version-control and local agent state
+.git
+.github
+.codegraph
+.codex
+.claude
+.ai
+.repo-harness
+
+# Dependencies and generated caches
+node_modules/
+.expo
+.derivedData
+ios/build/
+android/.gradle
+android/app/build
+coverage
+reports/
+output
+artifacts
+*.tgz
+*.tar.gz
+
+# Non-mobile products and operational material
+server/
+admin/
+deploy
+docs
+plans
+tasks
+figma-plugin
+
+# Screenshots, recordings, previews, and scratch data
+.tmp*
+tmp*
+screenshots
+*.tmp
+*.log
+*.err.log
+*.out.log
+.DS_Store
+
+# Local environments and credentials
+.env
+.env.*
+!.env.example
+credentials.json
+*.mobileprovision
+*.p8
+*.p12
+*.pem
+*.key
+*.cer
+
+# IDE state
+.idea
+.vscode
+*.xcuserstate
+xcuserdata/

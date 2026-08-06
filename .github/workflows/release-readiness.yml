@@ -1,0 +1,178 @@
+name: Release readiness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      NODE_ENV: test
+      TEST_DATABASE_URL: postgresql://trainer_ci:ci-${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/trainer_disposable_ci
+      ACCOUNT_DELETION_TEST_DB_ACK: DELETE_DISPOSABLE_DATABASE
+      PRODUCTION_DATABASE_HOSTS: production.invalid
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env:
+          POSTGRES_USER: trainer_ci
+          POSTGRES_PASSWORD: ci-${{ github.run_id }}-${{ github.run_attempt }}
+          POSTGRES_DB: trainer_disposable_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trainer_ci -d trainer_disposable_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Toolchain and Expo dependency checks
+        run: |
+          node --version
+          npm --version
+          npx expo install --check
+          npx --yes expo-doctor@1.17.11
+
+      - name: Static and design gates
+        run: |
+          npm run lint
+          npm run typecheck
+          npm run api:typecheck
+          npm run admin:typecheck
+          npm run design:audit
+          DATABASE_URL="$TEST_DATABASE_URL" npx prisma validate --schema server/prisma/schema.prisma
+
+      - name: Unit and in-memory integration gates
+        run: npm test
+
+      - name: Apply migrations to disposable PostgreSQL
+        run: DATABASE_URL="$TEST_DATABASE_URL" npx prisma migrate deploy --schema server/prisma/schema.prisma
+
+      - name: Real PostgreSQL integration gates
+        run: npm run test:postgres
+
+      - name: Run idempotent system seed twice
+        run: |
+          DATABASE_URL="$TEST_DATABASE_URL" npm run api:seed:exercises
+          DATABASE_URL="$TEST_DATABASE_URL" npm run api:seed:exercises
+
+      - name: Read-only database preflight
+        env:
+          PREFLIGHT_DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+        run: bash deploy/scripts/production-preflight.sh
+
+      - name: Export smoke check
+        run: npm run build:check
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+  native-ios-compile:
+    needs: verify
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      # Reserved .invalid origins make this a non-distributable compile smoke.
+      # The manual production lane below remains fail-closed on real secrets.
+      NODE_ENV: production
+      STORYBOOK_ENABLED: "false"
+      EXPO_PUBLIC_STORYBOOK_ENABLED: "false"
+      EXPO_PUBLIC_USE_MOCK_AUTH: "false"
+      EXPO_PUBLIC_AUTH_MOCK_ENABLED: "false"
+      EXPO_PUBLIC_API_BASE_URL: https://api.invalid
+      EXPO_PUBLIC_PRIVACY_POLICY_URL: https://privacy.invalid
+      EXPO_PUBLIC_SUPPORT_URL: https://support.invalid
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install pinned CocoaPods
+        run: sudo gem install cocoapods -v 1.16.2 --no-document
+
+      - name: Resolve native dependencies
+        working-directory: ios
+        run: pod install
+
+      - name: Compile non-distributable Release app for iOS Simulator
+        run: >-
+          xcodebuild
+          -workspace ios/TrainerFoundation.xcworkspace
+          -scheme TrainerFoundation
+          -configuration Release
+          -sdk iphonesimulator
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath "$RUNNER_TEMP/trainer-release-derived-data"
+          CODE_SIGNING_ALLOWED=NO
+          build
+
+  production-ios-export:
+    if: github.event_name == 'workflow_dispatch'
+    needs: [verify, native-ios-compile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      NODE_ENV: production
+      STORYBOOK_ENABLED: "false"
+      EXPO_PUBLIC_STORYBOOK_ENABLED: "false"
+      EXPO_PUBLIC_USE_MOCK_AUTH: "false"
+      EXPO_PUBLIC_AUTH_MOCK_ENABLED: "false"
+      EXPO_PUBLIC_API_BASE_URL: ${{ secrets.EXPO_PUBLIC_API_BASE_URL }}
+      EXPO_PUBLIC_PRIVACY_POLICY_URL: ${{ secrets.EXPO_PUBLIC_PRIVACY_POLICY_URL }}
+      EXPO_PUBLIC_SUPPORT_URL: ${{ secrets.EXPO_PUBLIC_SUPPORT_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Fail closed on missing or unsafe release URLs
+        shell: bash
+        run: |
+          for variable in EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_PRIVACY_POLICY_URL EXPO_PUBLIC_SUPPORT_URL; do
+            value="${!variable:-}"
+            test -n "$value" || { echo "$variable is not configured" >&2; exit 1; }
+            case "$value" in
+              https://*) ;;
+              *) echo "$variable must use https" >&2; exit 1 ;;
+            esac
+            case "$value" in
+              *localhost*|*127.0.0.1*) echo "$variable must not target a local host" >&2; exit 1 ;;
+            esac
+          done
+
+      - name: Production iOS export
+        run: npx expo export --platform ios --output-dir .expo-export-ios --clear

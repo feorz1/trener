@@ -19,6 +19,21 @@ export type UpsertIdentityInput = {
   rawProfile?: unknown | null;
 };
 
+export type CreateRefreshTokenInput = {
+  userId: string;
+  tokenHash: string;
+  deviceId?: string | null;
+  userAgent?: string | null;
+  ipHash?: string | null;
+  expiresAt: Date;
+  rotatedFromTokenId?: string | null;
+};
+
+export type RotateRefreshTokenResult = {
+  consumed: RefreshTokenRecord;
+  successor: RefreshTokenRecord;
+};
+
 export interface AuthRepository {
   findUserById(id: string): Promise<UserRecord | null>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
@@ -34,17 +49,10 @@ export interface AuthRepository {
     lastSentAt: Date;
   }): Promise<EmailLoginCodeRecord>;
   findLatestEmailCode(email: string): Promise<EmailLoginCodeRecord | null>;
-  incrementEmailCodeAttempts(id: string): Promise<EmailLoginCodeRecord>;
+  claimEmailCodeAttempt(id: string, now: Date, maxAttempts: number): Promise<EmailLoginCodeRecord | null>;
   consumeEmailCode(id: string): Promise<EmailLoginCodeRecord | null>;
-  createRefreshToken(input: {
-    userId: string;
-    tokenHash: string;
-    deviceId?: string | null;
-    userAgent?: string | null;
-    ipHash?: string | null;
-    expiresAt: Date;
-    rotatedFromTokenId?: string | null;
-  }): Promise<RefreshTokenRecord>;
+  createRefreshToken(input: CreateRefreshTokenInput): Promise<RefreshTokenRecord>;
+  rotateRefreshToken(tokenId: string, successor: CreateRefreshTokenInput, now: Date): Promise<RotateRefreshTokenResult | null>;
   findRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenRecord | null>;
   revokeRefreshToken(id: string): Promise<RefreshTokenRecord | null>;
   revokeRefreshTokenFamily(userId: string, deviceId?: string | null): Promise<void>;
@@ -64,5 +72,5 @@ export interface AuthRepository {
     expiresAt: Date;
   }): Promise<LoginTicketRecord>;
   findLoginTicketByHash(ticketHash: string): Promise<LoginTicketRecord | null>;
-  consumeLoginTicket(id: string): Promise<LoginTicketRecord>;
+  consumeLoginTicket(id: string): Promise<LoginTicketRecord | null>;
 }

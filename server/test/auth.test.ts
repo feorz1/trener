@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { loadAuthConfig } from "../src/config";
 import { createEmailSender, ResendEmailSender } from "../src/email";
-import { buildApi } from "../src/app";
+import { buildApi, normalizeClientIp } from "../src/app";
 import { InMemoryAccountDeletionRepository } from "../src/accountDeletion/InMemoryAccountDeletionRepository";
 import { PrismaAccountDeletionRepository } from "../src/accountDeletion/PrismaAccountDeletionRepository";
 import { InMemoryAdminRepository } from "../src/admin/InMemoryAdminRepository";
@@ -47,7 +48,7 @@ class FakeOAuthAdapter implements OAuthProviderAdapter {
 
 function createTestApi(
   env: NodeJS.ProcessEnv = {},
-  deletionOptions: { beforeCommit?: () => void } = {}
+  deletionOptions: { beforeCommit?: () => void | Promise<void> } = {}
 ) {
   const config = loadAuthConfig({
     NODE_ENV: "test",
@@ -88,6 +89,30 @@ function createTestApi(
   return { app, config, repository, dataRepository, adminRepository, accountDeletionRepository, emailSender };
 }
 
+describe("public release information", () => {
+  it.each([
+    ["/privacy", ["Trener", "Оператор приложения Trener", "support@trener-app.com", "тренировочные данные", "Удалить аккаунт"]],
+    ["/support", ["Поддержка Trener", "support@trener-app.com", "Не отправляйте пароль", "/privacy"]]
+  ])("serves %s without authentication and exposes a matching HEAD route", async (path, expectedContent) => {
+    const { app } = createTestApi();
+
+    const response = await app.inject({ method: "GET", url: path });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.headers["content-security-policy"]).toContain("default-src 'none'");
+    for (const content of expectedContent) {
+      expect(response.body).toContain(content);
+    }
+    expect(response.body).not.toContain("OWNER ACTION");
+    expect(response.body).not.toContain("localhost");
+
+    const head = await app.inject({ method: "HEAD", url: path });
+    expect(head.statusCode).toBe(200);
+    expect(head.headers["content-type"]).toContain("text/html");
+    expect(head.body).toBe("");
+  });
+});
+
 describe("production auth backend", () => {
   it("keeps console email blocked in production and reads production SMTP settings", () => {
     const productionEnv = {
@@ -100,6 +125,7 @@ describe("production auth backend", () => {
       OAUTH_STATE_ENCRYPTION_SECRET: "test_oauth_state_secret_12345678901",
       ADMIN_SESSION_PEPPER: "test_admin_session_pepper_12345678901",
       ADMIN_CORS_ORIGIN: "https://admin.example.com",
+      TRUSTED_PROXY_CIDRS: "172.20.0.10/32",
       YANDEX_AUTH_ENABLED: "false",
       VK_AUTH_ENABLED: "false"
     };
@@ -111,6 +137,8 @@ describe("production auth backend", () => {
       SMTP_HOST: "smtp.example.com",
       SMTP_PORT: "587",
       SMTP_SECURE: "true",
+      SMTP_USER: "smtp-user",
+      SMTP_PASSWORD: "smtp-password",
       EMAIL_FROM: "no-reply@example.com",
       EMAIL_FROM_NAME: "Trener"
     });
@@ -131,6 +159,7 @@ describe("production auth backend", () => {
       OAUTH_STATE_ENCRYPTION_SECRET: "test_oauth_state_secret_12345678901",
       ADMIN_SESSION_PEPPER: "test_admin_session_pepper_12345678901",
       ADMIN_CORS_ORIGIN: "https://admin.example.com",
+      TRUSTED_PROXY_CIDRS: "172.20.0.10/32",
       YANDEX_AUTH_ENABLED: "false",
       VK_AUTH_ENABLED: "false",
       EMAIL_SENDER: "resend",
@@ -150,6 +179,126 @@ describe("production auth backend", () => {
     expect(createEmailSender(config)).toBeInstanceOf(ResendEmailSender);
   });
 
+  it("rejects unknown or incomplete production email senders and non-six-digit OTP configuration", () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://user:pass@postgres:5432/app",
+      JWT_ACCESS_SECRET: "test_access_secret_12345678901234567890",
+      REFRESH_TOKEN_PEPPER: "test_refresh_pepper_123456789012345",
+      EMAIL_CODE_PEPPER: "test_email_code_pepper_12345678901",
+      LOGIN_TICKET_PEPPER: "test_login_ticket_pepper_123456789",
+      OAUTH_STATE_ENCRYPTION_SECRET: "test_oauth_state_secret_12345678901",
+      ADMIN_SESSION_PEPPER: "test_admin_session_pepper_12345678901",
+      ADMIN_CORS_ORIGIN: "https://admin.example.com",
+      TRUSTED_PROXY_CIDRS: "172.20.0.10/32",
+      YANDEX_AUTH_ENABLED: "false",
+      VK_AUTH_ENABLED: "false"
+    };
+
+    expect(() => loadAuthConfig({ ...productionEnv, EMAIL_SENDER: "smtpp" })).toThrow(/EMAIL_SENDER must be one of/);
+    expect(() => loadAuthConfig({ ...productionEnv, EMAIL_SENDER: "smtp", EMAIL_FROM: "auth@example.com" })).toThrow(
+      /SMTP_HOST, SMTP_USER, SMTP_PASSWORD/
+    );
+    expect(() => loadAuthConfig({ ...productionEnv, EMAIL_SENDER: "resend", RESEND_API_KEY: "test-key" })).toThrow(/EMAIL_FROM/);
+    expect(() => loadAuthConfig({ EMAIL_CODE_LENGTH: "4" })).toThrow(/must be exactly 6/);
+    expect(() => loadAuthConfig({ EMAIL_CODE_LENGTH: "8" })).toThrow(/must be exactly 6/);
+  });
+
+  it("bounds the account-deletion receipt retention TTL", () => {
+    expect(loadAuthConfig({}).accountDeletion.receiptTtlHours).toBe(24);
+    expect(loadAuthConfig({ ACCOUNT_DELETION_RECEIPT_TTL_HOURS: "48" }).accountDeletion.receiptTtlHours).toBe(48);
+    expect(() => loadAuthConfig({ ACCOUNT_DELETION_RECEIPT_TTL_HOURS: "0" })).toThrow(/integer from 1 to 168/);
+    expect(() => loadAuthConfig({ ACCOUNT_DELETION_RECEIPT_TTL_HOURS: "169" })).toThrow(/integer from 1 to 168/);
+  });
+
+  it("requires explicit bounded trusted proxy networks in production", () => {
+    const productionEnv = {
+      NODE_ENV: "production",
+      DATABASE_URL: "postgresql://user:pass@postgres:5432/app",
+      JWT_ACCESS_SECRET: "test_access_secret_12345678901234567890",
+      REFRESH_TOKEN_PEPPER: "test_refresh_pepper_123456789012345",
+      EMAIL_CODE_PEPPER: "test_email_code_pepper_12345678901",
+      LOGIN_TICKET_PEPPER: "test_login_ticket_pepper_123456789",
+      OAUTH_STATE_ENCRYPTION_SECRET: "test_oauth_state_secret_12345678901",
+      ADMIN_ENABLED: "false",
+      YANDEX_AUTH_ENABLED: "false",
+      VK_AUTH_ENABLED: "false",
+      EMAIL_SENDER: "resend",
+      RESEND_API_KEY: "test-key",
+      EMAIL_FROM: "auth@example.com"
+    };
+
+    expect(() => loadAuthConfig(productionEnv)).toThrow(/TRUSTED_PROXY_CIDRS/);
+    expect(() => loadAuthConfig({ ...productionEnv, TRUSTED_PROXY_CIDRS: "0.0.0.0/0" })).toThrow(/\/0 is forbidden/);
+    expect(() => loadAuthConfig({ ...productionEnv, TRUSTED_PROXY_CIDRS: "not-a-network" })).toThrow(/explicit IP addresses/);
+    expect(loadAuthConfig({ ...productionEnv, TRUSTED_PROXY_CIDRS: "172.20.0.10/32 2001:db8::10/128" }).trustedProxyCidrs).toEqual([
+      "172.20.0.10/32",
+      "2001:db8::10/128"
+    ]);
+  });
+
+  it("normalizes IPv6 and IPv4-mapped client addresses", () => {
+    expect(normalizeClientIp("2001:0db8:0:0:0:0:0:1")).toBe("2001:db8::1");
+    expect(normalizeClientIp("2001:db8::1")).toBe("2001:db8::1");
+    expect(normalizeClientIp("::ffff:192.0.2.1")).toBe("192.0.2.1");
+    expect(normalizeClientIp("not-an-ip")).toBeNull();
+  });
+
+  it("uses trusted forwarded client IPs while direct spoofing and malformed chains fail closed", async () => {
+    const trusted = createTestApi({
+      TRUSTED_PROXY_CIDRS: "10.0.0.2/32",
+      RATE_LIMIT_EMAIL_START_PER_EMAIL: "10",
+      RATE_LIMIT_EMAIL_START_PER_IP: "1",
+      EMAIL_CODE_RESEND_SECONDS: "0"
+    });
+    const injectStart = (email: string, forwardedFor: string, remoteAddress: string) =>
+      trusted.app.inject({
+        method: "POST",
+        url: "/auth/email/start",
+        remoteAddress,
+        headers: { "x-forwarded-for": forwardedFor },
+        payload: { email }
+      });
+
+    expect((await injectStart("proxy-a@example.com", "198.51.100.1", "10.0.0.2")).statusCode).toBe(200);
+    expect((await injectStart("proxy-b@example.com", "203.0.113.2", "10.0.0.2")).statusCode).toBe(200);
+    expect((await injectStart("proxy-c@example.com", "198.51.100.1", "10.0.0.2")).statusCode).toBe(429);
+
+    const direct = createTestApi({
+      TRUSTED_PROXY_CIDRS: "10.0.0.2/32",
+      RATE_LIMIT_EMAIL_START_PER_EMAIL: "10",
+      RATE_LIMIT_EMAIL_START_PER_IP: "1",
+      EMAIL_CODE_RESEND_SECONDS: "0"
+    });
+    const directStart = (email: string, forwardedFor: string) =>
+      direct.app.inject({
+        method: "POST",
+        url: "/auth/email/start",
+        remoteAddress: "198.51.100.20",
+        headers: { "x-forwarded-for": forwardedFor },
+        payload: { email }
+      });
+    expect((await directStart("direct-a@example.com", "192.0.2.1")).statusCode).toBe(200);
+    expect((await directStart("direct-b@example.com", "192.0.2.2")).statusCode).toBe(429);
+
+    const malformed = createTestApi({
+      TRUSTED_PROXY_CIDRS: "10.0.0.2/32",
+      RATE_LIMIT_EMAIL_START_PER_EMAIL: "10",
+      RATE_LIMIT_EMAIL_START_PER_IP: "1",
+      EMAIL_CODE_RESEND_SECONDS: "0"
+    });
+    const malformedStart = (email: string, forwardedFor: string) =>
+      malformed.app.inject({
+        method: "POST",
+        url: "/auth/email/start",
+        remoteAddress: "10.0.0.2",
+        headers: { "x-forwarded-for": forwardedFor },
+        payload: { email }
+      });
+    expect((await malformedStart("malformed-a@example.com", "not-an-ip")).statusCode).toBe(200);
+    expect((await malformedStart("malformed-b@example.com", "still-not-an-ip")).statusCode).toBe(429);
+  });
+
   it("serves health and provider availability", async () => {
     const { app } = createTestApi();
     const health = await app.inject({ method: "GET", url: "/health" });
@@ -165,7 +314,12 @@ describe("production auth backend", () => {
       NODE_ENV: "production",
       DATABASE_URL: "postgresql://user:pass@postgres:5432/app",
       ADMIN_ENABLED: "false",
-      EMAIL_SENDER: "smtp"
+      TRUSTED_PROXY_CIDRS: "172.20.0.10/32",
+      EMAIL_SENDER: "smtp",
+      SMTP_HOST: "smtp.example.com",
+      SMTP_USER: "smtp-user",
+      SMTP_PASSWORD: "smtp-password",
+      EMAIL_FROM: "auth@example.com"
     });
 
     expect(config.providerFlags).toEqual({ email: true, yandex: false, vk: false });
@@ -257,6 +411,25 @@ describe("production auth backend", () => {
     expect(tooMany.json().code).toBe("too_many_attempts");
   });
 
+  it("claims email verification attempts atomically", async () => {
+    const api = createTestApi({ EMAIL_CODE_MAX_ATTEMPTS: "2", RATE_LIMIT_EMAIL_VERIFY_PER_EMAIL: "10" });
+    const email = "attempt-race@example.com";
+    await api.app.inject({ method: "POST", url: "/auth/email/start", payload: { email } });
+    const correctCode = api.emailSender.sent.at(-1)?.code;
+
+    const wrongResponses = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        api.app.inject({ method: "POST", url: "/auth/email/verify", payload: { email, code: "000000" } })
+      )
+    );
+
+    expect(wrongResponses.filter((response) => response.statusCode === 429)).toHaveLength(2);
+    expect((await api.repository.findLatestEmailCode(email))?.attemptCount).toBe(2);
+    const afterLimit = await api.app.inject({ method: "POST", url: "/auth/email/verify", payload: { email, code: correctCode } });
+    expect(afterLimit.statusCode).toBe(429);
+    expect([...api.repository.users.values()].filter((user) => user.email === email)).toHaveLength(0);
+  });
+
   it("rotates refresh tokens, detects reuse, serves /me, and logs out idempotently", async () => {
     const api = createTestApi();
     const { app } = api;
@@ -286,6 +459,70 @@ describe("production auth backend", () => {
     expect(logoutAgain.statusCode).toBe(200);
     const afterLogout = await app.inject({ method: "POST", url: "/auth/refresh", payload: { refreshToken: secondSession.refreshToken } });
     expect(afterLogout.statusCode).toBe(401);
+  });
+
+  it("allows exactly one concurrent refresh rotation and creates one successor", async () => {
+    const api = createTestApi();
+    const session = await signInByEmail(api, "refresh-race@example.com");
+    const original = [...api.repository.refreshTokens.values()].find((record) => record.userId === session.user.id);
+    expect(original).toBeTruthy();
+
+    const responses = await Promise.all([
+      api.app.inject({ method: "POST", url: "/auth/refresh", payload: { refreshToken: session.refreshToken } }),
+      api.app.inject({ method: "POST", url: "/auth/refresh", payload: { refreshToken: session.refreshToken } })
+    ]);
+
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 401]);
+    const success = responses.find((response) => response.statusCode === 200);
+    const rejected = responses.find((response) => response.statusCode === 401);
+    expect(rejected?.json().code).toBe("invalid_refresh_token");
+    expect([...api.repository.refreshTokens.values()].filter((record) => record.rotatedFromTokenId === original?.id)).toHaveLength(1);
+
+    const replayProtectedSuccessor = await api.app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      payload: { refreshToken: success?.json().refreshToken }
+    });
+    expect(replayProtectedSuccessor.statusCode).toBe(401);
+  });
+
+  it("keeps refresh-token reuse revocation in the original device family", async () => {
+    const api = createTestApi();
+    const email = "refresh-family@example.com";
+    await api.app.inject({ method: "POST", url: "/auth/email/start", payload: { email } });
+    const code = api.emailSender.sent.at(-1)?.code;
+    const signedIn = await api.app.inject({
+      method: "POST",
+      url: "/auth/email/verify",
+      headers: { "x-device-id": "trusted-device" },
+      payload: { email, code }
+    });
+    expect(signedIn.statusCode).toBe(200);
+    const original = [...api.repository.refreshTokens.values()].find((record) => record.deviceId === "trusted-device");
+    expect(original).toBeTruthy();
+
+    const rotated = await api.app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      headers: { "x-device-id": "attacker-controlled-device" },
+      payload: { refreshToken: signedIn.json().refreshToken }
+    });
+    expect(rotated.statusCode).toBe(200);
+    const successor = [...api.repository.refreshTokens.values()].find((record) => record.rotatedFromTokenId === original?.id);
+    expect(successor?.deviceId).toBe("trusted-device");
+
+    const replay = await api.app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      payload: { refreshToken: signedIn.json().refreshToken }
+    });
+    expect(replay.statusCode).toBe(401);
+    const revokedSuccessor = await api.app.inject({
+      method: "POST",
+      url: "/auth/refresh",
+      payload: { refreshToken: rotated.json().refreshToken }
+    });
+    expect(revokedSuccessor.statusCode).toBe(401);
   });
 
   it("rejects blocked trainers on /me, refresh, and new login", async () => {
@@ -339,6 +576,28 @@ describe("production auth backend", () => {
     expect(repository.users.size).toBe(firstUserCount);
   });
 
+  it("allows exactly one concurrent login-ticket exchange", async () => {
+    const api = createTestApi({ YANDEX_AUTH_ENABLED: "true", VK_AUTH_ENABLED: "true" });
+    const started = await api.app.inject({
+      method: "GET",
+      url: "/auth/oauth/yandex/start?return_to=app",
+      headers: { accept: "application/json" }
+    });
+    const state = new URL(started.json().authorizationUrl).searchParams.get("state");
+    const callback = await api.app.inject({ method: "GET", url: `/auth/oauth/yandex/callback?code=ok&state=${state}` });
+    const ticket = new URL(callback.headers.location!).searchParams.get("ticket");
+
+    const responses = await Promise.all([
+      api.app.inject({ method: "POST", url: "/auth/ticket/exchange", payload: { ticket } }),
+      api.app.inject({ method: "POST", url: "/auth/ticket/exchange", payload: { ticket } })
+    ]);
+
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([200, 400]);
+    expect(responses.find((response) => response.statusCode === 400)?.json().code).toBe("ticket_already_used");
+    const userId = responses.find((response) => response.statusCode === 200)?.json().user.id;
+    expect([...api.repository.refreshTokens.values()].filter((record) => record.userId === userId)).toHaveLength(1);
+  });
+
   it("rejects expired login tickets", async () => {
     const { app } = createTestApi({ LOGIN_TICKET_TTL_SECONDS: "-1", YANDEX_AUTH_ENABLED: "true", VK_AUTH_ENABLED: "true" });
     const started = await app.inject({ method: "GET", url: "/auth/oauth/vk/start?return_to=app", headers: { accept: "application/json" } });
@@ -370,15 +629,186 @@ describe("production auth backend", () => {
 
   it("requires authentication to delete the current account", async () => {
     const { app } = createTestApi();
+    const credentials = deletionCredentials();
 
     const response = await app.inject({
       method: "DELETE",
       url: "/auth/account",
-      payload: { confirmation: "DELETE" }
+      payload: deletionPayload(credentials)
     });
 
     expect(response.statusCode).toBe(401);
     expect(response.json().code).toBe("session_expired");
+  });
+
+  it("reconciles a completed deletion after the original 204 response is lost", async () => {
+    const api = createTestApi();
+    const session = await signInByEmail(api, "lost-delete-response@example.com");
+    const credentials = deletionCredentials();
+
+    const committed = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(session.accessToken),
+      payload: deletionPayload(credentials)
+    });
+    expect(committed.statusCode).toBe(204);
+
+    const reconciled = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: { authorization: "Bearer expired-after-commit" },
+      payload: deletionPayload(credentials)
+    });
+    expect(reconciled.statusCode).toBe(204);
+    const receipt = api.accountDeletionRepository.receipts.get(credentials.operationId);
+    expect(receipt).toMatchObject({ operationId: credentials.operationId });
+    expect(receipt).not.toHaveProperty("userId");
+    expect(JSON.stringify(receipt)).not.toContain(credentials.recoverySecret);
+
+    receipt!.expiresAt = new Date(0);
+    const reconciledAfterExpiry = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      payload: deletionPayload(credentials)
+    });
+    const wrongProofAfterExpiry = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      payload: deletionPayload({ ...credentials, recoverySecret: "B".repeat(43) })
+    });
+    expect(reconciledAfterExpiry.statusCode).toBe(204);
+    expect(wrongProofAfterExpiry.statusCode).toBe(401);
+    expect(wrongProofAfterExpiry.json().code).toBe("session_expired");
+  });
+
+  it("persists a completed deletion receipt across repository reconstruction", async () => {
+    const api = createTestApi();
+    const session = await signInByEmail(api, "restart-delete@example.com");
+    const credentials = deletionCredentials();
+    const committed = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(session.accessToken),
+      payload: deletionPayload(credentials)
+    });
+    expect(committed.statusCode).toBe(204);
+
+    const restartedDeletionRepository = new InMemoryAccountDeletionRepository(
+      api.repository,
+      api.dataRepository,
+      api.adminRepository
+    );
+    const restartedApp = buildApi({
+      config: api.config,
+      repository: api.repository,
+      dataRepository: api.dataRepository,
+      adminRepository: api.adminRepository,
+      accountDeletionRepository: restartedDeletionRepository,
+      emailSender: api.emailSender,
+      oauthAdapters: {
+        yandex: new FakeOAuthAdapter("yandex"),
+        vk: new FakeOAuthAdapter("vk")
+      }
+    });
+    const reconciled = await restartedApp.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      payload: deletionPayload(credentials)
+    });
+    expect(reconciled.statusCode).toBe(204);
+  });
+
+  it("does not disclose whether an operation is unknown or has the wrong proof", async () => {
+    const api = createTestApi();
+    const session = await signInByEmail(api, "wrong-delete-proof@example.com");
+    const credentials = deletionCredentials();
+    expect(
+      (
+        await api.app.inject({
+          method: "DELETE",
+          url: "/auth/account",
+          headers: authHeaders(session.accessToken),
+          payload: deletionPayload(credentials)
+        })
+      ).statusCode
+    ).toBe(204);
+
+    const wrongProof = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      payload: deletionPayload({ ...credentials, recoverySecret: "B".repeat(43) })
+    });
+    const unknown = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      payload: deletionPayload(deletionCredentials())
+    });
+    expect({ status: wrongProof.statusCode, code: wrongProof.json().code }).toEqual({ status: 401, code: "session_expired" });
+    expect({ status: unknown.statusCode, code: unknown.json().code }).toEqual({ status: 401, code: "session_expired" });
+    expect(api.accountDeletionRepository.receipts.size).toBe(1);
+  });
+
+  it("rejects malformed deletion credentials without changing the account", async () => {
+    const api = createTestApi();
+    const session = await signInByEmail(api, "malformed-delete-credentials@example.com");
+    const invalidOperation = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(session.accessToken),
+      payload: { confirmation: "DELETE", operationId: "not-a-uuid", recoverySecret: "A".repeat(43) }
+    });
+    const invalidSecret = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(session.accessToken),
+      payload: { confirmation: "DELETE", operationId: randomUUID(), recoverySecret: "too-short" }
+    });
+    expect(invalidOperation.statusCode).toBe(400);
+    expect(invalidSecret.statusCode).toBe(400);
+    expect(api.repository.users.has(session.user.id)).toBe(true);
+    expect(api.accountDeletionRepository.receipts.size).toBe(0);
+  });
+
+  it("serializes concurrent retries for the same deletion operation", async () => {
+    let markCommitStarted!: () => void;
+    let releaseCommit!: () => void;
+    const commitStarted = new Promise<void>((resolve) => {
+      markCommitStarted = resolve;
+    });
+    const commitRelease = new Promise<void>((resolve) => {
+      releaseCommit = resolve;
+    });
+    let commitAttempts = 0;
+    const api = createTestApi({}, {
+      beforeCommit: async () => {
+        commitAttempts += 1;
+        markCommitStarted();
+        await commitRelease;
+      }
+    });
+    const session = await signInByEmail(api, "delete-race@example.com");
+    const credentials = deletionCredentials();
+    const first = api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(session.accessToken),
+      payload: deletionPayload(credentials)
+    });
+    await commitStarted;
+    const second = api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(session.accessToken),
+      payload: deletionPayload(credentials)
+    });
+    releaseCommit();
+
+    const responses = await Promise.all([first, second]);
+    expect(responses.map((response) => response.statusCode)).toEqual([204, 204]);
+    expect(commitAttempts).toBe(1);
+    expect(api.accountDeletionRepository.receipts.size).toBe(1);
+    expect(api.repository.users.has(session.user.id)).toBe(false);
   });
 
   it("rejects account deletion without the exact confirmation", async () => {
@@ -389,7 +819,7 @@ describe("production auth backend", () => {
       method: "DELETE",
       url: "/auth/account",
       headers: authHeaders(session.accessToken),
-      payload: { confirmation: "REMOVE" }
+      payload: deletionPayload(deletionCredentials(), "REMOVE")
     });
 
     expect(response.statusCode).toBe(400);
@@ -425,7 +855,7 @@ describe("production auth backend", () => {
       method: "DELETE",
       url: "/auth/account",
       headers: authHeaders(session.accessToken),
-      payload: { confirmation: "DELETE" }
+      payload: deletionPayload(deletionCredentials())
     });
 
     expect(response.statusCode).toBe(204);
@@ -443,6 +873,7 @@ describe("production auth backend", () => {
     const systemExerciseId = seedSystemExercise(api, "system-account-deletion");
     const deletedGraph = await seedTrainerGraph(api, deletedUserId, "deleted");
     const otherGraph = await seedTrainerGraph(api, otherUserId, "other");
+    const deletionCredentialsForUser = deletionCredentials();
 
     await api.repository.createLoginTicket({
       userId: deletedUserId,
@@ -475,7 +906,7 @@ describe("production auth backend", () => {
       method: "DELETE",
       url: "/auth/account",
       headers: authHeaders(deletedSession.accessToken),
-      payload: { confirmation: "DELETE" }
+      payload: deletionPayload(deletionCredentialsForUser)
     });
 
     expect(response.statusCode).toBe(204);
@@ -528,6 +959,22 @@ describe("production auth backend", () => {
 
     const recreatedSession = await signInByEmail(api, "delete-me@example.com");
     expect(recreatedSession.user.id).not.toBe(deletedUserId);
+    const wrongReplayAfterRecreate = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(recreatedSession.accessToken),
+      payload: deletionPayload({ ...deletionCredentialsForUser, recoverySecret: "B".repeat(43) })
+    });
+    expect(wrongReplayAfterRecreate.statusCode).toBe(401);
+    expect(api.repository.users.has(recreatedSession.user.id)).toBe(true);
+    const replayAfterRecreate = await api.app.inject({
+      method: "DELETE",
+      url: "/auth/account",
+      headers: authHeaders(recreatedSession.accessToken),
+      payload: deletionPayload(deletionCredentialsForUser)
+    });
+    expect(replayAfterRecreate.statusCode).toBe(204);
+    expect(api.repository.users.has(recreatedSession.user.id)).toBe(true);
     const recreatedBootstrap = await api.app.inject({
       method: "GET",
       url: "/sync/bootstrap",
@@ -559,7 +1006,7 @@ describe("production auth backend", () => {
       method: "DELETE",
       url: "/auth/account",
       headers: authHeaders(session.accessToken),
-      payload: { confirmation: "DELETE" }
+      payload: deletionPayload(deletionCredentials())
     });
 
     expect(response.statusCode).toBe(409);
@@ -645,7 +1092,7 @@ describe("production auth backend", () => {
       method: "DELETE",
       url: "/auth/account",
       headers: authHeaders(targetSession.accessToken),
-      payload: { confirmation: "DELETE" }
+      payload: deletionPayload(deletionCredentials())
     });
 
     expect(response.statusCode).toBe(409);
@@ -657,7 +1104,13 @@ describe("production auth backend", () => {
     const api = createTestApi();
     const session = await signInByEmail(api, "atomic-in-memory@example.com");
 
-    const deletion = api.accountDeletionRepository.deleteAccount(session.user.id);
+    const credentials = deletionCredentials();
+    const deletion = api.accountDeletionRepository.deleteAccount(
+      session.user.id,
+      credentials.operationId,
+      "test-proof-hash",
+      new Date(Date.now() + 60_000)
+    );
     const concurrentUser = await api.repository.createUser({ email: "concurrent@example.com" });
     await deletion;
 
@@ -665,21 +1118,72 @@ describe("production auth backend", () => {
     expect(api.repository.users.get(concurrentUser.id)).toEqual(concurrentUser);
   });
 
-  it("retries a Prisma serialization conflict before reporting deletion success", async () => {
+  it("retries a raw-query Prisma serialization conflict before reporting deletion success", async () => {
     let attempts = 0;
     const fakePrisma = {
       async $transaction() {
         attempts += 1;
-        if (attempts === 1) throw Object.assign(new Error("serialization conflict"), { code: "P2034" });
-        return { email: "retry@example.com" };
+        if (attempts === 1) {
+          throw Object.assign(new Error("raw query serialization conflict"), {
+            code: "P2010",
+            meta: { code: "40001" }
+          });
+        }
+        return { email: "retry@example.com", alreadyCompleted: false };
       }
     };
     const repository = new PrismaAccountDeletionRepository(fakePrisma as never);
 
-    await expect(repository.deleteAccount("00000000-0000-4000-8000-000000000001")).resolves.toEqual({
-      email: "retry@example.com"
+    await expect(
+      repository.deleteAccount(
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+        "test-proof-hash",
+        new Date(Date.now() + 60_000)
+      )
+    ).resolves.toEqual({
+      email: "retry@example.com",
+      alreadyCompleted: false
     });
     expect(attempts).toBe(2);
+  });
+
+  it("keeps an expired Prisma deletion receipt reconcilable only with the correct proof", async () => {
+    const receipt = {
+      operationId: "00000000-0000-4000-8000-000000000002",
+      recoverySecretHash: "correct-proof-hash",
+      createdAt: new Date(0),
+      completedAt: new Date(0),
+      expiresAt: new Date(0)
+    };
+    const fakePrisma = {
+      async $transaction(callback: (transaction: unknown) => Promise<unknown>) {
+        return callback({
+          $queryRaw: async () => [],
+          accountDeletionReceipt: {
+            findUnique: async () => receipt
+          }
+        });
+      }
+    };
+    const repository = new PrismaAccountDeletionRepository(fakePrisma as never);
+
+    await expect(
+      repository.deleteAccount(
+        "00000000-0000-4000-8000-000000000001",
+        receipt.operationId,
+        receipt.recoverySecretHash,
+        new Date(0)
+      )
+    ).resolves.toEqual({ email: null, alreadyCompleted: true });
+    await expect(
+      repository.deleteAccount(
+        "00000000-0000-4000-8000-000000000001",
+        receipt.operationId,
+        "wrong-proof-hash",
+        new Date(0)
+      )
+    ).rejects.toMatchObject({ code: "session_expired", statusCode: 401 });
   });
 
   it("rolls back every account-owned store when deletion fails before commit", async () => {
@@ -714,7 +1218,7 @@ describe("production auth backend", () => {
       method: "DELETE",
       url: "/auth/account",
       headers: authHeaders(deletedSession.accessToken),
-      payload: { confirmation: "DELETE" }
+      payload: deletionPayload(deletionCredentials())
     });
 
     expect(response.statusCode).toBe(500);
@@ -750,6 +1254,17 @@ async function signInByEmail(api: ReturnType<typeof createTestApi>, email = "tra
 
 function authHeaders(accessToken: string) {
   return { authorization: `Bearer ${accessToken}` };
+}
+
+function deletionCredentials() {
+  return {
+    operationId: randomUUID(),
+    recoverySecret: "A".repeat(43)
+  };
+}
+
+function deletionPayload(credentials: ReturnType<typeof deletionCredentials>, confirmation = "DELETE") {
+  return { confirmation, ...credentials };
 }
 
 function seedSystemExercise(api: ReturnType<typeof createTestApi>, id: string) {
@@ -811,6 +1326,7 @@ function snapshotDeletionStores(api: ReturnType<typeof createTestApi>) {
     workoutSessions: [...api.dataRepository.workoutSessions.entries()],
     activityEvents: api.dataRepository.activityEvents,
     adminTrainers: [...api.adminRepository.trainers.entries()],
-    adminAuditLogs: api.adminRepository.auditLogs
+    adminAuditLogs: api.adminRepository.auditLogs,
+    accountDeletionReceipts: [...api.accountDeletionRepository.receipts.entries()]
   });
 }

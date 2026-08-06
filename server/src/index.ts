@@ -30,7 +30,7 @@ async function main() {
   console.info(`[api] listening on ${config.apiBaseUrl}`);
 }
 
-void main().catch((error) => {
-  console.error(error);
+void main().catch(() => {
+  console.error("[api] startup failed; inspect validated environment and service health");
   process.exit(1);
 });

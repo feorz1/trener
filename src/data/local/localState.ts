@@ -56,7 +56,13 @@ export function cloneWorkout(workout: Workout): Workout {
 export function cloneSession(session: WorkoutSession): WorkoutSession {
   return {
     ...session,
-    exercises: session.exercises.map((exercise) => ({ ...exercise }))
+    exercises: session.exercises.map((exercise) => ({
+      ...exercise,
+      plannedSetTargets: exercise.plannedSetTargets?.map((target) => ({
+        ...target,
+        values: target.values ? { ...target.values } : undefined
+      }))
+    }))
   };
 }
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Children, useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import {
   AccessibilityInfo,
   Animated,
@@ -73,6 +73,9 @@ export function ModalBody({
   style
 }: ModalBodyProps) {
   const hasBodyText = showBodyText && Boolean(subheader || description);
+  const hasBodyContent = hasBodyText || Children.toArray(children).length > 0;
+
+  if (!hasBodyContent) return null;
 
   return (
     <View style={[styles.body, style]}>

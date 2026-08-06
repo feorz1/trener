@@ -134,8 +134,11 @@ model Exercise {
 
   name        String    @db.Text
   muscleGroup String?   @map("muscle_group") @db.Text
+  primaryMuscles Json?  @map("primary_muscles") @db.JsonB
+  secondaryMuscles Json? @map("secondary_muscles") @db.JsonB
   equipment   String?   @db.Text
   description String?   @db.Text
+  resultType  String?   @map("result_type") @db.Text
   isSystem    Boolean   @default(false) @map("is_system")
   systemKey   String?   @unique @map("system_key") @db.Text
 
@@ -186,6 +189,10 @@ model WorkoutTemplateItem {
 
   order              Int
   titleSnapshot      String?  @map("title_snapshot") @db.Text
+  resultType         String?  @map("result_type") @db.Text
+  day                String?  @db.Text
+  supersetWithNext   Boolean? @map("superset_with_next")
+  plannedSetTargets  Json?    @map("planned_set_targets") @db.JsonB
   plannedSets        Int?     @map("planned_sets")
   plannedReps        Int?     @map("planned_reps")
   plannedWeight      Float?   @map("planned_weight")
@@ -214,6 +221,12 @@ model WorkoutSession {
   title              String    @db.Text
   status             WorkoutSessionStatus @default(PLANNED)
   scheduledAt        DateTime? @map("scheduled_at")
+  timezone           String?   @db.Text
+  durationMinutes    Int?      @map("duration_minutes")
+  focus              String?   @db.Text
+  location           String?   @db.Text
+  repeatDays         Json?     @map("repeat_days") @db.JsonB
+  scheduleTimes      Json?     @map("schedule_times") @db.JsonB
   startedAt          DateTime? @map("started_at")
   finishedAt         DateTime? @map("finished_at")
   notes              String?   @db.Text
@@ -251,6 +264,10 @@ model WorkoutSessionItem {
 
   order              Int
   titleSnapshot      String   @map("title_snapshot") @db.Text
+  resultType         String?  @map("result_type") @db.Text
+  day                String?  @db.Text
+  supersetWithNext   Boolean? @map("superset_with_next")
+  plannedSetTargets  Json?    @map("planned_set_targets") @db.JsonB
   plannedSets        Int?     @map("planned_sets")
   plannedReps        Int?     @map("planned_reps")
   plannedWeight      Float?   @map("planned_weight")
@@ -285,6 +302,17 @@ model WorkoutSetResult {
 
   @@index([workoutSessionItemId])
   @@map("workout_set_results")
+}
+
+model AccountDeletionReceipt {
+  operationId        String   @id @map("operation_id") @db.Uuid
+  recoverySecretHash String   @map("recovery_secret_hash") @db.Text
+  completedAt        DateTime @map("completed_at")
+  expiresAt          DateTime @map("expires_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("account_deletion_receipts")
 }
 
 model ActivityEvent {

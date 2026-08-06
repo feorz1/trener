@@ -1,4 +1,5 @@
-import type { WorkoutResultType } from "../types";
+import type { MetricValues } from "@/types";
+import type { RepeatDay, WorkoutResultType } from "../types";
 
 export type AuthorizedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -77,6 +78,8 @@ export type DataApiExercise = {
   trainerId?: string | null;
   name: string;
   muscleGroup?: string | null;
+  primaryMuscles?: string[] | null;
+  secondaryMuscles?: string[] | null;
   equipment?: string | null;
   description?: string | null;
   resultType?: WorkoutResultType | null;
@@ -86,11 +89,25 @@ export type DataApiExercise = {
   deletedAt?: string | null;
 };
 
+export type DataApiWorkoutPlannedSetTarget = {
+  id: string;
+  order: number;
+  values?: MetricValues | null;
+  targetWeightKg?: number | null;
+  targetReps?: number | null;
+  targetDurationSeconds?: number | null;
+  targetDistanceMeters?: number | null;
+};
+
 export type DataApiWorkoutItem = {
   id: string;
   exerciseId?: string | null;
   order: number;
   titleSnapshot?: string | null;
+  resultType?: WorkoutResultType | null;
+  day?: RepeatDay | null;
+  supersetWithNext?: boolean | null;
+  plannedSetTargets?: DataApiWorkoutPlannedSetTarget[] | null;
   plannedSets?: number | null;
   plannedReps?: number | null;
   plannedWeight?: number | null;
@@ -140,6 +157,12 @@ export type DataApiWorkoutSession = {
   title: string;
   status: "planned" | "in_progress" | "completed" | "cancelled";
   scheduledAt?: string | null;
+  timezone?: string | null;
+  durationMinutes?: number | null;
+  focus?: string | null;
+  location?: string | null;
+  repeatDays?: RepeatDay[] | null;
+  scheduleTimes?: Partial<Record<RepeatDay, string>> | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   notes?: string | null;
@@ -170,8 +193,11 @@ export type DataApiClientInput = {
 export type DataApiExerciseInput = {
   name?: string;
   muscleGroup?: string | null;
+  primaryMuscles?: string[] | null;
+  secondaryMuscles?: string[] | null;
   equipment?: string | null;
   description?: string | null;
+  resultType?: WorkoutResultType | null;
 };
 
 export type DataApiWorkoutTemplateInput = {
@@ -188,6 +214,12 @@ export type DataApiWorkoutSessionInput = {
   title?: string;
   status?: "planned" | "in_progress" | "completed" | "cancelled";
   scheduledAt?: string | null;
+  timezone?: string | null;
+  durationMinutes?: number | null;
+  focus?: string | null;
+  location?: string | null;
+  repeatDays?: RepeatDay[] | null;
+  scheduleTimes?: Partial<Record<RepeatDay, string>> | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   notes?: string | null;

@@ -74,7 +74,7 @@ export interface AuthApiClient {
   verifyEmailCode(email: string, code: string): Promise<AuthSession>;
   refresh(refreshToken: string): Promise<AuthRefreshResult>;
   logout(refreshToken: string): Promise<void>;
-  deleteAccount(accessToken: string): Promise<void>;
+  deleteAccount(accessToken: string | null, operationId: string, recoverySecret: string): Promise<void>;
   getMe(accessToken: string): Promise<AuthUser>;
 }
 

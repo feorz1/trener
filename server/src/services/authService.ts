@@ -80,16 +80,23 @@ export class AuthService {
     if (latest.expiresAt.getTime() <= Date.now()) throw new AuthApiError("code_expired", 400);
     if (latest.attemptCount >= this.config.emailCodes.maxAttempts) throw new AuthApiError("too_many_attempts", 429);
 
-    const expectedHash = this.hashEmailCode(email, code);
-    if (!safeCompareHash(latest.codeHash, expectedHash)) {
-      const updated = await this.repository.incrementEmailCodeAttempts(latest.id);
-      if (updated.attemptCount >= this.config.emailCodes.maxAttempts) {
+    const claimed = await this.repository.claimEmailCodeAttempt(latest.id, new Date(), this.config.emailCodes.maxAttempts);
+    if (!claimed) {
+      const current = await this.repository.findLatestEmailCode(email);
+      if (current?.expiresAt && current.expiresAt.getTime() <= Date.now()) throw new AuthApiError("code_expired", 400);
+      if (current && current.attemptCount >= this.config.emailCodes.maxAttempts) {
         throw new AuthApiError("too_many_attempts", 429);
       }
       throw new AuthApiError("invalid_code", 400);
     }
 
-    const consumedCode = await this.repository.consumeEmailCode(latest.id);
+    const expectedHash = this.hashEmailCode(email, code);
+    if (!safeCompareHash(claimed.codeHash, expectedHash)) {
+      if (claimed.attemptCount >= this.config.emailCodes.maxAttempts) throw new AuthApiError("too_many_attempts", 429);
+      throw new AuthApiError("invalid_code", 400);
+    }
+
+    const consumedCode = await this.repository.consumeEmailCode(claimed.id);
     if (!consumedCode) throw new AuthApiError("invalid_code", 400);
     let user = await this.repository.findUserByEmail(email);
     if (!user) {
@@ -181,7 +188,8 @@ export class AuthService {
     this.ensureProviderEnabled(record.provider);
     if (record.consumedAt) throw new AuthApiError("ticket_already_used", 400);
     if (record.expiresAt.getTime() <= Date.now()) throw new AuthApiError("ticket_expired", 400);
-    await this.repository.consumeLoginTicket(record.id);
+    const consumed = await this.repository.consumeLoginTicket(record.id);
+    if (!consumed) throw new AuthApiError("ticket_already_used", 400);
     const user = await this.repository.findUserById(record.userId);
     if (!user || user.deletedAt) throw new AuthApiError("invalid_ticket", 400);
     this.assertUserCanAuthenticate(user);
@@ -203,13 +211,20 @@ export class AuthService {
     const user = await this.repository.findUserById(token.userId);
     if (!user || user.deletedAt) throw new AuthApiError("session_expired", 401);
     this.assertUserCanAuthenticate(user);
-    await this.repository.revokeRefreshToken(token.id);
-    return this.createTokens(user.id, {
-      deviceId: meta.deviceId ?? token.deviceId,
+    const nextTokens = this.buildTokenPair(user.id, {
+      // The refresh family is immutable. A request header may describe the
+      // caller, but it must never move the successor outside reuse revocation.
+      deviceId: token.deviceId,
       userAgent: meta.userAgent ?? token.userAgent,
       ip: meta.ip,
       rotatedFromTokenId: token.id
     });
+    const rotated = await this.repository.rotateRefreshToken(token.id, nextTokens.record, new Date());
+    if (!rotated) {
+      await this.repository.revokeRefreshTokenFamily(token.userId, token.deviceId ?? undefined);
+      throw new AuthApiError("invalid_refresh_token", 401);
+    }
+    return nextTokens.response;
   }
 
   async logout(refreshToken: string) {
@@ -220,10 +235,36 @@ export class AuthService {
     return { ok: true as const };
   }
 
-  async deleteAccount(accessToken: string, confirmation: unknown) {
-    const user = await this.requireAuthenticatedUser(accessToken, { allowBlocked: true });
+  async deleteAccount(
+    accessToken: string | null,
+    confirmation: unknown,
+    operationIdInput: unknown,
+    recoverySecretInput: unknown
+  ) {
     if (confirmation !== "DELETE") throw new AuthApiError("validation", 400);
-    const deleted = await this.accountDeletionRepository.deleteAccount(user.id);
+    const operationId = readDeletionOperationId(operationIdInput);
+    const recoverySecret = readDeletionRecoverySecret(recoverySecretInput);
+    const recoverySecretHash = hashSecret(
+      `account-deletion-recovery:${operationId}:${recoverySecret}`,
+      this.config.tokens.refreshPepper
+    );
+    const receipt = await this.accountDeletionRepository.findDeletionReceipt(operationId);
+    if (receipt) {
+      if (!safeCompareHash(receipt.recoverySecretHash, recoverySecretHash)) {
+        throw new AuthApiError("session_expired", 401);
+      }
+      return;
+    }
+    if (!accessToken) throw new AuthApiError("session_expired", 401);
+
+    const user = await this.requireAuthenticatedUser(accessToken, { allowBlocked: true });
+    const expiresAt = new Date(Date.now() + this.config.accountDeletion.receiptTtlHours * 60 * 60 * 1000);
+    const deleted = await this.accountDeletionRepository.deleteAccount(
+      user.id,
+      operationId,
+      recoverySecretHash,
+      expiresAt
+    );
     if (deleted.email) this.clearEmailRateLimits(deleted.email);
   }
 
@@ -268,13 +309,19 @@ export class AuthService {
   }
 
   private async createTokens(userId: string, meta: RequestMeta & { rotatedFromTokenId?: string | null }) {
+    const tokens = this.buildTokenPair(userId, meta);
+    await this.repository.createRefreshToken(tokens.record);
+    return tokens.response;
+  }
+
+  private buildTokenPair(userId: string, meta: RequestMeta & { rotatedFromTokenId?: string | null }) {
     const signed = signAccessToken({
       userId,
       secret: this.config.tokens.accessSecret,
       ttlMinutes: this.config.tokens.accessTtlMinutes
     });
     const refreshToken = randomToken(48);
-    await this.repository.createRefreshToken({
+    const record = {
       userId,
       tokenHash: hashSecret(refreshToken, this.config.tokens.refreshPepper),
       deviceId: meta.deviceId ?? null,
@@ -282,11 +329,14 @@ export class AuthService {
       ipHash: meta.ip ? hashSecret(meta.ip, this.config.tokens.refreshPepper) : null,
       expiresAt: new Date(Date.now() + this.config.tokens.refreshTtlDays * 24 * 60 * 60 * 1000),
       rotatedFromTokenId: meta.rotatedFromTokenId ?? null
-    });
+    };
     return {
-      accessToken: signed.token,
-      refreshToken,
-      expiresAt: signed.expiresAt.toISOString()
+      record,
+      response: {
+        accessToken: signed.token,
+        refreshToken,
+        expiresAt: signed.expiresAt.toISOString()
+      }
     };
   }
 
@@ -370,6 +420,23 @@ export function normalizeEmail(email: string) {
   const [local, domain] = trimmed.split("@");
   if (!local || !domain) return trimmed;
   return `${local}@${domain.toLowerCase()}`;
+}
+
+function readDeletionOperationId(value: unknown) {
+  if (
+    typeof value !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  ) {
+    throw new AuthApiError("validation", 400, "operationId is invalid");
+  }
+  return value.toLowerCase();
+}
+
+function readDeletionRecoverySecret(value: unknown) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(value)) {
+    throw new AuthApiError("validation", 400, "recoverySecret is invalid");
+  }
+  return value;
 }
 
 export function isValidEmail(email: string) {

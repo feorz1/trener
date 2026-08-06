@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { Socket } from "node:net";
+import { isIP, Socket } from "node:net";
 import type { AuthServerConfig } from "../config";
 import { AuthApiError } from "../errors";
+import { hashSecret } from "../security";
 import type { AuthProvider } from "../types";
 import type { AdminService } from "./AdminService";
 import type { AdminRepository, TimeseriesMetric, TimeseriesRange } from "./types";
@@ -16,9 +17,15 @@ type RegisterAdminRoutesInput = {
 export function registerAdminRoutes({ app, config, service, repository }: RegisterAdminRoutesInput) {
   const cookieOptions = cookieAttributes(config);
 
+  async function requireAdminMutation(request: FastifyRequest) {
+    assertTrustedBrowserRequest(request, config);
+    return service.requireSession(readSessionCookie(request, config), readCsrfToken(request), true);
+  }
+
   app.post("/admin/auth/login", async (request, reply) => {
+    assertTrustedBrowserRequest(request, config);
     const body = readBody(request);
-    const result = await service.login(requiredString(body.email), requiredString(body.password), requestMeta(request));
+    const result = await service.login(requiredString(body.email), requiredString(body.password), requestMeta(request, config));
     setCookie(reply, config.admin.cookieName, result.sessionToken, cookieOptions);
     setCookie(reply, config.admin.csrfCookieName, result.csrfToken, { ...cookieOptions, httpOnly: false });
     return {
@@ -29,7 +36,8 @@ export function registerAdminRoutes({ app, config, service, repository }: Regist
   });
 
   app.post("/admin/auth/logout", async (request, reply) => {
-    const response = await service.logout(readSessionCookie(request, config), readCsrfToken(request, config), requestMeta(request));
+    assertTrustedBrowserRequest(request, config);
+    const response = await service.logout(readSessionCookie(request, config), readCsrfToken(request), requestMeta(request, config));
     clearCookie(reply, config.admin.cookieName, cookieOptions);
     clearCookie(reply, config.admin.csrfCookieName, { ...cookieOptions, httpOnly: false });
     return response;
@@ -77,14 +85,14 @@ export function registerAdminRoutes({ app, config, service, repository }: Regist
   app.get<{ Params: { id: string } }>("/admin/trainers/:id/clients", async (request) => {
     const { admin } = await service.requireSession(readSessionCookie(request, config));
     const items = await repository.listTrainerClients(request.params.id);
-    await service.audit(admin.id, "trainer.viewed", "trainer", request.params.id, { view: "clients" }, requestMeta(request));
+    await service.audit(admin.id, "trainer.viewed", "trainer", request.params.id, { view: "clients" }, requestMeta(request, config));
     return { data: items };
   });
 
   app.get<{ Params: { id: string } }>("/admin/trainers/:id/workouts", async (request) => {
     const { admin } = await service.requireSession(readSessionCookie(request, config));
     const items = await repository.listTrainerWorkouts(request.params.id);
-    await service.audit(admin.id, "trainer.viewed", "trainer", request.params.id, { view: "workouts" }, requestMeta(request));
+    await service.audit(admin.id, "trainer.viewed", "trainer", request.params.id, { view: "workouts" }, requestMeta(request, config));
     return { data: items };
   });
 
@@ -92,35 +100,35 @@ export function registerAdminRoutes({ app, config, service, repository }: Regist
     const { admin } = await service.requireSession(readSessionCookie(request, config));
     const trainer = await repository.getTrainerDetail(request.params.id);
     if (!trainer) throw new AuthApiError("not_found", 404);
-    await service.audit(admin.id, "trainer.viewed", "trainer", request.params.id, { view: "detail" }, requestMeta(request));
+    await service.audit(admin.id, "trainer.viewed", "trainer", request.params.id, { view: "detail" }, requestMeta(request, config));
     return trainer;
   });
 
   app.post<{ Params: { id: string } }>("/admin/trainers/:id/block", async (request) => {
-    const { admin } = await service.requireSession(readSessionCookie(request, config), readCsrfToken(request, config), true);
+    const { admin } = await requireAdminMutation(request);
     service.assertDangerousRole(admin);
     const body = readBody(request);
     const trainer = await repository.setTrainerBlocked(request.params.id, true, optionalString(body.reason) ?? "admin_action");
     if (!trainer) throw new AuthApiError("not_found", 404);
     const revokedSessions = await repository.revokeTrainerSessions(request.params.id);
-    await service.audit(admin.id, "trainer.block", "trainer", request.params.id, { reason: optionalString(body.reason), revokedSessions }, requestMeta(request));
+    await service.audit(admin.id, "trainer.block", "trainer", request.params.id, { reason: optionalString(body.reason), revokedSessions }, requestMeta(request, config));
     return { ok: true, trainer, revokedSessions };
   });
 
   app.post<{ Params: { id: string } }>("/admin/trainers/:id/unblock", async (request) => {
-    const { admin } = await service.requireSession(readSessionCookie(request, config), readCsrfToken(request, config), true);
+    const { admin } = await requireAdminMutation(request);
     service.assertDangerousRole(admin);
     const trainer = await repository.setTrainerBlocked(request.params.id, false);
     if (!trainer) throw new AuthApiError("not_found", 404);
-    await service.audit(admin.id, "trainer.unblock", "trainer", request.params.id, null, requestMeta(request));
+    await service.audit(admin.id, "trainer.unblock", "trainer", request.params.id, null, requestMeta(request, config));
     return { ok: true, trainer };
   });
 
   app.post<{ Params: { id: string } }>("/admin/trainers/:id/revoke-sessions", async (request) => {
-    const { admin } = await service.requireSession(readSessionCookie(request, config), readCsrfToken(request, config), true);
+    const { admin } = await requireAdminMutation(request);
     service.assertDangerousRole(admin);
     const revokedSessions = await repository.revokeTrainerSessions(request.params.id);
-    await service.audit(admin.id, "trainer.sessions_revoked", "trainer", request.params.id, { revokedSessions }, requestMeta(request));
+    await service.audit(admin.id, "trainer.sessions_revoked", "trainer", request.params.id, { revokedSessions }, requestMeta(request, config));
     return { ok: true, revokedSessions };
   });
 
@@ -183,11 +191,34 @@ async function checkRedisStatus(redisUrl: string | undefined) {
   }
 }
 
-function requestMeta(request: FastifyRequest) {
+function requestMeta(request: FastifyRequest, config: AuthServerConfig) {
   return {
-    ip: request.ip,
+    ip: hashSecret(`admin-rate:${readClientIp(request)}`, config.admin.sessionPepper),
     userAgent: request.headers["user-agent"] ?? null
   };
+}
+
+function readClientIp(request: FastifyRequest) {
+  let proxyResolvedIp: string | undefined;
+  try {
+    proxyResolvedIp = request.ip;
+  } catch {
+    proxyResolvedIp = undefined;
+  }
+  return normalizeIp(proxyResolvedIp) ?? normalizeIp(request.socket.remoteAddress) ?? "unknown";
+}
+
+function normalizeIp(value: string | undefined) {
+  const candidate = value?.trim();
+  if (!candidate) return null;
+  const version = isIP(candidate);
+  if (version === 4) return candidate.split(".").map((part) => String(Number(part))).join(".");
+  if (version !== 6) return null;
+  const normalized = new URL(`http://[${candidate}]/`).hostname.slice(1, -1).toLowerCase();
+  const mappedIpv4 = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (!mappedIpv4) return normalized;
+  const value32 = (Number.parseInt(mappedIpv4[1], 16) * 0x1_0000 + Number.parseInt(mappedIpv4[2], 16)) >>> 0;
+  return [value32 >>> 24, (value32 >>> 16) & 0xff, (value32 >>> 8) & 0xff, value32 & 0xff].join(".");
 }
 
 function readBody(request: FastifyRequest) {
@@ -261,9 +292,18 @@ function readSessionCookie(request: FastifyRequest, config: AuthServerConfig) {
   return parseCookies(request.headers.cookie)[config.admin.cookieName] ?? null;
 }
 
-function readCsrfToken(request: FastifyRequest, config: AuthServerConfig) {
+function readCsrfToken(request: FastifyRequest) {
   const header = request.headers["x-csrf-token"];
-  return typeof header === "string" ? header : parseCookies(request.headers.cookie)[config.admin.csrfCookieName] ?? null;
+  return typeof header === "string" && header.length > 0 ? header : null;
+}
+
+function assertTrustedBrowserRequest(request: FastifyRequest, config: AuthServerConfig) {
+  const origin = typeof request.headers.origin === "string" ? request.headers.origin : null;
+  const fetchSite = typeof request.headers["sec-fetch-site"] === "string" ? request.headers["sec-fetch-site"] : null;
+  if (!origin && !fetchSite) return;
+  if (origin !== config.admin.corsOrigin || (fetchSite !== null && fetchSite !== "same-origin" && fetchSite !== "same-site")) {
+    throw new AuthApiError("forbidden", 403, "Admin request origin is invalid");
+  }
 }
 
 function parseCookies(header: string | undefined) {

@@ -1,18 +1,45 @@
-import { Stack } from "expo-router";
+import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo } from "react";
-import { Platform, StyleSheet } from "react-native";
+import { Platform, StyleSheet, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
 import Sortable from "react-native-sortables";
 import { AuthProvider, AuthRouteBoundary, useAuth } from "@/auth";
 import { authConfig } from "@/auth/config";
+import { Button, Icon } from "@/components/ui";
 import { DataProvider, useDataContext } from "@/data";
 import { createDataApi } from "@/data/api/dataApi";
 import { fetchBootstrapState } from "@/data/remote/bootstrap";
 import { AppSplashScreen } from "@/features/splash/AppSplashScreen";
+import { reportAppError } from "@/observability";
 import { ThemeProvider, theme, useAppTheme } from "@/theme";
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  useEffect(() => {
+    reportAppError({
+      category: "ui",
+      code: "root_render_failed",
+      error,
+      fatal: true,
+      attributes: { phase: "root_boundary" }
+    });
+  }, [error]);
+
+  return (
+    <View style={styles.errorRoot} accessible accessibilityRole="alert">
+      <View style={styles.errorContent}>
+        <View style={styles.errorIcon}>
+          <Icon name="warning circle" size={theme.sizes.buttonIconMedium} color={theme.colors.status.warningDeep} />
+        </View>
+        <Text style={styles.errorTitle}>Что-то пошло не так</Text>
+        <Text style={styles.errorMessage}>Перезапустите экран. Ваши сохранённые данные останутся на устройстве.</Text>
+        <Button label="Попробовать снова" type="secondary" size="large" width="fill" onPress={retry} />
+      </View>
+    </View>
+  );
+}
 
 export default function RootLayout() {
   return (
@@ -68,11 +95,40 @@ function RootAppShell() {
         <Stack.Screen name="auth/code" />
         <Stack.Screen name="auth/connection-error" />
         <Stack.Screen
+          name="settings/appearance"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="settings/logout"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
+          name="settings/delete-account"
+          options={{
+            presentation: "formSheet",
+            sheetAllowedDetents: "fitToContents",
+            sheetGrabberVisible: false,
+            animation: "default",
+            contentStyle: { backgroundColor: theme.colors.background.canvas }
+          }}
+        />
+        <Stack.Screen
           name="workouts/planning"
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -83,7 +139,6 @@ function RootAppShell() {
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -94,7 +149,6 @@ function RootAppShell() {
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -105,7 +159,6 @@ function RootAppShell() {
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -116,7 +169,6 @@ function RootAppShell() {
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -127,7 +179,6 @@ function RootAppShell() {
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -138,7 +189,6 @@ function RootAppShell() {
           options={{
             presentation: "formSheet",
             sheetAllowedDetents: "fitToContents",
-            sheetCornerRadius: theme.radius.xl,
             sheetGrabberVisible: false,
             animation: "default",
             contentStyle: { backgroundColor: theme.colors.background.canvas }
@@ -184,5 +234,33 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: theme.colors.background.canvasSoft
+  },
+  errorRoot: {
+    flex: 1,
+    justifyContent: "center",
+    backgroundColor: theme.colors.background.canvas,
+    padding: theme.spacing.xl
+  },
+  errorContent: {
+    alignItems: "center",
+    gap: theme.spacing.lg
+  },
+  errorIcon: {
+    width: theme.sizes.avatarLg,
+    height: theme.sizes.avatarLg,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.status.warningDeepSoft
+  },
+  errorTitle: {
+    ...theme.typography.display.xs,
+    color: theme.colors.content.ink,
+    textAlign: "center"
+  },
+  errorMessage: {
+    ...theme.typography.body.md,
+    color: theme.colors.content.body,
+    textAlign: "center"
   }
 });

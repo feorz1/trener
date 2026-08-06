@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRootNavigationState, useRouter } from "expo-router";
 import { StyleSheet, View } from "react-native";
 import { AppSplashScreen } from "@/features/splash/AppSplashScreen";
-import { clearPendingAccountDeletion, markPendingAccountDeletion, recoverPendingAccountDeletion } from "@/data/persistence/accountDeletionRecovery";
+import { clearPendingAccountDeletion, hasPendingAccountDeletion, markPendingAccountDeletion, readPendingAccountDeletion, recoverPendingAccountDeletion } from "@/data/persistence/accountDeletionRecovery";
+import { createNativeAccountDeletionRecoveryMaterial } from "./nativeAccountDeletionRecoveryMaterial";
 import { createAuthorizedFetch } from "./api/apiClient";
 import { createDefaultAuthApi } from "./api/authApi";
 import { authConfig, envProvidersAvailability, mergeProviderAvailability } from "./config";
@@ -12,7 +13,9 @@ import type { AuthApiClient, AuthError, AuthProvidersAvailability, AuthSession, 
 import { AuthFlowError, createAuthError, normalizeAuthError } from "./utils/authErrors";
 import { isValidEmail, normalizeEmail } from "./utils/email";
 import { getAuthRouteDecision, SIGN_IN_ROUTE } from "./routes";
-import { deleteRemoteAccountWithRefresh, executeAccountDeletion, type AccountDeletionCleanup } from "./accountDeletion";
+import { AccountDeletionCleanupPendingError, deleteRemoteAccountWithRefresh, executeAccountDeletion, reconcilePendingAccountDeletion, type AccountDeletionCleanup } from "./accountDeletion";
+import { createNativeAccountDeletionSecretStorage } from "./services/nativeAccountDeletionSecretStorage";
+import { restoreAuthSession } from "./sessionRecovery";
 
 export type AuthContextValue = {
   state: AuthState;
@@ -28,12 +31,14 @@ export type AuthContextValue = {
   authorizedFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   setAuthSession: (session: AuthSession) => Promise<void>;
   clearAuthSession: () => Promise<void>;
+  resetAuthStorage: () => Promise<void>;
   clearAuthError: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 const defaultAuthApi = createDefaultAuthApi();
 const defaultTokenStorage = createSecureTokenStorage();
+const defaultAccountDeletionSecretStorage = createNativeAccountDeletionSecretStorage();
 
 export function AuthProvider({
   children,
@@ -48,7 +53,6 @@ export function AuthProvider({
   const stateRef = useRef(state);
   const registeredLocalCleanupRef = useRef<AccountDeletionCleanup | null>(null);
   const accountDeletionPromiseRef = useRef<Promise<void> | null>(null);
-  const remoteDeletedOwnerIdRef = useRef<string | null>(null);
   const authorizedRequestsPausedRef = useRef(false);
   const activeAuthorizedRequestsRef = useRef(new Map<Promise<Response>, AbortController>());
   const sessionCheckPromiseRef = useRef<Promise<void> | null>(null);
@@ -78,17 +82,22 @@ export function AuthProvider({
     }
   }, [tokenStorage]);
 
-  const clearDeletedAccountSession = useCallback(async () => {
+  const clearDeletedAccountSession = useCallback(async (operationId: string) => {
     // Unlike ordinary session expiry, a failed SecureStore purge must keep the
     // deletion flow retryable. Transition to sign-in only after both token
     // keys have been removed successfully.
     await tokenStorage.clearAuthTokens();
+    await markPendingAccountDeletion(operationId, "completed");
+    await defaultAccountDeletionSecretStorage.clear();
     await clearPendingAccountDeletion();
     setState(createUnauthenticatedState({ providers: stateRef.current.providers }));
   }, [tokenStorage]);
 
   const setAuthSession = useCallback(
     async (session: AuthSession) => {
+      if (await hasPendingAccountDeletion()) {
+        throw new AccountDeletionCleanupPendingError(new Error("Account deletion recovery must finish before sign-in"));
+      }
       await Promise.all([tokenStorage.setRefreshToken(session.refreshToken), tokenStorage.setAccessToken(session.accessToken)]);
       setState(createAuthenticatedState(session, stateRef.current.providers));
     },
@@ -102,33 +111,42 @@ export function AuthProvider({
     const operation = (async () => {
       setState((current) => ({ ...current, status: "checking", isLoading: true, error: null }));
 
-      try {
-        await recoverPendingAccountDeletion(tokenStorage);
-      } catch (error) {
-        const authError = normalizeAuthError(error, "server_error");
-        setState((current) => createAuthErrorState(authError, current));
-        return;
-      }
-
-      const refreshToken = await tokenStorage.getRefreshToken();
-      if (!refreshToken) {
-        setState(createUnauthenticatedState({ providers: stateRef.current.providers }));
-        return;
-      }
-
-      try {
-        const refreshed = await authApi.refresh(refreshToken);
-        await Promise.all([tokenStorage.setRefreshToken(refreshed.refreshToken), tokenStorage.setAccessToken(refreshed.accessToken)]);
-        const user = await authApi.getMe(refreshed.accessToken);
-        setState(createAuthenticatedStateFromUser(user, refreshed.accessToken, refreshed.expiresAt, stateRef.current.providers));
-      } catch (error) {
-        const authError = normalizeAuthError(error);
-        if (authError.code === "network_error") {
-          setState(createAuthErrorState(authError, stateRef.current));
-          return;
+      const result = await restoreAuthSession({
+        authApi,
+        tokenStorage,
+        recoverPendingDeletion: async () => {
+          await recoverPendingAccountDeletion(tokenStorage, undefined, async (pending) => {
+            const proof = await defaultAccountDeletionSecretStorage.get();
+            if (!proof || proof.operationId !== pending.operationId) {
+              throw new Error("Account deletion recovery proof is unavailable");
+            }
+            if (pending.state === "requested") {
+              await reconcilePendingAccountDeletion({
+                expectedOwnerId: proof.ownerId,
+                accessToken: await tokenStorage.getAccessToken(),
+                operationId: pending.operationId,
+                recoverySecret: proof.recoverySecret,
+                deleteRemoteAccount: (accessToken, operationId, recoverySecret) => authApi.deleteAccount(accessToken, operationId, recoverySecret),
+                getCurrentUser: (accessToken) => authApi.getMe(accessToken),
+                getRefreshToken: () => tokenStorage.getRefreshToken(),
+                refreshSession: (refreshToken) => authApi.refresh(refreshToken),
+                persistRefreshedSession: async (refreshed) => {
+                  await Promise.all([tokenStorage.setRefreshToken(refreshed.refreshToken), tokenStorage.setAccessToken(refreshed.accessToken)]);
+                }
+              });
+            }
+            return { ownerId: proof.ownerId };
+          });
+          await defaultAccountDeletionSecretStorage.clear();
         }
-        await tokenStorage.clearAuthTokens();
-        setState(createUnauthenticatedState({ error: authError, providers: stateRef.current.providers }));
+      });
+
+      if (result.status === "authenticated") {
+        setState(createAuthenticatedStateFromUser(result.user, result.accessToken, result.expiresAt, stateRef.current.providers));
+      } else if (result.status === "unauthenticated") {
+        setState(createUnauthenticatedState({ error: result.error, providers: stateRef.current.providers }));
+      } else {
+        setState((current) => createAuthErrorState(result.error, current));
       }
     })();
 
@@ -214,6 +232,20 @@ export function AuthProvider({
     setState((current) => ({ ...current, status: current.isAuthenticated ? "authenticated" : "unauthenticated", isLoading: false, error: null }));
   }, []);
 
+  const resetAuthStorage = useCallback(async () => {
+    setState((current) => ({ ...current, status: "checking", isLoading: true, error: null }));
+    try {
+      if (await hasPendingAccountDeletion()) {
+        throw new AccountDeletionCleanupPendingError(new Error("Account deletion recovery must finish before auth reset"));
+      }
+      await tokenStorage.clearAuthTokens();
+      setState(createUnauthenticatedState({ providers: stateRef.current.providers }));
+    } catch (error) {
+      const authError = normalizeAuthError(error, "server_error");
+      setState((current) => createAuthErrorState(authError, current));
+    }
+  }, [tokenStorage]);
+
   const baseAuthorizedFetch = useMemo(
     () =>
       createAuthorizedFetch({
@@ -274,10 +306,42 @@ export function AuthProvider({
       resume: () => {
         authorizedRequestsPausedRef.current = false;
       },
-      deleteRemoteAccount: (accessToken) =>
+      loadDeletionRecovery: async () => {
+        const [pending, proof] = await Promise.all([
+          readPendingAccountDeletion(),
+          defaultAccountDeletionSecretStorage.get()
+        ]);
+        if (!pending && !proof) return null;
+        if (!pending || !proof || pending.operationId !== proof.operationId) {
+          throw new AccountDeletionCleanupPendingError(new Error("Account deletion recovery state is incomplete"));
+        }
+        return { pending, proof };
+      },
+      createDeletionRecovery: async (recoveryOwnerId) => {
+        const material = await createNativeAccountDeletionRecoveryMaterial();
+        return { version: 1, ownerId: recoveryOwnerId, ...material };
+      },
+      persistDeletionRecovery: async (proof) => {
+        await defaultAccountDeletionSecretStorage.set(proof);
+        try {
+          await markPendingAccountDeletion(proof.operationId, "requested");
+        } catch (error) {
+          await defaultAccountDeletionSecretStorage.clear().catch(() => undefined);
+          throw error;
+        }
+        return { version: 3, operationId: proof.operationId, state: "requested" };
+      },
+      discardDeletionRecovery: async () => {
+        await clearPendingAccountDeletion();
+        await defaultAccountDeletionSecretStorage.clear();
+      },
+      markDeletionState: (operationId, deletionState) => markPendingAccountDeletion(operationId, deletionState),
+      deleteRemoteAccount: (accessToken, operationId, recoverySecret) =>
         deleteRemoteAccountWithRefresh({
           accessToken,
-          deleteRemoteAccount: (token) => authApi.deleteAccount(token),
+          operationId,
+          recoverySecret,
+          deleteRemoteAccount: (token, pendingOperationId, pendingRecoverySecret) => authApi.deleteAccount(token, pendingOperationId, pendingRecoverySecret),
           getRefreshToken: () => tokenStorage.getRefreshToken(),
           refreshSession: (refreshToken) => authApi.refresh(refreshToken),
           persistRefreshedSession: async (refreshed) => {
@@ -286,14 +350,7 @@ export function AuthProvider({
           }
         }),
       clearAuthSession: clearDeletedAccountSession,
-      remoteDeletionConfirmed: Boolean(ownerId && remoteDeletedOwnerIdRef.current === ownerId),
-      markRemoteDeletionConfirmed: async () => {
-        remoteDeletedOwnerIdRef.current = ownerId;
-        if (ownerId) await markPendingAccountDeletion(ownerId);
-      },
-      markDeletionComplete: () => {
-        remoteDeletedOwnerIdRef.current = null;
-      }
+      markDeletionComplete: () => undefined
     });
 
     const trackedOperation = operation.finally(() => {
@@ -325,9 +382,10 @@ export function AuthProvider({
       authorizedFetch,
       setAuthSession,
       clearAuthSession,
+      resetAuthStorage,
       clearAuthError
     }),
-    [authorizedFetch, checkSession, clearAuthError, clearAuthSession, deleteAccount, loadAuthProviders, logout, refreshSession, registerAccountDeletionCleanup, resendEmailCode, setAuthSession, startEmailLogin, state, verifyEmailCode]
+    [authorizedFetch, checkSession, clearAuthError, clearAuthSession, deleteAccount, loadAuthProviders, logout, refreshSession, registerAccountDeletionCleanup, resendEmailCode, resetAuthStorage, setAuthSession, startEmailLogin, state, verifyEmailCode]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

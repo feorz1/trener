@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { createDataApi } from "../src/data/api/dataApi";
 import { DataError } from "../src/data/contracts";
+import { SessionResultWriteQueue } from "../src/data/remote/sessionResultWriteQueue";
+import { NetworkTimeoutError } from "../src/utils/networkTimeout";
 
 type Scope = Record<string, unknown>;
 
@@ -183,6 +185,41 @@ async function main() {
     assert.equal(error.message, "Нельзя изменить состав уже начатой тренировки");
     return true;
   });
+
+  let readSignal: AbortSignal | undefined;
+  const neverResolvingReadApi = createDataApi({
+    baseUrl: "https://api.example.test",
+    timeoutMs: 5,
+    authorizedFetch: async (_input, init) => {
+      readSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => undefined);
+    }
+  });
+
+  await assert.rejects(() => neverResolvingReadApi.getClients(), NetworkTimeoutError);
+  assert.equal(readSignal?.aborted, true, "Read timeout must abort the full authorized request, even if fetch ignores the signal");
+
+  let mutationSignal: AbortSignal | undefined;
+  const neverResolvingMutationApi = createDataApi({
+    baseUrl: "https://api.example.test",
+    timeoutMs: 5,
+    authorizedFetch: async (_input, init) => {
+      mutationSignal = init?.signal ?? undefined;
+      return new Promise<Response>(() => undefined);
+    }
+  });
+  const queue = new SessionResultWriteQueue();
+
+  await assert.rejects(
+    () => queue.enqueue("session-timeout", () => neverResolvingMutationApi.updateWorkoutSession("session-timeout", { notes: "pending" })),
+    NetworkTimeoutError
+  );
+  assert.equal(mutationSignal?.aborted, true, "Mutation timeout must abort the full authorized request");
+  assert.equal(
+    await queue.enqueue("session-timeout", async () => "next-write"),
+    "next-write",
+    "A timed-out mutation must release its per-session write queue"
+  );
 
   console.log("Data API tests passed.");
 }

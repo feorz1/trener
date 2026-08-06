@@ -6,8 +6,11 @@ export type SystemExerciseSeedRow = {
   systemKey: string;
   name: string;
   muscleGroup: string | null;
+  primaryMuscles: string[];
+  secondaryMuscles: string[];
   equipment: string | null;
   description: string | null;
+  resultType: string | null;
 };
 
 export function buildSystemExerciseSeedRows(exercises: Exercise[] = mockExercises): SystemExerciseSeedRow[] {
@@ -17,8 +20,11 @@ export function buildSystemExerciseSeedRows(exercises: Exercise[] = mockExercise
       systemKey: `local:${exercise.id}`,
       name: exercise.name.trim().replace(/\s+/g, " "),
       muscleGroup: exercise.primaryMuscles[0] ?? null,
+      primaryMuscles: [...exercise.primaryMuscles],
+      secondaryMuscles: [...(exercise.secondaryMuscles ?? [])],
       equipment: exercise.equipment?.trim() || null,
-      description: buildDescription(exercise)
+      description: buildDescription(exercise),
+      resultType: exercise.resultType ?? null
     }))
     .filter((exercise) => exercise.name.length > 0);
 
@@ -50,8 +56,11 @@ export async function seedSystemExercises(prisma = new PrismaClient()) {
             isSystem: true,
             name: row.name,
             muscleGroup: row.muscleGroup,
+            primaryMuscles: row.primaryMuscles,
+            secondaryMuscles: row.secondaryMuscles,
             equipment: row.equipment,
             description: row.description,
+            resultType: row.resultType,
             deletedAt: null
           }
         });
@@ -73,8 +82,11 @@ export async function seedSystemExercises(prisma = new PrismaClient()) {
           data: {
             systemKey: row.systemKey,
             muscleGroup: row.muscleGroup,
+            primaryMuscles: row.primaryMuscles,
+            secondaryMuscles: row.secondaryMuscles,
             equipment: row.equipment,
             description: row.description,
+            resultType: row.resultType,
             deletedAt: null
           }
         });
@@ -89,8 +101,11 @@ export async function seedSystemExercises(prisma = new PrismaClient()) {
           isSystem: true,
           name: row.name,
           muscleGroup: row.muscleGroup,
+          primaryMuscles: row.primaryMuscles,
+          secondaryMuscles: row.secondaryMuscles,
           equipment: row.equipment,
-          description: row.description
+          description: row.description,
+          resultType: row.resultType
         }
       });
       created += 1;
@@ -117,8 +132,8 @@ async function main() {
 
 if (require.main === module) {
   main()
-    .catch((error) => {
-      console.error(error);
+    .catch(() => {
+      console.error("System exercise seed failed");
       process.exitCode = 1;
     });
 }

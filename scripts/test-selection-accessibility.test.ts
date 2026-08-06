@@ -16,7 +16,7 @@ describe("selection accessibility contracts", () => {
   });
 
   it.each([
-    ["theme options", "../app/(tabs)/settings.tsx", 'accessibilityRole="radio"'],
+    ["theme options", "../app/settings/appearance.tsx", 'accessibilityRole="radio"'],
     ["client options", "../app/workouts/client-select.tsx", 'accessibilityRole="radio"'],
     ["repeat-day options", "../app/workouts/repeat-select.tsx", 'accessibilityRole="checkbox"']
   ])("exposes %s as one selectable accessibility target", (_name, path, roleContract) => {

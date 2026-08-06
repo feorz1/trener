@@ -192,17 +192,17 @@ const workoutSetVariants: WorkoutSetVariant[] = ["set", "new"];
 const headerSizes: HeaderSize[] = ["xl", "lg", "md", "sm"];
 const notificationVariants: NotificationVariant[] = ["default", "plain"];
 const notificationEffects: NotificationEffect[] = ["regular", "clear", "none"];
-const webMobileWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.storybookMobileWidth, alignSelf: "center" } as const) : null;
-const webGalleryWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.storybookGalleryWidth, alignSelf: "center" } as const) : null;
+const webMobileWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.previewMobileWidth, alignSelf: "center" } as const) : null;
+const webGalleryWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.previewGalleryWidth, alignSelf: "center" } as const) : null;
 const webActionWidth = Platform.OS === "web" ? ({ maxWidth: 357 } as const) : null;
 const webResizablePreviewFrame =
   Platform.OS === "web"
     ? ({
         resize: "both",
         overflow: "auto",
-        width: theme.sizes.storybookGalleryCardWidth,
-        minWidth: theme.sizes.storybookGalleryCardWidth,
-        minHeight: theme.sizes.storybookGalleryCardHeight,
+        width: theme.sizes.previewGalleryCardWidth,
+        minWidth: theme.sizes.previewGalleryCardWidth,
+        minHeight: theme.sizes.previewGalleryCardHeight,
         maxWidth: "none",
         alignSelf: "flex-start"
       } as ViewStyle & { resize: "both"; overflow: "auto"; maxWidth: "none" })
@@ -2421,10 +2421,10 @@ const styles = StyleSheet.create({
   },
   componentCard: {
     gap: theme.spacing.sm,
-    width: Platform.OS === "web" ? theme.sizes.storybookGalleryCardWidth : undefined,
-    height: Platform.OS === "web" ? theme.sizes.storybookGalleryCardHeight : undefined,
+    width: Platform.OS === "web" ? theme.sizes.previewGalleryCardWidth : undefined,
+    height: Platform.OS === "web" ? theme.sizes.previewGalleryCardHeight : undefined,
     minHeight: 88,
-    maxHeight: Platform.OS === "web" ? theme.sizes.storybookGalleryCardHeight : undefined,
+    maxHeight: Platform.OS === "web" ? theme.sizes.previewGalleryCardHeight : undefined,
     padding: theme.spacing.lg,
     borderRadius: theme.radius.xl,
     overflow: "hidden",

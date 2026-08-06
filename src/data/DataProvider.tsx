@@ -6,8 +6,11 @@ import { createId } from "./createId";
 import { LOCAL_OWNER_ID } from "./types";
 import type { DataApi, DataApiClientInput, DataApiWorkoutResultsInput, DataApiWorkoutSession, DataApiWorkoutSessionInput } from "./api/dataApi";
 import { mapClient as mapRemoteClient, mapExercise as mapRemoteExercise, mapResults as mapRemoteResults, mapSession as mapRemoteSession, mapWorkout as mapRemoteWorkout } from "./remote/bootstrap";
+import { mergeOwnerBootstrapState } from "./remote/ownerBootstrapMerge";
+import { exerciseToRemoteInput, exerciseToRemotePatch, sessionExercisesToRemoteItems, workoutToRemoteSessionInput as serializeWorkoutToRemoteSessionInput } from "./remote/workoutRoundtripCodec";
 import { SessionResultWriteQueue } from "./remote/sessionResultWriteQueue";
 import { createSessionTimerPersistence, type SessionTimerPersistence } from "./persistence/SessionTimerPersistence";
+import { reportAppError } from "@/observability";
 import type {
   CreateClientInput,
   CreateExerciseInput,
@@ -299,70 +302,11 @@ function toRemoteClientInput(input: CreateClientInput | UpdateClientInput): Data
   };
 }
 
-function toRemoteExerciseInput(input: CreateExerciseInput) {
-  return {
-    name: requiredTrim(input.name, "Новое упражнение"),
-    muscleGroup: optionalTrimList(input.primaryMuscles)?.[0] ?? null,
-    equipment: optionalTrim(input.equipment) ?? null,
-    description: optionalTrim(input.notes) ?? optionalTrim(input.coachNotes) ?? null
-  };
-}
-
-function toRemoteExercisePatch(input: Partial<CreateExerciseInput>) {
-  return {
-    ...(input.name !== undefined ? { name: requiredTrim(input.name, "Новое упражнение") } : {}),
-    ...(input.primaryMuscles !== undefined ? { muscleGroup: optionalTrimList(input.primaryMuscles)?.[0] ?? null } : {}),
-    ...(input.equipment !== undefined ? { equipment: optionalTrim(input.equipment) ?? null } : {}),
-    ...(input.notes !== undefined || input.coachNotes !== undefined ? { description: optionalTrim(input.notes) ?? optionalTrim(input.coachNotes) ?? null } : {})
-  };
-}
-
-function workoutToRemoteItems(workout: Workout): NonNullable<DataApiWorkoutSessionInput["items"]> {
-  return workout.exercises.map((exercise, index) => {
-    const firstSetValues = getLegacyValues({
-      values: exercise.sets[0]?.values,
-      weight: exercise.sets[0]?.targetWeightKg,
-      reps: exercise.sets[0]?.targetReps,
-      durationSeconds: exercise.sets[0]?.targetDurationSeconds,
-      distanceMeters: exercise.sets[0]?.targetDistanceMeters
-    });
-    const weightMetricKey = getPrimaryWeightMetricKey(exercise.resultType);
-
-    return {
-      exerciseId: exercise.exerciseId,
-      order: exercise.order ?? index + 1,
-      titleSnapshot: exercise.exerciseName,
-      plannedSets: exercise.sets.length || null,
-      plannedReps: exercise.sets[0]?.targetReps ?? firstSetValues.reps ?? null,
-      plannedWeight: weightMetricKey ? firstSetValues[weightMetricKey] ?? null : null,
-      plannedDurationSec: exercise.sets[0]?.targetDurationSeconds ?? firstSetValues.duration ?? null,
-      notes: exercise.comment ?? null
-    };
-  });
-}
-
 function workoutToRemoteSessionInput(workout: Workout, status: DataApiWorkoutSessionInput["status"] = "planned"): DataApiWorkoutSessionInput & { title: string } {
   return {
-    clientId: workout.clientId ?? null,
-    title: workout.title || "Тренировка",
-    status,
-    scheduledAt: normalizeIsoDate(workout.startsAt, "Дата тренировки"),
-    notes: workout.focus || null,
-    items: workoutToRemoteItems(workout)
+    ...serializeWorkoutToRemoteSessionInput(workout, status),
+    scheduledAt: normalizeIsoDate(workout.startsAt, "Дата тренировки")
   };
-}
-
-function sessionExercisesToRemoteItems(exercises: WorkoutSession["exercises"]): NonNullable<DataApiWorkoutSessionInput["items"]> {
-  return exercises.map((exercise, index) => ({
-    id: exercise.id,
-    exerciseId: exercise.exerciseId,
-    order: exercise.order ?? index + 1,
-    titleSnapshot: exercise.exerciseNameSnapshot ?? exercise.exerciseName,
-    plannedSets: exercise.plannedSets ?? null,
-    plannedReps: exercise.plannedRepetitions ?? null,
-    plannedWeight: exercise.plannedWeight ?? null,
-    notes: exercise.comment ?? null
-  }));
 }
 
 function remoteSessionActions(session: DataApiWorkoutSession, ownerId: OwnerId): LocalDataAction[] {
@@ -475,6 +419,7 @@ export function DataProvider({
         const snapshot = rawSnapshot ? migrateSnapshot(rawSnapshot) : null;
         let nextState = snapshot ? hydrateDataState(snapshot) : createProductionState();
         const shouldWriteCurrentSnapshot = !rawSnapshot || getSnapshotSchemaVersion(rawSnapshot) !== CURRENT_SCHEMA_VERSION;
+        let didPersistBootstrap = false;
 
         if (isCancelled() || isBlocked()) return;
 
@@ -485,20 +430,24 @@ export function DataProvider({
           try {
             const remoteState = await bootstrapRemoteData();
             if (remoteState && !isCancelled() && !isBlocked()) {
-              nextState = remoteState;
+              nextState = mergeOwnerBootstrapState(nextState, remoteState, currentOwnerId);
               stateRef.current = nextState;
               dispatch({ type: "state/replace", state: nextState });
               await coordinatorRef.current.saveImmediately(nextState);
+              didPersistBootstrap = true;
             }
           } catch (error) {
             if (!snapshot) throw error;
-            if (__DEV__) {
-              console.warn("Remote data bootstrap failed; using local cache", error);
-            }
+            reportAppError({
+              category: "startup",
+              code: "remote_bootstrap_failed",
+              error,
+              attributes: { phase: "remote_bootstrap", source: "local_cache" }
+            });
           }
         }
 
-        if (shouldWriteCurrentSnapshot && !isBlocked()) {
+        if (shouldWriteCurrentSnapshot && !didPersistBootstrap && !isBlocked()) {
           await coordinatorRef.current.saveImmediately(nextState);
         }
 
@@ -507,16 +456,19 @@ export function DataProvider({
         updateHydrationStatus("ready");
         setPersistenceStatus(coordinatorRef.current.getStatus());
       } catch (error) {
-        if (__DEV__) {
-          console.warn("Local data hydration failed", error);
-        }
+        reportAppError({
+          category: "startup",
+          code: "local_hydration_failed",
+          error,
+          attributes: { phase: "local_hydration", source: "empty_state" }
+        });
         if (isCancelled() || isBlocked()) return;
         setHydrationError(error instanceof Error ? error : new Error("Local data hydration failed"));
         updateHydrationStatus("error");
         setPersistenceStatus(coordinatorRef.current.getStatus());
       }
     },
-    [bootstrapRemoteData, effectivePersistenceAdapter, updateHydrationStatus]
+    [bootstrapRemoteData, currentOwnerId, effectivePersistenceAdapter, updateHydrationStatus]
   );
 
   const commitActions = useCallback(async (actions: LocalDataAction[], mode: SaveMode = "debounced") => {
@@ -577,6 +529,13 @@ export function DataProvider({
   }, [effectivePersistenceAdapter, updateHydrationStatus]);
 
   const prepareAccountDeletion = useCallback(async () => {
+    if (
+      accountDeletionPhaseRef.current === "prepared" ||
+      accountDeletionPhaseRef.current === "committing" ||
+      accountDeletionPhaseRef.current === "committed"
+    ) {
+      return;
+    }
     if (accountDeletionPhaseRef.current !== "active") {
       throw new Error("Account deletion cleanup is already active");
     }
@@ -742,7 +701,7 @@ export function DataProvider({
         },
         async create(input: CreateExerciseInput) {
           if (dataApi) {
-            const remoteInput = toRemoteExerciseInput(input);
+            const remoteInput = exerciseToRemoteInput(input);
             assertUniqueActiveExerciseName(stateRef.current, { ownerId: currentOwnerId, name: remoteInput.name });
             const exercise = mapRemoteExercise(await dataApi.createExercise(remoteInput), currentOwnerId);
             await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
@@ -786,7 +745,7 @@ export function DataProvider({
           }
 
           if (dataApi) {
-            const exercise = mapRemoteExercise(await dataApi.updateExercise(id, toRemoteExercisePatch(normalizedPatch)), currentOwnerId);
+            const exercise = mapRemoteExercise(await dataApi.updateExercise(id, exerciseToRemotePatch(normalizedPatch)), currentOwnerId);
             await commitActions([{ type: "exercise/upsert", exercise }], "immediate");
             return cloneExercise(exercise);
           }
@@ -1211,10 +1170,23 @@ export function DataProvider({
             exerciseNameSnapshot: exercise.exerciseName,
             resultTypeSnapshot: exercise.resultType ?? defaultResultType,
             order: index + 1,
+            day: exercise.day,
             comment: exercise.comment,
+            supersetWithNext: exercise.supersetWithNext,
+            plannedSetTargets: exercise.sets.map((set) => ({
+              id: set.id,
+              order: set.order,
+              values: set.values ? { ...set.values } : undefined,
+              targetWeightKg: set.targetWeightKg,
+              targetReps: set.targetReps,
+              targetDurationSeconds: set.targetDurationSeconds,
+              targetDistanceMeters: set.targetDistanceMeters
+            })),
             plannedSets: exercise.sets.length,
             plannedRepetitions: exercise.sets[0]?.targetReps,
-            plannedWeight: exercise.sets[0]?.targetWeightKg
+            plannedWeight: exercise.sets[0]?.targetWeightKg,
+            plannedDurationSeconds: exercise.sets[0]?.targetDurationSeconds,
+            restSeconds: exercise.restSeconds
           }));
           const session = {
             id: createId("session"),

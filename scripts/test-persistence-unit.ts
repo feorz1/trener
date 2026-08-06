@@ -3,7 +3,7 @@ import { createInitialState } from "../src/data/seeds/mockSeed";
 import { createProductionState } from "../src/data/seeds/productionSeed";
 import { AsyncStoragePersistenceAdapter, InMemoryPersistenceAdapter, PersistenceCoordinator, CURRENT_SCHEMA_VERSION, LEGACY_LOCAL_DATA_STORAGE_KEY, getLocalDataStorageKey, hydrateDataState, migrateSnapshot, serializeDataState } from "../src/data/persistence";
 import { SessionTimerPersistence, getLegacySessionTimerStorageKey, getSessionTimerStorageKey } from "../src/data/persistence/SessionTimerPersistence";
-import { PENDING_ACCOUNT_DELETION_STORAGE_KEY, markPendingAccountDeletion, recoverPendingAccountDeletion } from "../src/data/persistence/accountDeletionRecovery";
+import { PENDING_ACCOUNT_DELETION_STORAGE_KEY, hasPendingAccountDeletion, markPendingAccountDeletion, readPendingAccountDeletion, recoverPendingAccountDeletion } from "../src/data/persistence/accountDeletionRecovery";
 import { SessionResultWriteQueue } from "../src/data/remote/sessionResultWriteQueue";
 import { getTimerElapsedSeconds, type SetTimerState } from "../src/features/workouts/tracking";
 import { LOCAL_OWNER_ID } from "../src/types";
@@ -273,8 +273,18 @@ async function run() {
   recoveryValues.set(getSessionTimerStorageKey("owner-recovery-b", "session-b"), JSON.stringify(pausedTimer));
   recoveryValues.set(getLegacySessionTimerStorageKey("legacy-recovery"), JSON.stringify(runningTimer));
   recoveryValues.set("trainer-app:theme-preference:v1", "dark");
-  await markPendingAccountDeletion("owner-recovery-a", recoveryStorage);
+  const recoveryOperationA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const recoveryOperationB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const lostResponseOperation = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  await markPendingAccountDeletion(recoveryOperationA, "requested", recoveryStorage);
+  assert.deepEqual(await readPendingAccountDeletion(recoveryStorage), {
+    version: 3,
+    operationId: recoveryOperationA,
+    state: "requested"
+  });
+  assert.equal(recoveryValues.get(PENDING_ACCOUNT_DELETION_STORAGE_KEY)?.includes("owner-recovery-a"), false, "the durable marker must contain no owner PII");
   let recoveredCredentialsCleared = false;
+  let reconciledOperationId: string | null = null;
   assert.equal(
     await recoverPendingAccountDeletion(
       {
@@ -282,10 +292,15 @@ async function run() {
           recoveredCredentialsCleared = true;
         }
       },
-      recoveryStorage
+      recoveryStorage,
+      async (pending) => {
+        reconciledOperationId = pending.operationId;
+        return { ownerId: "owner-recovery-a" };
+      }
     ),
     true
   );
+  assert.equal(reconciledOperationId, recoveryOperationA);
   assert.equal(recoveredCredentialsCleared, true);
   assert.equal(recoveryValues.has(getLocalDataStorageKey("owner-recovery-a")), false);
   assert.equal(recoveryValues.has(getSessionTimerStorageKey("owner-recovery-a", "session-a")), false);
@@ -296,7 +311,7 @@ async function run() {
   assert.equal(recoveryValues.get("trainer-app:theme-preference:v1"), "dark");
   assert.equal(recoveryValues.has(PENDING_ACCOUNT_DELETION_STORAGE_KEY), false);
 
-  await markPendingAccountDeletion("owner-recovery-a", recoveryStorage);
+  await markPendingAccountDeletion(recoveryOperationB, "server_confirmed", recoveryStorage);
   await assert.rejects(
     recoverPendingAccountDeletion(
       {
@@ -304,13 +319,49 @@ async function run() {
           throw new Error("transient SecureStore failure");
         }
       },
-      recoveryStorage
+      recoveryStorage,
+      async () => ({ ownerId: "owner-recovery-a" })
     ),
     /transient SecureStore failure/
   );
   assert.equal(recoveryValues.has(PENDING_ACCOUNT_DELETION_STORAGE_KEY), true, "recovery marker must survive partial cleanup");
-  await recoverPendingAccountDeletion({ async clearAuthTokens() {} }, recoveryStorage);
+  await recoverPendingAccountDeletion({ async clearAuthTokens() {} }, recoveryStorage, async () => ({ ownerId: "owner-recovery-a" }));
   assert.equal(recoveryValues.has(PENDING_ACCOUNT_DELETION_STORAGE_KEY), false);
+
+  const legacyRecoveryOwner = "owner-recovery-legacy";
+  recoveryValues.set(getLocalDataStorageKey(legacyRecoveryOwner), JSON.stringify(snapshot));
+  recoveryValues.set(getSessionTimerStorageKey(legacyRecoveryOwner, "session-legacy"), JSON.stringify(runningTimer));
+  recoveryValues.set(PENDING_ACCOUNT_DELETION_STORAGE_KEY, JSON.stringify({ version: 1, ownerId: legacyRecoveryOwner }));
+  assert.equal(await hasPendingAccountDeletion(recoveryStorage), true);
+  assert.equal(await readPendingAccountDeletion(recoveryStorage), null, "legacy markers are not proof-bearing version 3 operations");
+  let legacyCredentialsCleared = false;
+  assert.equal(
+    await recoverPendingAccountDeletion({
+      async clearAuthTokens() {
+        legacyCredentialsCleared = true;
+      }
+    }, recoveryStorage),
+    true
+  );
+  assert.equal(legacyCredentialsCleared, true);
+  assert.equal(recoveryValues.has(getLocalDataStorageKey(legacyRecoveryOwner)), false);
+  assert.equal(recoveryValues.has(getSessionTimerStorageKey(legacyRecoveryOwner, "session-legacy")), false);
+  assert.equal(await hasPendingAccountDeletion(recoveryStorage), false);
+
+  recoveryValues.set(getLocalDataStorageKey("owner-recovery-a"), JSON.stringify(snapshot));
+  await markPendingAccountDeletion(lostResponseOperation, "requested", recoveryStorage);
+  let purgeAttemptedBeforeReconciliation = false;
+  await assert.rejects(
+    recoverPendingAccountDeletion(
+      { async clearAuthTokens() { purgeAttemptedBeforeReconciliation = true; } },
+      recoveryStorage,
+      async () => { throw new Error("ambiguous network result"); }
+    ),
+    /ambiguous network result/
+  );
+  assert.equal(purgeAttemptedBeforeReconciliation, false, "lost-response recovery must reconcile before purging credentials");
+  assert.notEqual(await recoveryStorage.getItem(getLocalDataStorageKey("owner-recovery-a")), null);
+  assert.notEqual(await recoveryStorage.getItem(PENDING_ACCOUNT_DELETION_STORAGE_KEY), null);
 
   await adapter.clear();
   assert.equal(await adapter.load(), null);

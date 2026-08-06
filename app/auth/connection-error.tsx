@@ -4,8 +4,9 @@ import { useAuth } from "@/auth";
 import { theme } from "@/theme";
 
 export default function AuthConnectionErrorScreen() {
-  const { state, checkSession } = useAuth();
+  const { state, checkSession, resetAuthStorage } = useAuth();
   const loading = state.status === "checking";
+  const networkError = state.error?.code === "network_error";
 
   return (
     <View style={styles.root}>
@@ -14,8 +15,20 @@ export default function AuthConnectionErrorScreen() {
           <Icon name="warning circle" size={theme.sizes.buttonIconMedium} color={theme.colors.status.warningDeep} />
         </View>
         <Text style={styles.title}>Не удалось подключиться</Text>
-        <Text style={styles.subtitle}>Проверьте интернет и попробуйте ещё раз</Text>
+        <Text style={styles.subtitle}>
+          {networkError
+            ? "Проверьте интернет и попробуйте ещё раз"
+            : "Не удалось восстановить данные входа. Повторите попытку или сбросьте локальную сессию"}
+        </Text>
         <Button label="Повторить" type="secondary" size="large" width="fill" state={loading ? "loading" : "active"} onPress={() => void checkSession()} />
+        <Button
+          label="Сбросить данные входа"
+          type="secondaryNeutral"
+          size="large"
+          width="fill"
+          state={loading ? "disabled" : "active"}
+          onPress={() => void resetAuthStorage()}
+        />
       </View>
     </View>
   );

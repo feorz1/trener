@@ -1,6 +1,7 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import { AuthApiError } from "../errors";
-import type { AccountDeletionRepository } from "./types";
+import { safeCompareHash } from "../security";
+import type { AccountDeletionReceipt, AccountDeletionRepository } from "./types";
 
 type LockedUser = {
   id: string;
@@ -14,12 +15,25 @@ type ConflictResult = {
 export class PrismaAccountDeletionRepository implements AccountDeletionRepository {
   constructor(private readonly prisma = new PrismaClient()) {}
 
-  async deleteAccount(userId: string) {
+  async findDeletionReceipt(operationId: string) {
+    return this.prisma.accountDeletionReceipt.findUnique({ where: { operationId } });
+  }
+
+  async deleteAccount(userId: string, operationId: string, recoverySecretHash: string, expiresAt: Date) {
     const maxAttempts = 3;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         return await this.prisma.$transaction(
           async (tx) => {
+            await tx.$queryRaw<Array<{ lock: string }>>`
+              SELECT pg_advisory_xact_lock(hashtext(${operationId}))::text AS "lock"
+            `;
+            const existingReceipt = await tx.accountDeletionReceipt.findUnique({ where: { operationId } });
+            if (existingReceipt) {
+              assertValidRecoveryProof(existingReceipt, recoverySecretHash);
+              return { email: null, alreadyCompleted: true };
+            }
+
             const [user] = await tx.$queryRaw<LockedUser[]>`
               SELECT id::text AS id, email
               FROM users
@@ -82,8 +96,17 @@ export class PrismaAccountDeletionRepository implements AccountDeletionRepositor
               });
             }
             await tx.user.delete({ where: { id: userId } });
+            const completedAt = new Date();
+            await tx.accountDeletionReceipt.create({
+              data: {
+                operationId,
+                recoverySecretHash,
+                completedAt,
+                expiresAt
+              }
+            });
 
-            return { email: user.email };
+            return { email: user.email, alreadyCompleted: false };
           },
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
         );
@@ -97,6 +120,12 @@ export class PrismaAccountDeletionRepository implements AccountDeletionRepositor
   }
 }
 
+function assertValidRecoveryProof(receipt: AccountDeletionReceipt, recoverySecretHash: string) {
+  if (!safeCompareHash(receipt.recoverySecretHash, recoverySecretHash)) {
+    throw new AuthApiError("session_expired", 401);
+  }
+}
+
 function deletionConflict() {
   return new AuthApiError("account_conflict", 409, "Удаление аккаунта временно недоступно");
 }
@@ -105,6 +134,8 @@ function isSerializationConflict(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const code = (error as { code?: unknown }).code;
   if (code === "P2034" || code === "40001") return true;
+  const metaCode = (error as { meta?: { code?: unknown } }).meta?.code;
+  if (metaCode === "40001") return true;
   const causeCode = (error as { cause?: { code?: unknown } }).cause?.code;
   return causeCode === "40001";
 }

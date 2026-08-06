@@ -1,5 +1,7 @@
 # VPS Deploy
 
+> **Release safety:** this document covers host provisioning and reference values only. For every release, use [`deploy/runbooks/production-release.md`](../deploy/runbooks/production-release.md) with both Compose files. Starting the base stack first and applying migrations later is forbidden because it can expose an API against an incomplete schema.
+
 ## Requirements
 
 - Ubuntu 22.04+ or similar Linux VPS.
@@ -123,39 +125,19 @@ Before production email smoke, verify the Resend sender domain DNS records: SPF,
 
 ## Start
 
-Validate compose before starting:
+Do not release with `docker-compose.prod.yml` alone. Validate the ordered release overlay without printing the resolved configuration:
 
 ```bash
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml config
+sudo docker compose \
+  --env-file .env.production \
+  -f docker-compose.prod.yml \
+  -f deploy/docker-compose.release.yml \
+  config --quiet
 ```
 
 Use Docker Compose v2 (`docker compose`). If the VPS only has legacy `docker-compose` v1, install the Docker Compose plugin before deploy.
 
-On the current VPS, the `deploy` user has passwordless sudo but is not using the Docker socket directly in non-interactive SSH sessions. Prefix Docker commands with `sudo` unless the user is later added to the Docker group and the session is refreshed.
-
-```bash
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml ps
-```
-
-Apply Prisma migrations:
-
-```bash
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml run --rm api npx prisma migrate deploy --schema server/prisma/schema.prisma
-```
-
-Seed the shared system exercise library after migrations:
-
-```bash
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml run --rm api npm run api:seed:exercises
-```
-
-The seed is idempotent and should report roughly 200+ total system exercises. Confirm production counts:
-
-```bash
-sudo docker compose --env-file .env.production -f docker-compose.prod.yml exec postgres \
-  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select count(*) filter (where is_system = true and deleted_at is null) as system_exercises, count(*) filter (where trainer_id is not null and deleted_at is null) as trainer_exercises from exercises;"'
-```
+On the current VPS, prefix Docker commands with `sudo` unless Docker socket access has been deliberately configured. Follow the authoritative runbook for backup proof and the enforced sequence `postgres healthy → migrate → seed → read-only preflight → API ready → Caddy`. Never force-start a dependent service after a failed gate.
 
 Check health:
 
@@ -265,16 +247,7 @@ gunzip -c deploy/backups/trainer_app_<timestamp>.sql.gz \
       sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 ```
 
-For a destructive production restore, stop the API first, verify the target database name, restore, run a read-only sanity check, then start the API again:
-
-```bash
-docker compose --env-file .env.production -f docker-compose.prod.yml stop api
-gunzip -c deploy/backups/trainer_app_<timestamp>.sql.gz \
-  | docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
-      sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
-docker compose --env-file .env.production -f docker-compose.prod.yml start api
-curl http://localhost/ready
-```
+Production restore is intentionally not given as a copy-paste command here. An older backup can resurrect accounts deleted after the snapshot. Keep public traffic blocked and follow the reconciliation procedure in the authoritative release runbook; if a protected deletion/tombstone ledger for the interval is unavailable, the production restore remains blocked.
 
 Backup safety:
 
@@ -285,34 +258,19 @@ Backup safety:
 
 ## Restore Drill
 
-Run restore checks only against an isolated temporary database/container unless you are intentionally performing a destructive production restore.
-
-Inside the compose network:
+Run restore checks only through the guarded script against an isolated disposable database. It refuses `NODE_ENV=production`, production-like hosts/names, missing acknowledgement, IPv6 targets, URI target overrides, and ambient PostgreSQL target variables:
 
 ```bash
-BACKUP_FILE=deploy/backups/trainer_app_<timestamp>.sql.gz
-docker compose --env-file .env.production -f docker-compose.prod.yml exec postgres \
-  sh -lc 'createdb -U "$POSTGRES_USER" trainer_app_restore_check'
-gunzip -c "$BACKUP_FILE" \
-  | docker compose --env-file .env.production -f docker-compose.prod.yml exec -T postgres \
-      sh -lc 'psql -U "$POSTGRES_USER" -d trainer_app_restore_check'
-docker compose --env-file .env.production -f docker-compose.prod.yml exec postgres \
-  sh -lc 'psql -U "$POSTGRES_USER" -d trainer_app_restore_check -c "select count(*) from users; select count(*) from auth_identities; select count(*) from clients; select count(*) from exercises; select count(*) from workout_templates; select count(*) from workout_sessions; select count(*) from workout_set_results; select count(*) from admin_users; select count(*) from admin_audit_logs;"'
-docker compose --env-file .env.production -f docker-compose.prod.yml exec postgres \
-  sh -lc 'dropdb -U "$POSTGRES_USER" trainer_app_restore_check'
+NODE_ENV=test \
+ACCOUNT_DELETION_TEST_DB_ACK=DELETE_DISPOSABLE_DATABASE \
+TEST_DATABASE_URL='postgresql://<test-user>:<test-password>@127.0.0.1:5432/trainer_restore_test' \
+BACKUP_FILE='deploy/backups/trainer_app_<timestamp>.sql.gz' \
+bash deploy/scripts/restore-drill.sh
 ```
-
-Compare these counts with production counts captured immediately before backup. Do not keep the restore-check database after the drill.
 
 ## Update
 
-```bash
-git pull
-docker compose --env-file .env.production -f docker-compose.prod.yml build api
-docker compose --env-file .env.production -f docker-compose.prod.yml run --rm api npx prisma migrate deploy --schema server/prisma/schema.prisma
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d
-curl -I https://api.trener-app.com/ready
-```
+Use the same ordered procedure in [`deploy/runbooks/production-release.md`](../deploy/runbooks/production-release.md) for every update. A plain `up -d` or an API start before migration, seed, and preflight is not an accepted release path.
 
 PostgreSQL data lives in the `postgres_data` Docker volume and is not removed by image rebuilds.
 

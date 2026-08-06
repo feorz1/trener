@@ -2,7 +2,7 @@ import type { OwnerId } from "../types";
 import type { LocalDataState } from "../local/localState";
 import type { Client, Exercise, Workout, WorkoutResult, WorkoutResultType, WorkoutSession } from "../types";
 import type { MetricValues } from "@/types";
-import type { AuthorizedFetch, DataApiBootstrapPayload, DataApiClient, DataApiClientIntake, DataApiExercise, DataApiWorkoutSession, DataApiWorkoutSetResult } from "../api/dataApi.types";
+import type { AuthorizedFetch, DataApiBootstrapPayload, DataApiClient, DataApiClientIntake, DataApiExercise, DataApiWorkoutSession, DataApiWorkoutSessionItem, DataApiWorkoutSetResult } from "../api/dataApi.types";
 import { exerciseCatalog } from "../exerciseCatalog";
 import { getPrimaryWeightMetricKey } from "@/features/workouts/tracking";
 import { withNetworkTimeout } from "@/utils/networkTimeout";
@@ -108,7 +108,12 @@ export function mapExercise(exercise: DataApiExercise, ownerId: OwnerId): Exerci
     name: exercise.name,
     category: "strength",
     source: exercise.isSystem ? "built_in" : "custom",
-    primaryMuscles: exercise.muscleGroup ? [exercise.muscleGroup] : ["all"],
+    primaryMuscles: exercise.primaryMuscles != null
+      ? [...exercise.primaryMuscles]
+      : exercise.muscleGroup
+        ? [exercise.muscleGroup]
+        : ["all"],
+    secondaryMuscles: exercise.secondaryMuscles != null ? [...exercise.secondaryMuscles] : undefined,
     equipment: exercise.equipment ?? "Не указано",
     resultType: getExerciseResultType(exercise.id, exercise.name, exercise.resultType ?? undefined),
     notes: exercise.description ?? undefined,
@@ -126,59 +131,41 @@ export function mapWorkout(session: DataApiWorkoutSession, ownerId: OwnerId): Wo
     clientId: session.clientId ?? undefined,
     title: session.title,
     startsAt,
-    durationMinutes: 60,
-    focus: "",
-    location: "Зал",
+    timezone: session.timezone ?? undefined,
+    durationMinutes: session.durationMinutes ?? 60,
+    focus: session.focus ?? session.notes ?? "",
+    location: session.location ?? "Зал",
     status: mapWorkoutStatus(session.status),
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
-	    exercises: (session.items ?? []).map((item) => {
-	      const resultType = getExerciseResultType(item.exerciseId ?? item.id, item.titleSnapshot);
-	      const setResults = uniqueSetResults(item.setResults);
-	      const resultBySetNumber = new Map(setResults.map((set) => [set.setNumber, set]));
-	      const highestResultSetNumber = setResults.reduce((highest, set) => Math.max(highest, set.setNumber), 0);
-	      const hasPlannedTarget = item.plannedReps != null || item.plannedWeight != null || item.plannedDurationSec != null;
-	      const plannedSetCount = item.plannedSets ?? (hasPlannedTarget ? 1 : 0);
-	      const setCount = Math.max(0, plannedSetCount, highestResultSetNumber);
-	      const sets: DataApiWorkoutSetResult[] = Array.from({ length: setCount }, (_, index) => {
-	        const setNumber = index + 1;
-	        return resultBySetNumber.get(setNumber) ?? { id: `${item.id}:planned:${setNumber}`, setNumber, completed: false };
-	      });
-	      return {
-	        id: item.id,
-	        exerciseId: item.exerciseId ?? item.id,
-	        exerciseName: item.titleSnapshot,
-	        resultType,
-	        order: item.order,
-	        comment: item.notes ?? undefined,
-	        sets: sets.map((set) => {
-	          const plannedValues = getWeightMetricValues(resultType, item.plannedWeight);
-	          const resultValues = getWeightMetricValues(resultType, set.weight);
-	          const hasResultValues = set.reps !== undefined || set.durationSec !== undefined || set.distanceMeters !== undefined || set.weight !== undefined;
-	          const values = { ...plannedValues, ...(hasResultValues ? resultValues : undefined) };
-
-	          return {
-	            id: set.id ?? `${item.id}:set:${set.setNumber}`,
-	            order: set.setNumber,
-	            values: Object.keys(values).length > 0 ? values : undefined,
-	            targetWeightKg: getPrimaryWeightMetricKey(resultType) === "weight" ? item.plannedWeight ?? undefined : undefined,
-	            targetReps: item.plannedReps ?? undefined,
-	            targetDurationSeconds: item.plannedDurationSec ?? undefined,
-	            actualWeightKg: getPrimaryWeightMetricKey(resultType) === "weight" ? set.weight ?? undefined : undefined,
-	            actualReps: set.reps ?? undefined,
-	            actualDurationSeconds: set.durationSec ?? undefined,
-	            actualDistanceMeters: set.distanceMeters ?? undefined,
-	            completed: Boolean(set.completed)
-	          };
-	        })
-	      };
-	    })
-	  };
+    exercises: (session.items ?? []).map((item) => {
+      const resultType = getExerciseResultType(item.exerciseId ?? item.id, item.titleSnapshot, item.resultType ?? undefined);
+      return {
+        id: item.id,
+        exerciseId: item.exerciseId ?? item.id,
+        exerciseName: item.titleSnapshot,
+        resultType,
+        order: item.order,
+        day: item.day ?? undefined,
+        comment: item.notes ?? undefined,
+        supersetWithNext: item.supersetWithNext ?? undefined,
+        restSeconds: item.restSeconds ?? undefined,
+        sets: mapWorkoutItemSets(item, resultType)
+      };
+    }),
+    repeatDays: session.repeatDays != null ? [...session.repeatDays] : undefined,
+    scheduleTimes: session.scheduleTimes != null ? { ...session.scheduleTimes } : undefined
+  };
 }
 
 export function mapSession(session: DataApiWorkoutSession, ownerId: OwnerId): WorkoutSession | null {
   if (session.status === "planned") return null;
   const startedAt = session.startedAt ?? session.scheduledAt ?? session.createdAt ?? new Date().toISOString();
+  const startedAtTimestamp = session.startedAt ? Date.parse(session.startedAt) : Number.NaN;
+  const finishedAtTimestamp = session.finishedAt ? Date.parse(session.finishedAt) : Number.NaN;
+  const durationSeconds = Number.isFinite(startedAtTimestamp) && Number.isFinite(finishedAtTimestamp)
+    ? Math.max(0, Math.floor((finishedAtTimestamp - startedAtTimestamp) / 1000))
+    : undefined;
   return {
     id: session.id,
     ownerId,
@@ -187,6 +174,7 @@ export function mapSession(session: DataApiWorkoutSession, ownerId: OwnerId): Wo
     status: mapSessionStatus(session.status),
     startedAt,
     completedAt: session.finishedAt ?? undefined,
+    durationSeconds,
     workoutTitleSnapshot: session.title,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
@@ -195,12 +183,25 @@ export function mapSession(session: DataApiWorkoutSession, ownerId: OwnerId): Wo
       exerciseId: item.exerciseId ?? item.id,
       exerciseName: item.titleSnapshot,
       exerciseNameSnapshot: item.titleSnapshot,
-      resultTypeSnapshot: getExerciseResultType(item.exerciseId ?? item.id, item.titleSnapshot),
+      resultTypeSnapshot: getExerciseResultType(item.exerciseId ?? item.id, item.titleSnapshot, item.resultType ?? undefined),
       order: item.order,
+      day: item.day ?? undefined,
       comment: item.notes ?? undefined,
+      supersetWithNext: item.supersetWithNext ?? undefined,
+      plannedSetTargets: item.plannedSetTargets?.map((target) => ({
+        id: target.id,
+        order: target.order,
+        values: target.values ? { ...target.values } : undefined,
+        targetWeightKg: target.targetWeightKg ?? undefined,
+        targetReps: target.targetReps ?? undefined,
+        targetDurationSeconds: target.targetDurationSeconds ?? undefined,
+        targetDistanceMeters: target.targetDistanceMeters ?? undefined
+      })),
       plannedSets: item.plannedSets ?? undefined,
       plannedRepetitions: item.plannedReps ?? undefined,
-      plannedWeight: item.plannedWeight ?? undefined
+      plannedWeight: item.plannedWeight ?? undefined,
+      plannedDurationSeconds: item.plannedDurationSec ?? undefined,
+      restSeconds: item.restSeconds ?? undefined
     }))
   };
 }
@@ -208,7 +209,7 @@ export function mapSession(session: DataApiWorkoutSession, ownerId: OwnerId): Wo
 export function mapResults(session: DataApiWorkoutSession, ownerId: OwnerId): WorkoutResult[] {
   return (session.items ?? []).flatMap((item) =>
     uniqueSetResults(item.setResults).map((result) => {
-      const resultType = getExerciseResultType(item.exerciseId ?? item.id, item.titleSnapshot);
+      const resultType = getExerciseResultType(item.exerciseId ?? item.id, item.titleSnapshot, item.resultType ?? undefined);
       const values = getWeightMetricValues(resultType, result.weight);
 
       return {
@@ -229,6 +230,70 @@ export function mapResults(session: DataApiWorkoutSession, ownerId: OwnerId): Wo
       };
     })
   );
+}
+
+function mapWorkoutItemSets(item: DataApiWorkoutSessionItem, resultType: WorkoutResultType | undefined): Workout["exercises"][number]["sets"] {
+  const setResults = uniqueSetResults(item.setResults);
+
+  if (item.plannedSetTargets != null) {
+    const targetByOrder = new Map(item.plannedSetTargets.map((target) => [target.order, target]));
+    const resultByOrder = new Map(setResults.map((result) => [result.setNumber, result]));
+    const orders = Array.from(new Set([...targetByOrder.keys(), ...resultByOrder.keys()])).sort((left, right) => left - right);
+
+    return orders.map((order) => {
+      const target = targetByOrder.get(order);
+      const result = resultByOrder.get(order);
+      const resultValues = getWeightMetricValues(resultType, result?.weight);
+
+      return {
+        id: target?.id ?? result?.id ?? `${item.id}:set:${order}`,
+        order,
+        values: target?.values != null
+          ? { ...target.values }
+          : resultValues,
+        targetWeightKg: target?.targetWeightKg ?? undefined,
+        targetReps: target?.targetReps ?? undefined,
+        targetDurationSeconds: target?.targetDurationSeconds ?? undefined,
+        targetDistanceMeters: target?.targetDistanceMeters ?? undefined,
+        actualWeightKg: getPrimaryWeightMetricKey(resultType) === "weight" ? result?.weight ?? undefined : undefined,
+        actualReps: result?.reps ?? undefined,
+        actualDurationSeconds: result?.durationSec ?? undefined,
+        actualDistanceMeters: result?.distanceMeters ?? undefined,
+        completed: Boolean(result?.completed)
+      };
+    });
+  }
+
+  const resultBySetNumber = new Map(setResults.map((set) => [set.setNumber, set]));
+  const highestResultSetNumber = setResults.reduce((highest, set) => Math.max(highest, set.setNumber), 0);
+  const hasPlannedTarget = item.plannedReps != null || item.plannedWeight != null || item.plannedDurationSec != null;
+  const plannedSetCount = item.plannedSets ?? (hasPlannedTarget ? 1 : 0);
+  const setCount = Math.max(0, plannedSetCount, highestResultSetNumber);
+  const sets: DataApiWorkoutSetResult[] = Array.from({ length: setCount }, (_, index) => {
+    const setNumber = index + 1;
+    return resultBySetNumber.get(setNumber) ?? { id: `${item.id}:planned:${setNumber}`, setNumber, completed: false };
+  });
+
+  return sets.map((set) => {
+    const plannedValues = getWeightMetricValues(resultType, item.plannedWeight);
+    const resultValues = getWeightMetricValues(resultType, set.weight);
+    const hasResultValues = set.reps !== undefined || set.durationSec !== undefined || set.distanceMeters !== undefined || set.weight !== undefined;
+    const values = { ...plannedValues, ...(hasResultValues ? resultValues : undefined) };
+
+    return {
+      id: set.id ?? `${item.id}:set:${set.setNumber}`,
+      order: set.setNumber,
+      values: Object.keys(values).length > 0 ? values : undefined,
+      targetWeightKg: getPrimaryWeightMetricKey(resultType) === "weight" ? item.plannedWeight ?? undefined : undefined,
+      targetReps: item.plannedReps ?? undefined,
+      targetDurationSeconds: item.plannedDurationSec ?? undefined,
+      actualWeightKg: getPrimaryWeightMetricKey(resultType) === "weight" ? set.weight ?? undefined : undefined,
+      actualReps: set.reps ?? undefined,
+      actualDurationSeconds: set.durationSec ?? undefined,
+      actualDistanceMeters: set.distanceMeters ?? undefined,
+      completed: Boolean(set.completed)
+    };
+  });
 }
 
 function uniqueSetResults(itemResults: DataApiWorkoutSetResult[] = []) {

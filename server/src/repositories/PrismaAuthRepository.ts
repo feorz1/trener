@@ -1,6 +1,6 @@
 import { Prisma, PrismaClient } from "@prisma/client";
 import type { AuthIdentityRecord, AuthProvider, EmailLoginCodeRecord, LoginTicketRecord, OAuthProvider, OAuthStateRecord, RefreshTokenRecord, UserRecord } from "../types";
-import type { AuthRepository, CreateUserInput, UpsertIdentityInput } from "./AuthRepository";
+import type { AuthRepository, CreateRefreshTokenInput, CreateUserInput, UpsertIdentityInput } from "./AuthRepository";
 
 const prisma = new PrismaClient();
 
@@ -111,13 +111,21 @@ export class PrismaAuthRepository implements AuthRepository {
     return record ? mapEmailCode(record) : null;
   }
 
-  async incrementEmailCodeAttempts(id: string) {
-    return mapEmailCode(
-      await prisma.emailLoginCode.update({
-        where: { id },
+  async claimEmailCodeAttempt(id: string, now: Date, maxAttempts: number) {
+    return prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.emailLoginCode.updateMany({
+        where: {
+          id,
+          consumedAt: null,
+          expiresAt: { gt: now },
+          attemptCount: { lt: maxAttempts }
+        },
         data: { attemptCount: { increment: 1 } }
-      })
-    );
+      });
+      if (claimed.count !== 1) return null;
+      const record = await transaction.emailLoginCode.findUnique({ where: { id } });
+      return record ? mapEmailCode(record) : null;
+    });
   }
 
   async consumeEmailCode(id: string) {
@@ -145,6 +153,32 @@ export class PrismaAuthRepository implements AuthRepository {
         }
       })
     );
+  }
+
+  async rotateRefreshToken(tokenId: string, successor: CreateRefreshTokenInput, now: Date) {
+    return prisma.$transaction(async (transaction) => {
+      const claimed = await transaction.refreshToken.updateMany({
+        where: { id: tokenId, revokedAt: null, expiresAt: { gt: now } },
+        data: { revokedAt: now }
+      });
+      if (claimed.count !== 1) return null;
+
+      const [consumed, createdSuccessor] = await Promise.all([
+        transaction.refreshToken.findUniqueOrThrow({ where: { id: tokenId } }),
+        transaction.refreshToken.create({
+          data: {
+            userId: successor.userId,
+            tokenHash: successor.tokenHash,
+            deviceId: successor.deviceId ?? null,
+            userAgent: successor.userAgent ?? null,
+            ipHash: successor.ipHash ?? null,
+            expiresAt: successor.expiresAt,
+            rotatedFromTokenId: successor.rotatedFromTokenId ?? tokenId
+          }
+        })
+      ]);
+      return { consumed: mapRefreshToken(consumed), successor: mapRefreshToken(createdSuccessor) };
+    });
   }
 
   async findRefreshTokenByHash(tokenHash: string) {
@@ -203,7 +237,11 @@ export class PrismaAuthRepository implements AuthRepository {
   }
 
   async consumeLoginTicket(id: string) {
-    return mapLoginTicket(await prisma.loginTicket.update({ where: { id }, data: { consumedAt: new Date() } }));
+    const consumedAt = new Date();
+    const consumed = await prisma.loginTicket.updateMany({ where: { id, consumedAt: null }, data: { consumedAt } });
+    if (consumed.count !== 1) return null;
+    const record = await prisma.loginTicket.findUnique({ where: { id } });
+    return record ? mapLoginTicket(record) : null;
   }
 }
 

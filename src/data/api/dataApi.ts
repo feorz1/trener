@@ -1,4 +1,5 @@
 import { DataError } from "../contracts";
+import { withNetworkTimeout } from "../../utils/networkTimeout";
 import type {
   AuthorizedFetch,
   DataApi,
@@ -18,20 +19,26 @@ import type {
 type CreateDataApiInput = {
   baseUrl: string;
   authorizedFetch: AuthorizedFetch;
+  timeoutMs?: number;
 };
 
-export function createDataApi({ baseUrl, authorizedFetch }: CreateDataApiInput): DataApi {
+export function createDataApi({ baseUrl, authorizedFetch, timeoutMs }: CreateDataApiInput): DataApi {
   const rootUrl = baseUrl.replace(/\/$/, "");
 
   async function request<T>(path: string, init: RequestInit = {}) {
-    const response = await authorizedFetch(`${rootUrl}${path}`, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...init.headers
-      }
-    });
+    const response = await withNetworkTimeout(
+      (signal) =>
+        authorizedFetch(`${rootUrl}${path}`, {
+          ...init,
+          signal,
+          headers: {
+            Accept: "application/json",
+            ...(init.body ? { "Content-Type": "application/json" } : {}),
+            ...init.headers
+          }
+        }),
+      { timeoutMs, signal: init.signal }
+    );
 
     if (!response.ok) {
       throw await toDataApiError(response);

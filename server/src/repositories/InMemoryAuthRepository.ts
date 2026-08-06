@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AuthIdentityRecord, AuthProvider, EmailLoginCodeRecord, LoginTicketRecord, OAuthProvider, OAuthStateRecord, RefreshTokenRecord, UserRecord } from "../types";
-import type { AuthRepository, CreateUserInput, UpsertIdentityInput } from "./AuthRepository";
+import type { AuthRepository, CreateRefreshTokenInput, CreateUserInput, UpsertIdentityInput } from "./AuthRepository";
 
 export class InMemoryAuthRepository implements AuthRepository {
   readonly users = new Map<string, UserRecord>();
@@ -113,9 +113,10 @@ export class InMemoryAuthRepository implements AuthRepository {
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0] ?? null;
   }
 
-  async incrementEmailCodeAttempts(id: string) {
+  async claimEmailCodeAttempt(id: string, now: Date, maxAttempts: number) {
     const record = this.emailCodes.get(id);
     if (!record) throw new Error(`Email code not found: ${id}`);
+    if (record.consumedAt || record.expiresAt.getTime() <= now.getTime() || record.attemptCount >= maxAttempts) return null;
     const updated = { ...record, attemptCount: record.attemptCount + 1 };
     this.emailCodes.set(id, updated);
     return updated;
@@ -145,6 +146,15 @@ export class InMemoryAuthRepository implements AuthRepository {
     };
     this.refreshTokens.set(record.id, record);
     return record;
+  }
+
+  async rotateRefreshToken(tokenId: string, successor: CreateRefreshTokenInput, now: Date) {
+    const record = this.refreshTokens.get(tokenId);
+    if (!record || record.revokedAt || record.expiresAt.getTime() <= now.getTime()) return null;
+    const consumed = { ...record, revokedAt: now };
+    this.refreshTokens.set(tokenId, consumed);
+    const createdSuccessor = await this.createRefreshToken(successor);
+    return { consumed, successor: createdSuccessor };
   }
 
   async findRefreshTokenByHash(tokenHash: string) {
@@ -215,6 +225,7 @@ export class InMemoryAuthRepository implements AuthRepository {
   async consumeLoginTicket(id: string) {
     const record = this.loginTickets.get(id);
     if (!record) throw new Error(`Login ticket not found: ${id}`);
+    if (record.consumedAt) return null;
     const updated = { ...record, consumedAt: new Date() };
     this.loginTickets.set(id, updated);
     return updated;

@@ -69,6 +69,7 @@ Canonical mobile modal container for titled dialogs with body content and footer
 - Header uses 24px top/horizontal padding and 12px bottom padding to match the bottom-sheet reference height.
 - `ModalBody` keeps 8px horizontal and 8px vertical padding with no default child gap, so `List item/Cell` can keep its own canonical 16px internal padding while aligning to the modal 24px rhythm.
 - `showBodyText=false` hides the internal subheader/description block and keeps only slotted body content.
+- When body text is hidden and no slotted content exists, `ModalBody` collapses completely so the action area follows the header without an empty padded row, matching Figma node `1077:16009`.
 - Do not remove or override `List item/Cell` padding for modal usage.
 - `presentation="inline"` renders the panel for Storybook and embedded previews.
 - `presentation="overlay"` uses React Native `Modal` with a dimmed overlay and bottom-sheet slide animation.

@@ -1,9 +1,10 @@
 {
   "expo": {
-    "name": "Trainer Foundation",
+    "name": "Trener",
     "slug": "trainer-foundation",
-    "version": "0.1.0",
-    "orientation": "portrait",
+    "version": "1.0.0",
+    "icon": "./assets/icon.png",
+    "orientation": "default",
     "scheme": "trainer",
     "userInterfaceStyle": "automatic",
     "plugins": [
@@ -16,13 +17,35 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.trainerfoundation"
+      "bundleIdentifier": "com.trenerapp.trener",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIRequiresFullScreen": false,
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown"
+        ],
+        "UISupportedInterfaceOrientations~ipad": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationPortraitUpsideDown",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#111827"
       },
-      "package": "com.anonymous.trainerfoundation"
-    }
+      "package": "com.trenerapp.trener"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d5a30ca4-d99b-4648-9e50-5f201b61ac99"
+      }
+    },
+    "owner": "feorz"
   }
 }

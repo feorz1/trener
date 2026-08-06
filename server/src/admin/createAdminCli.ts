@@ -22,11 +22,11 @@ async function main() {
 
   const repository = createAdminRepository(config);
   const service = new AdminService(config, repository);
-  const admin = await service.createInitialAdmin(email, password, "OWNER");
-  console.info(`[admin] owner is ready: ${admin.email}`);
+  await service.createInitialAdmin(email, password, "OWNER");
+  console.info("[admin] owner account is ready");
 }
 
-void main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+void main().catch(() => {
+  console.error("[admin] owner account setup failed");
   process.exit(1);
 });

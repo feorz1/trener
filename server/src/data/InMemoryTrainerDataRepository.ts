@@ -21,9 +21,12 @@ import type {
 } from "./types";
 import { mergeClientProfile } from "./clientProfile";
 
+type StoredExerciseRecord = Omit<ExerciseRecord, "primaryMuscles" | "secondaryMuscles" | "resultType"> &
+  Partial<Pick<ExerciseRecord, "primaryMuscles" | "secondaryMuscles" | "resultType">>;
+
 export class InMemoryTrainerDataRepository implements TrainerDataRepository {
   readonly clients = new Map<string, ClientRecord>();
-  readonly exercises = new Map<string, ExerciseRecord>();
+  readonly exercises = new Map<string, StoredExerciseRecord>();
   readonly workoutTemplates = new Map<string, WorkoutTemplateRecord>();
   readonly workoutSessions = new Map<string, WorkoutSessionRecord>();
   readonly activityEvents: unknown[] = [];
@@ -98,7 +101,7 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
     return Array.from(this.exercises.values())
       .filter((exercise) => !exercise.deletedAt && (exercise.isSystem || exercise.trainerId === trainerId))
       .sort(sortByUpdatedAt)
-      .map(clone);
+      .map(normalizeExerciseRecord);
   }
 
   async createExercise(trainerId: string, input: ExerciseInput & { name: string }) {
@@ -108,8 +111,11 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
       trainerId,
       name: input.name,
       muscleGroup: input.muscleGroup ?? null,
+      primaryMuscles: input.primaryMuscles ?? null,
+      secondaryMuscles: input.secondaryMuscles ?? null,
       equipment: input.equipment ?? null,
       description: input.description ?? null,
+      resultType: input.resultType ?? null,
       isSystem: false,
       createdAt: now,
       updatedAt: now,
@@ -121,13 +127,21 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
 
   async getExercise(trainerId: string, id: string) {
     const exercise = this.exercises.get(id);
-    return exercise && !exercise.deletedAt && (exercise.isSystem || exercise.trainerId === trainerId) ? clone(exercise) : null;
+    return exercise && !exercise.deletedAt && (exercise.isSystem || exercise.trainerId === trainerId) ? normalizeExerciseRecord(exercise) : null;
   }
 
   async updateExercise(trainerId: string, id: string, input: ExerciseInput) {
     const current = this.exercises.get(id);
     if (!current || current.trainerId !== trainerId || current.isSystem || current.deletedAt) return null;
-    const next = { ...current, ...pickDefined(input), id, trainerId, isSystem: current.isSystem, createdAt: current.createdAt, updatedAt: new Date() };
+    const next: ExerciseRecord = {
+      ...normalizeExerciseRecord(current),
+      ...pickDefined(input),
+      id,
+      trainerId,
+      isSystem: current.isSystem,
+      createdAt: current.createdAt,
+      updatedAt: new Date()
+    };
     this.exercises.set(id, next);
     return clone(next);
   }
@@ -135,7 +149,7 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
   async softDeleteExercise(trainerId: string, id: string) {
     const current = this.exercises.get(id);
     if (!current || current.trainerId !== trainerId || current.isSystem || current.deletedAt) return null;
-    const next = { ...current, deletedAt: new Date(), updatedAt: new Date() };
+    const next: ExerciseRecord = { ...normalizeExerciseRecord(current), deletedAt: new Date(), updatedAt: new Date() };
     this.exercises.set(id, next);
     return clone(next);
   }
@@ -221,6 +235,12 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
       title: input.title,
       status: input.status ?? "PLANNED",
       scheduledAt: input.scheduledAt ?? null,
+      timezone: input.timezone ?? null,
+      durationMinutes: input.durationMinutes ?? null,
+      focus: input.focus ?? null,
+      location: input.location ?? null,
+      repeatDays: input.repeatDays ?? null,
+      scheduleTimes: input.scheduleTimes ?? null,
       startedAt: input.startedAt ?? null,
       finishedAt: input.finishedAt ?? null,
       notes: input.notes ?? null,
@@ -257,6 +277,10 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
             exerciseId: item.exerciseId ?? null,
             order: item.order,
             titleSnapshot: item.titleSnapshot ?? "Упражнение",
+            resultType: item.resultType ?? null,
+            day: item.day ?? null,
+            supersetWithNext: item.supersetWithNext ?? null,
+            plannedSetTargets: normalizePlannedSetTargets(item.plannedSetTargets),
             plannedSets: item.plannedSets ?? null,
             plannedReps: item.plannedReps ?? null,
             plannedWeight: item.plannedWeight ?? null,
@@ -332,7 +356,7 @@ export class InMemoryTrainerDataRepository implements TrainerDataRepository {
     return {
       serverTime: new Date(),
       clients: Array.from(this.clients.values()).filter((item) => item.trainerId === trainerId && !item.deletedAt && updated(item)).map(clone),
-      exercises: Array.from(this.exercises.values()).filter((item) => !item.deletedAt && (item.isSystem || item.trainerId === trainerId) && updated(item)).map(clone),
+      exercises: Array.from(this.exercises.values()).filter((item) => !item.deletedAt && (item.isSystem || item.trainerId === trainerId) && updated(item)).map(normalizeExerciseRecord),
       workoutTemplates: Array.from(this.workoutTemplates.values()).filter((item) => item.trainerId === trainerId && !item.deletedAt && updated(item)).map(cloneTemplate),
       workoutSessions: Array.from(this.workoutSessions.values()).filter((item) => item.trainerId === trainerId && !item.deletedAt && updated(item)).map(cloneSession)
     };
@@ -350,6 +374,10 @@ function createTemplateItem(input: WorkoutItemInput, now: Date): WorkoutTemplate
     exerciseId: input.exerciseId ?? null,
     order: input.order,
     titleSnapshot: input.titleSnapshot ?? null,
+    resultType: input.resultType ?? null,
+    day: input.day ?? null,
+    supersetWithNext: input.supersetWithNext ?? null,
+    plannedSetTargets: normalizePlannedSetTargets(input.plannedSetTargets),
     plannedSets: input.plannedSets ?? null,
     plannedReps: input.plannedReps ?? null,
     plannedWeight: input.plannedWeight ?? null,
@@ -368,6 +396,10 @@ function createSessionItem(input: WorkoutItemInput, now: Date): WorkoutSessionIt
     exerciseId: input.exerciseId ?? null,
     order: input.order,
     titleSnapshot: input.titleSnapshot ?? "Упражнение",
+    resultType: input.resultType ?? null,
+    day: input.day ?? null,
+    supersetWithNext: input.supersetWithNext ?? null,
+    plannedSetTargets: normalizePlannedSetTargets(input.plannedSetTargets),
     plannedSets: input.plannedSets ?? null,
     plannedReps: input.plannedReps ?? null,
     plannedWeight: input.plannedWeight ?? null,
@@ -394,6 +426,27 @@ function createSetResult(workoutSessionItemId: string, input: SetResultInput, no
     createdAt: now,
     updatedAt: now
   };
+}
+
+function normalizePlannedSetTargets(input: WorkoutItemInput["plannedSetTargets"]) {
+  return input?.map((target) => ({
+    id: target.id,
+    order: target.order,
+    values: target.values ?? null,
+    targetWeightKg: target.targetWeightKg ?? null,
+    targetReps: target.targetReps ?? null,
+    targetDurationSeconds: target.targetDurationSeconds ?? null,
+    targetDistanceMeters: target.targetDistanceMeters ?? null
+  })) ?? null;
+}
+
+function normalizeExerciseRecord(input: StoredExerciseRecord): ExerciseRecord {
+  return clone({
+    ...input,
+    primaryMuscles: input.primaryMuscles ?? null,
+    secondaryMuscles: input.secondaryMuscles ?? null,
+    resultType: input.resultType ?? null
+  });
 }
 
 function page<T extends { id: string }>(items: T[], limit = 50, cursor?: string) {

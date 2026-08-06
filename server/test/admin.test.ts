@@ -99,6 +99,54 @@ describe("admin backend", () => {
     expect(limited.statusCode).toBe(429);
   });
 
+  it("keeps auth and admin rate-limit buckets separate and honors trusted client IPs", async () => {
+    const api = createTestApi({
+      TRUSTED_PROXY_CIDRS: "10.0.0.2/32",
+      ADMIN_LOGIN_RATE_LIMIT_MAX: "1",
+      RATE_LIMIT_EMAIL_START_PER_EMAIL: "10",
+      RATE_LIMIT_EMAIL_START_PER_IP: "1",
+      EMAIL_CODE_RESEND_SECONDS: "0"
+    });
+    await seedAdmin(api);
+    const proxyHeaders = (clientIp: string) => ({ "x-forwarded-for": clientIp });
+
+    const authAttempt = await api.app.inject({
+      method: "POST",
+      url: "/auth/email/start",
+      remoteAddress: "10.0.0.2",
+      headers: proxyHeaders("198.51.100.1"),
+      payload: { email: "rate-auth@example.com" }
+    });
+    expect(authAttempt.statusCode).toBe(200);
+
+    const firstAdmin = await api.app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      remoteAddress: "10.0.0.2",
+      headers: proxyHeaders("198.51.100.1"),
+      payload: { email: "owner@example.com", password: "wrong-password-123" }
+    });
+    expect(firstAdmin.statusCode).toBe(401);
+
+    const otherClient = await api.app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      remoteAddress: "10.0.0.2",
+      headers: proxyHeaders("203.0.113.2"),
+      payload: { email: "owner@example.com", password: "wrong-password-123" }
+    });
+    expect(otherClient.statusCode).toBe(401);
+
+    const repeatedAdmin = await api.app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      remoteAddress: "10.0.0.2",
+      headers: proxyHeaders("198.51.100.1"),
+      payload: { email: "owner@example.com", password: "wrong-password-123" }
+    });
+    expect(repeatedAdmin.statusCode).toBe(429);
+  });
+
   it("requires an admin cookie and rejects trainer bearer tokens", async () => {
     const api = createTestApi();
     await seedAdmin(api);
@@ -198,6 +246,126 @@ describe("admin backend", () => {
 
     const missingAuditAuth = await api.app.inject({ method: "GET", url: "/admin/audit-log" });
     expect(missingAuditAuth.statusCode).toBe(401);
+  });
+
+  it("requires a matching CSRF header and trusted browser origin for every admin mutation", async () => {
+    const api = createTestApi({ ADMIN_CORS_ORIGIN: "https://admin.example.com" });
+    await seedAdmin(api);
+    const trainer = api.adminRepository.seedTrainer();
+
+    const foreignLogin = await api.app.inject({
+      method: "POST",
+      url: "/admin/auth/login",
+      headers: { origin: "https://evil.example", "sec-fetch-site": "cross-site" },
+      payload: { email: "owner@example.com", password: "owner-password-123" }
+    });
+    expect(foreignLogin.statusCode).toBe(403);
+
+    const session = await loginAdmin(api);
+    const trustedBrowserHeaders = {
+      cookie: session.cookie,
+      origin: "https://admin.example.com",
+      "sec-fetch-site": "same-site"
+    };
+
+    const cookieOnlyText = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/block`,
+      headers: { ...trustedBrowserHeaders, "content-type": "text/plain" },
+      payload: "reason=csrf"
+    });
+    expect(cookieOnlyText.statusCode).toBe(403);
+
+    const missingHeaderJson = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/block`,
+      headers: trustedBrowserHeaders,
+      payload: { reason: "csrf" }
+    });
+    expect(missingHeaderJson.statusCode).toBe(403);
+
+    const wrongHeader = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/block`,
+      headers: { ...trustedBrowserHeaders, "x-csrf-token": "wrong-token" },
+      payload: { reason: "csrf" }
+    });
+    expect(wrongHeader.statusCode).toBe(403);
+
+    const foreignOrigin = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/block`,
+      headers: {
+        cookie: session.cookie,
+        origin: "https://evil.example",
+        "sec-fetch-site": "same-site",
+        "x-csrf-token": session.csrfToken
+      },
+      payload: { reason: "csrf" }
+    });
+    expect(foreignOrigin.statusCode).toBe(403);
+
+    const crossSite = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/block`,
+      headers: {
+        ...trustedBrowserHeaders,
+        "sec-fetch-site": "cross-site",
+        "x-csrf-token": session.csrfToken
+      },
+      payload: { reason: "csrf" }
+    });
+    expect(crossSite.statusCode).toBe(403);
+
+    const allowed = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/block`,
+      headers: { ...trustedBrowserHeaders, "x-csrf-token": session.csrfToken },
+      payload: { reason: "policy" }
+    });
+    expect(allowed.statusCode).toBe(200);
+    expect(allowed.json().trainer.isBlocked).toBe(true);
+
+    for (const url of [
+      `/admin/trainers/${trainer.id}/unblock`,
+      `/admin/trainers/${trainer.id}/revoke-sessions`,
+      "/admin/auth/logout"
+    ]) {
+      const cookieOnly = await api.app.inject({ method: "POST", url, headers: trustedBrowserHeaders, payload: "" });
+      expect(cookieOnly.statusCode).toBe(403);
+    }
+
+    const headMutation = await api.app.inject({
+      method: "HEAD",
+      url: `/admin/trainers/${trainer.id}/unblock`,
+      headers: { ...trustedBrowserHeaders, "x-csrf-token": session.csrfToken }
+    });
+    expect(headMutation.statusCode).toBe(404);
+    expect((await api.adminRepository.getTrainerDetail(trainer.id))?.isBlocked).toBe(true);
+
+    const unblocked = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/unblock`,
+      headers: { ...trustedBrowserHeaders, "x-csrf-token": session.csrfToken },
+      payload: ""
+    });
+    expect(unblocked.statusCode).toBe(200);
+
+    const revoked = await api.app.inject({
+      method: "POST",
+      url: `/admin/trainers/${trainer.id}/revoke-sessions`,
+      headers: { ...trustedBrowserHeaders, "x-csrf-token": session.csrfToken },
+      payload: ""
+    });
+    expect(revoked.statusCode).toBe(200);
+
+    const logout = await api.app.inject({
+      method: "POST",
+      url: "/admin/auth/logout",
+      headers: { ...trustedBrowserHeaders, "x-csrf-token": session.csrfToken },
+      payload: ""
+    });
+    expect(logout.statusCode).toBe(200);
   });
 });
 

@@ -1,6 +1,6 @@
 export { AuthProvider, AuthRouteBoundary, useAuth, type AuthContextValue } from "./AuthProvider";
 export { createAuthorizedFetch } from "./api/apiClient";
-export { createDefaultAuthApi, createHttpAuthApi, createMockAuthApi } from "./api/authApi";
+export { createDefaultAuthApi, createHttpAuthApi } from "./api/authApi";
 export { authConfig, envProvidersAvailability, mergeProviderAvailability } from "./config";
 export { AUTH_CONNECTION_ERROR_ROUTE, SIGN_IN_ROUTE, getAuthRouteDecision, type AuthRouteDecision } from "./routes";
 export { createMemoryTokenStorage, createSecureTokenStorage } from "./services/secureTokenStorage";

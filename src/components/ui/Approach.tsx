@@ -234,6 +234,7 @@ export function Approach({
   onResetTimer,
   style
 }: ApproachProps) {
+  const { resolvedColors, resolvedColorScheme } = useAppTheme();
   const preset = useMemo(() => trackingPreset ?? getTrackingPreset(resultType ?? sets[0]?.resultType), [resultType, sets, trackingPreset]);
   const uniqueSets = useMemo(() => getUniqueSetIds(sets), [sets]);
   const initialTextById = useMemo(() => getTextValuesById(uniqueSets, preset), [preset, uniqueSets]);
@@ -407,9 +408,19 @@ export function Approach({
     closeOpenRow();
     editNote();
   };
+  const actionSurfaceColor = resolvedColorScheme === "dark" ? resolvedColors.background.canvas : resolvedColors.background.canvasSoft;
 
   return (
-    <View style={[styles.root, style]}>
+    <View
+      style={[
+        styles.root,
+        {
+          borderColor: resolvedColors.background.border,
+          backgroundColor: resolvedColorScheme === "dark" ? resolvedColors.background.canvasSoft : resolvedColors.background.canvas
+        },
+        style
+      ]}
+    >
       <ApproachHeader
         title={title}
         imageSource={imageSource}
@@ -467,7 +478,12 @@ export function Approach({
             accessibilityState={{ disabled: orderedSets.length <= 1 }}
             disabled={orderedSets.length <= 1}
             onPress={removeLastSet}
-            style={({ pressed }) => [styles.actionButton, orderedSets.length <= 1 && styles.actionButtonDisabled, pressed && styles.actionButtonPressed]}
+            style={({ pressed }) => [
+              styles.actionButton,
+              { backgroundColor: actionSurfaceColor },
+              orderedSets.length <= 1 && styles.actionButtonDisabled,
+              pressed && styles.actionButtonPressed
+            ]}
           >
             <Icon name="minus" size={theme.sizes.approachStatusIcon} color={orderedSets.length <= 1 ? theme.colors.content.disabled : theme.colors.content.ink} />
           </Pressable>
@@ -478,7 +494,7 @@ export function Approach({
               closeOpenRow();
               onAddSet?.();
             }}
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
+            style={({ pressed }) => [styles.actionButton, { backgroundColor: actionSurfaceColor }, pressed && styles.actionButtonPressed]}
           >
             <Icon name="add" size={theme.sizes.approachStatusIcon} color={theme.colors.content.ink} />
           </Pressable>
@@ -923,9 +939,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     padding: theme.spacing.sm,
     borderWidth: theme.sizes.approachBorderWidth,
-    borderColor: theme.colors.background.border,
-    borderRadius: theme.radius.xl,
-    backgroundColor: theme.colors.background.canvas
+    borderRadius: theme.radius.xl
   },
   header: {
     minHeight: theme.sizes.approachHeaderThumb,
@@ -1019,8 +1033,7 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs
   },
   swipeRow: {
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.background.canvas
+    borderRadius: theme.radius.lg
   },
   rowRoot: {
     width: "100%",
@@ -1214,8 +1227,7 @@ const styles = StyleSheet.create({
     minHeight: theme.sizes.touchTargetMin,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.background.canvasSoft
+    borderRadius: theme.radius.lg
   },
   actionButtonDisabled: {
     opacity: 0.55

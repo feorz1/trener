@@ -33,6 +33,7 @@ async function run() {
 
   const rootLayoutSource = readFileSync(resolve(process.cwd(), "app/_layout.tsx"), "utf8");
   const settingsSource = readFileSync(resolve(process.cwd(), "app/(tabs)/settings.tsx"), "utf8");
+  const appearanceSource = readFileSync(resolve(process.cwd(), "app/settings/appearance.tsx"), "utf8");
   const listItemCellSource = readFileSync(resolve(process.cwd(), "src/components/ui/ListItemCell.tsx"), "utf8");
   const themeProviderSource = readFileSync(resolve(process.cwd(), "src/theme/ThemeProvider.tsx"), "utf8");
   const themePreferenceSource = readFileSync(resolve(process.cwd(), "src/theme/themePreference.ts"), "utf8");
@@ -41,8 +42,10 @@ async function run() {
   assert.match(rootLayoutSource, /const bootstrapRemoteData = useCallback\(/);
   assert.match(rootLayoutSource, /bootstrapRemoteData=\{state\.isAuthenticated \? bootstrapRemoteData : undefined\}/);
   assert.doesNotMatch(settingsSource, /router\.replace\(\s*["']\/settings["']\s*\)/);
-  assert.match(settingsSource, /accessibilityRole="radio"/);
-  assert.match(settingsSource, /accessibilityState=\{\{ checked: preference === option\.value \}\}/);
+  assert.match(settingsSource, /router\.push\("\/settings\/appearance"\)/);
+  assert.match(appearanceSource, /accessibilityRole="radiogroup"/);
+  assert.match(appearanceSource, /accessibilityRole="radio"/);
+  assert.match(appearanceSource, /accessibilityState=\{\{ checked: preference === option\.value \}\}/);
   assert.match(listItemCellSource, /accessibilityRole=\{accessibilityRole \?\? inferredAccessibilityRole\}/);
   assert.match(listItemCellSource, /\.\.\.accessibilityState,/);
   assert.match(listItemCellSource, /accessibilityValue=\{accessibilityValue\}/);

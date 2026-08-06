@@ -1,6 +1,77 @@
 export type ClientStatusRecord = "ACTIVE" | "ARCHIVED";
 export type WorkoutSessionStatusRecord = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
+export const REPEAT_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
+export type RepeatDayRecord = (typeof REPEAT_DAYS)[number];
+
+export const WORKOUT_RESULT_TYPES = [
+  "weight_reps",
+  "reps",
+  "duration",
+  "distance_duration",
+  "reps_only",
+  "weighted_bodyweight",
+  "assisted_bodyweight",
+  "weight_reps_rpe",
+  "duration_hold",
+  "time_result",
+  "weight_duration",
+  "distance_time",
+  "distance_only",
+  "weight_distance",
+  "time_calories",
+  "calories_only",
+  "cardio_extended",
+  "interval_reps",
+  "amrap",
+  "side_reps",
+  "weight_side_reps",
+  "completion_only"
+] as const;
+export type WorkoutResultTypeRecord = (typeof WORKOUT_RESULT_TYPES)[number];
+
+export const WORKOUT_METRIC_KEYS = [
+  "weight",
+  "addedWeight",
+  "assistance",
+  "reps",
+  "duration",
+  "interval",
+  "distance",
+  "calories",
+  "rpe",
+  "rounds",
+  "extraReps",
+  "leftReps",
+  "rightReps",
+  "speed",
+  "pace",
+  "incline",
+  "resistance"
+] as const;
+export type WorkoutMetricKeyRecord = (typeof WORKOUT_METRIC_KEYS)[number];
+export type WorkoutMetricValuesRecord = Partial<Record<WorkoutMetricKeyRecord, number>>;
+
+export type PlannedSetTargetRecord = {
+  id: string;
+  order: number;
+  values: WorkoutMetricValuesRecord | null;
+  targetWeightKg: number | null;
+  targetReps: number | null;
+  targetDurationSeconds: number | null;
+  targetDistanceMeters: number | null;
+};
+
+export type PlannedSetTargetInput = {
+  id: string;
+  order: number;
+  values?: WorkoutMetricValuesRecord | null;
+  targetWeightKg?: number | null;
+  targetReps?: number | null;
+  targetDurationSeconds?: number | null;
+  targetDistanceMeters?: number | null;
+};
+
 export type ClientProfileMetricsRecord = {
   weightKg?: number;
   heightCm?: number;
@@ -53,8 +124,11 @@ export type ExerciseRecord = {
   trainerId: string | null;
   name: string;
   muscleGroup: string | null;
+  primaryMuscles: string[] | null;
+  secondaryMuscles: string[] | null;
   equipment: string | null;
   description: string | null;
+  resultType: WorkoutResultTypeRecord | null;
   isSystem: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -67,6 +141,10 @@ export type WorkoutTemplateItemRecord = {
   exerciseId: string | null;
   order: number;
   titleSnapshot: string | null;
+  resultType: WorkoutResultTypeRecord | null;
+  day: RepeatDayRecord | null;
+  supersetWithNext: boolean | null;
+  plannedSetTargets: PlannedSetTargetRecord[] | null;
   plannedSets: number | null;
   plannedReps: number | null;
   plannedWeight: number | null;
@@ -110,6 +188,10 @@ export type WorkoutSessionItemRecord = {
   exerciseId: string | null;
   order: number;
   titleSnapshot: string;
+  resultType: WorkoutResultTypeRecord | null;
+  day: RepeatDayRecord | null;
+  supersetWithNext: boolean | null;
+  plannedSetTargets: PlannedSetTargetRecord[] | null;
   plannedSets: number | null;
   plannedReps: number | null;
   plannedWeight: number | null;
@@ -129,6 +211,12 @@ export type WorkoutSessionRecord = {
   title: string;
   status: WorkoutSessionStatusRecord;
   scheduledAt: Date | null;
+  timezone: string | null;
+  durationMinutes: number | null;
+  focus: string | null;
+  location: string | null;
+  repeatDays: RepeatDayRecord[] | null;
+  scheduleTimes: Partial<Record<RepeatDayRecord, string>> | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   notes: string | null;
@@ -162,6 +250,10 @@ export type WorkoutItemInput = {
   exerciseId?: string | null;
   order: number;
   titleSnapshot?: string | null;
+  resultType?: WorkoutResultTypeRecord | null;
+  day?: RepeatDayRecord | null;
+  supersetWithNext?: boolean | null;
+  plannedSetTargets?: PlannedSetTargetInput[] | null;
   plannedSets?: number | null;
   plannedReps?: number | null;
   plannedWeight?: number | null;
@@ -194,8 +286,11 @@ export type ClientInput = {
 export type ExerciseInput = {
   name?: string;
   muscleGroup?: string | null;
+  primaryMuscles?: string[] | null;
+  secondaryMuscles?: string[] | null;
   equipment?: string | null;
   description?: string | null;
+  resultType?: WorkoutResultTypeRecord | null;
 };
 
 export type WorkoutTemplateInput = {
@@ -212,6 +307,12 @@ export type WorkoutSessionInput = {
   title?: string;
   status?: WorkoutSessionStatusRecord;
   scheduledAt?: Date | null;
+  timezone?: string | null;
+  durationMinutes?: number | null;
+  focus?: string | null;
+  location?: string | null;
+  repeatDays?: RepeatDayRecord[] | null;
+  scheduleTimes?: Partial<Record<RepeatDayRecord, string>> | null;
   startedAt?: Date | null;
   finishedAt?: Date | null;
   notes?: string | null;

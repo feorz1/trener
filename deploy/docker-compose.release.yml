@@ -1,0 +1,75 @@
+x-api-job: &api-job
+  image: trener-api-release:${RELEASE_IMAGE_TAG:?set RELEASE_IMAGE_TAG to an immutable release identifier}
+  build:
+    context: .
+    dockerfile: server/Dockerfile
+  env_file:
+    - .env.production
+  restart: "no"
+
+services:
+  postgres:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trainer_app} -d ${POSTGRES_DB:-trainer_app}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  migrate:
+    <<: *api-job
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npx", "prisma", "migrate", "deploy", "--schema", "server/prisma/schema.prisma"]
+
+  seed:
+    <<: *api-job
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["npm", "run", "api:seed:exercises"]
+
+  preflight:
+    image: postgres:16-bookworm
+    env_file:
+      - .env.production
+    environment:
+      EXPECTED_MIGRATION: ${EXPECTED_MIGRATION:?set EXPECTED_MIGRATION to the latest release migration}
+      MIN_SYSTEM_EXERCISES: ${MIN_SYSTEM_EXERCISES:-200}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    volumes:
+      - ./deploy/scripts:/opt/trainer-ops:ro
+    entrypoint: ["/bin/bash", "/opt/trainer-ops/production-preflight.sh"]
+    restart: "no"
+
+  api:
+    <<: *api-job
+    restart: unless-stopped
+    depends_on:
+      preflight:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./deploy/scripts/api-schema-readiness.mjs:/app/deploy/scripts/api-schema-readiness.mjs:ro
+    environment:
+      EXPECTED_MIGRATION: ${EXPECTED_MIGRATION:?set EXPECTED_MIGRATION to the latest release migration}
+    healthcheck:
+      test: ["CMD", "node", "/app/deploy/scripts/api-schema-readiness.mjs"]
+      interval: 15s
+      timeout: 8s
+      retries: 8
+      start_period: 15s
+
+  backup:
+    entrypoint: ["/bin/bash", "-lc"]
+    command: ["while true; do /usr/local/bin/backup-postgres.sh; sleep 86400; done"]
+
+  caddy:
+    depends_on:
+      api:
+        condition: service_healthy
+      admin:
+        condition: service_healthy

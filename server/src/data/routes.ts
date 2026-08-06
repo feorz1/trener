@@ -1,7 +1,25 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { AuthApiError } from "../errors";
 import type { AuthService } from "../services/authService";
-import type { ClientProfileInput, TrainerDataRepository, WorkoutItemInput, WorkoutSessionInput, WorkoutSessionRecord, WorkoutSessionStatusRecord } from "./types";
+import {
+  REPEAT_DAYS,
+  WORKOUT_METRIC_KEYS,
+  WORKOUT_RESULT_TYPES,
+  type ClientProfileInput,
+  type PlannedSetTargetInput,
+  type RepeatDayRecord,
+  type TrainerDataRepository,
+  type WorkoutItemInput,
+  type WorkoutMetricValuesRecord,
+  type WorkoutResultTypeRecord,
+  type WorkoutSessionInput,
+  type WorkoutSessionRecord,
+  type WorkoutSessionStatusRecord
+} from "./types";
+
+const repeatDaySet = new Set<string>(REPEAT_DAYS);
+const workoutMetricKeySet = new Set<string>(WORKOUT_METRIC_KEYS);
+const workoutResultTypeSet = new Set<string>(WORKOUT_RESULT_TYPES);
 
 type RegisterTrainerDataRoutesInput = {
   app: FastifyInstance;
@@ -307,6 +325,12 @@ function assertWorkoutSessionPatchAllowed(session: WorkoutSessionRecord, input: 
     input.title === undefined &&
     input.status === undefined &&
     input.scheduledAt === undefined &&
+    input.timezone === undefined &&
+    input.durationMinutes === undefined &&
+    input.focus === undefined &&
+    input.location === undefined &&
+    input.repeatDays === undefined &&
+    input.scheduleTimes === undefined &&
     input.startedAt === undefined &&
     input.finishedAt === undefined &&
     input.notes === undefined;
@@ -384,9 +408,12 @@ function readClientIntakeProfile(input: unknown): NonNullable<ClientProfileInput
 function readExerciseInput(body: Record<string, unknown>, requireName: boolean) {
   return {
     name: requireName ? boundedString(body.name, "name", 1, 120) : optionalBoundedString(body.name, "name", 1, 120),
-    muscleGroup: optionalBoundedString(body.muscleGroup, "muscleGroup", 0, 80) ?? null,
-    equipment: optionalBoundedString(body.equipment, "equipment", 0, 80) ?? null,
-    description: optionalBoundedString(body.description, "description", 0, 5000) ?? null
+    muscleGroup: nullableOptional(body.muscleGroup, requireName, () => optionalBoundedString(body.muscleGroup, "muscleGroup", 0, 80)),
+    primaryMuscles: nullableOptional(body.primaryMuscles, requireName, () => optionalBoundedStringArray(body.primaryMuscles, "primaryMuscles", 100, 80)),
+    secondaryMuscles: nullableOptional(body.secondaryMuscles, requireName, () => optionalBoundedStringArray(body.secondaryMuscles, "secondaryMuscles", 100, 80)),
+    equipment: nullableOptional(body.equipment, requireName, () => optionalBoundedString(body.equipment, "equipment", 0, 80)),
+    description: nullableOptional(body.description, requireName, () => optionalBoundedString(body.description, "description", 0, 5000)),
+    resultType: nullableOptional(body.resultType, requireName, () => optionalWorkoutResultType(body.resultType))
   };
 }
 
@@ -407,6 +434,12 @@ function readSessionInput(body: Record<string, unknown>, requireTitle: boolean) 
     title: requireTitle ? boundedString(body.title, "title", 1, 160) : optionalBoundedString(body.title, "title", 1, 160),
     status: optionalSessionStatus(body.status),
     scheduledAt: nullableOptional(body.scheduledAt, requireTitle, () => optionalDate(body.scheduledAt)),
+    timezone: nullableOptional(body.timezone, requireTitle, () => optionalBoundedString(body.timezone, "timezone", 1, 120)),
+    durationMinutes: nullableOptional(body.durationMinutes, requireTitle, () => optionalBoundedInteger(body.durationMinutes, "durationMinutes", 0, 24 * 60)),
+    focus: nullableOptional(body.focus, requireTitle, () => optionalBoundedString(body.focus, "focus", 0, 500)),
+    location: nullableOptional(body.location, requireTitle, () => optionalBoundedString(body.location, "location", 0, 500)),
+    repeatDays: nullableOptional(body.repeatDays, requireTitle, () => readRepeatDays(body.repeatDays)),
+    scheduleTimes: nullableOptional(body.scheduleTimes, requireTitle, () => readScheduleTimes(body.scheduleTimes)),
     startedAt: nullableOptional(body.startedAt, requireTitle, () => optionalDate(body.startedAt)),
     finishedAt: nullableOptional(body.finishedAt, requireTitle, () => optionalDate(body.finishedAt)),
     notes: nullableOptional(body.notes, requireTitle, () => optionalBoundedString(body.notes, "notes", 0, 5000)),
@@ -428,6 +461,10 @@ function readItems(input: unknown): WorkoutItemInput[] {
       exerciseId: optionalString(value.exerciseId) ?? null,
       order: requiredInteger(value.order, "order"),
       titleSnapshot: optionalBoundedString(value.titleSnapshot, "titleSnapshot", 0, 160) ?? null,
+      resultType: optionalWorkoutResultType(value.resultType) ?? null,
+      day: optionalRepeatDay(value.day) ?? null,
+      supersetWithNext: optionalBoolean(value.supersetWithNext) ?? null,
+      plannedSetTargets: value.plannedSetTargets === undefined || value.plannedSetTargets === null ? null : readPlannedSetTargets(value.plannedSetTargets),
       plannedSets: optionalInteger(value.plannedSets),
       plannedReps: optionalInteger(value.plannedReps),
       plannedWeight: optionalNumber(value.plannedWeight),
@@ -461,8 +498,11 @@ function serializeExercise(exercise: import("./types").ExerciseRecord) {
     trainerId: exercise.trainerId,
     name: exercise.name,
     muscleGroup: exercise.muscleGroup,
+    primaryMuscles: exercise.primaryMuscles ?? null,
+    secondaryMuscles: exercise.secondaryMuscles ?? null,
     equipment: exercise.equipment,
     description: exercise.description,
+    resultType: exercise.resultType ?? null,
     isSystem: exercise.isSystem,
     createdAt: exercise.createdAt.toISOString(),
     updatedAt: exercise.updatedAt.toISOString(),
@@ -487,6 +527,10 @@ function serializeTemplate(template: import("./types").WorkoutTemplateRecord) {
       exerciseId: item.exerciseId,
       order: item.order,
       titleSnapshot: item.titleSnapshot,
+      resultType: item.resultType,
+      day: item.day,
+      supersetWithNext: item.supersetWithNext,
+      plannedSetTargets: item.plannedSetTargets,
       plannedSets: item.plannedSets,
       plannedReps: item.plannedReps,
       plannedWeight: item.plannedWeight,
@@ -508,6 +552,12 @@ function serializeSession(session: import("./types").WorkoutSessionRecord) {
     title: session.title,
     status: session.status.toLowerCase(),
     scheduledAt: session.scheduledAt?.toISOString() ?? null,
+    timezone: session.timezone,
+    durationMinutes: session.durationMinutes,
+    focus: session.focus,
+    location: session.location,
+    repeatDays: session.repeatDays,
+    scheduleTimes: session.scheduleTimes,
     startedAt: session.startedAt?.toISOString() ?? null,
     finishedAt: session.finishedAt?.toISOString() ?? null,
     notes: session.notes,
@@ -520,6 +570,10 @@ function serializeSession(session: import("./types").WorkoutSessionRecord) {
       exerciseId: item.exerciseId,
       order: item.order,
       titleSnapshot: item.titleSnapshot,
+      resultType: item.resultType,
+      day: item.day,
+      supersetWithNext: item.supersetWithNext,
+      plannedSetTargets: item.plannedSetTargets,
       plannedSets: item.plannedSets,
       plannedReps: item.plannedReps,
       plannedWeight: item.plannedWeight,
@@ -637,6 +691,11 @@ function optionalInteger(input: unknown) {
   return input;
 }
 
+function optionalBoundedInteger(input: unknown, name: string, min: number, max: number) {
+  if (input === undefined || input === null) return undefined;
+  return boundedInteger(input, name, min, max);
+}
+
 function optionalNumber(input: unknown) {
   if (input === undefined || input === null) return undefined;
   if (typeof input !== "number" || !Number.isFinite(input)) throw new AuthApiError("validation", 400);
@@ -653,6 +712,75 @@ function boundedStringArray(input: unknown, name: string, maxItems: number, maxI
   if (!Array.isArray(input)) throw new AuthApiError("validation", 400, `${name} must be an array`);
   if (input.length > maxItems) throw new AuthApiError("validation", 400, `${name} has too many items`);
   return input.map((item, index) => boundedString(item, `${name}[${index}]`, 1, maxItemLength));
+}
+
+function optionalBoundedStringArray(input: unknown, name: string, maxItems: number, maxItemLength: number) {
+  if (input === undefined || input === null) return undefined;
+  return boundedStringArray(input, name, maxItems, maxItemLength);
+}
+
+function optionalWorkoutResultType(input: unknown): WorkoutResultTypeRecord | undefined {
+  const value = optionalString(input);
+  if (!value) return undefined;
+  if (!workoutResultTypeSet.has(value)) throw new AuthApiError("validation", 400, "resultType is invalid");
+  return value as WorkoutResultTypeRecord;
+}
+
+function optionalRepeatDay(input: unknown): RepeatDayRecord | undefined {
+  const value = optionalString(input);
+  if (!value) return undefined;
+  if (!repeatDaySet.has(value)) throw new AuthApiError("validation", 400, "day is invalid");
+  return value as RepeatDayRecord;
+}
+
+function readRepeatDays(input: unknown): RepeatDayRecord[] | undefined {
+  if (input === undefined || input === null) return undefined;
+  if (!Array.isArray(input)) throw new AuthApiError("validation", 400, "repeatDays must be an array");
+  if (input.length > REPEAT_DAYS.length) throw new AuthApiError("validation", 400, "repeatDays has too many items");
+  const days = input.map((item) => optionalRepeatDay(item) ?? fail("repeatDays contains an empty day"));
+  if (new Set(days).size !== days.length) throw new AuthApiError("validation", 400, "repeatDays must be unique");
+  return days;
+}
+
+function readScheduleTimes(input: unknown): Partial<Record<RepeatDayRecord, string>> | undefined {
+  if (input === undefined || input === null) return undefined;
+  const value = object(input, "scheduleTimes");
+  const schedule: Partial<Record<RepeatDayRecord, string>> = {};
+  for (const [day, time] of Object.entries(value)) {
+    if (!repeatDaySet.has(day)) throw new AuthApiError("validation", 400, "scheduleTimes day is invalid");
+    schedule[day as RepeatDayRecord] = boundedString(time, `scheduleTimes.${day}`, 1, 40);
+  }
+  return schedule;
+}
+
+function readPlannedSetTargets(input: unknown): PlannedSetTargetInput[] {
+  if (!Array.isArray(input)) throw new AuthApiError("validation", 400, "plannedSetTargets must be an array");
+  if (input.length > 200) throw new AuthApiError("validation", 400, "plannedSetTargets has too many items");
+  return input.map((target, index) => {
+    const value = object(target, `plannedSetTargets[${index}]`);
+    return {
+      id: boundedString(value.id, `plannedSetTargets[${index}].id`, 1, 160),
+      order: boundedInteger(value.order, `plannedSetTargets[${index}].order`, 1, 1000),
+      values: value.values === undefined || value.values === null ? null : readWorkoutMetricValues(value.values, index),
+      targetWeightKg: optionalNumber(value.targetWeightKg) ?? null,
+      targetReps: optionalNumber(value.targetReps) ?? null,
+      targetDurationSeconds: optionalNumber(value.targetDurationSeconds) ?? null,
+      targetDistanceMeters: optionalNumber(value.targetDistanceMeters) ?? null
+    };
+  });
+}
+
+function readWorkoutMetricValues(input: unknown, targetIndex: number): WorkoutMetricValuesRecord {
+  const value = object(input, `plannedSetTargets[${targetIndex}].values`);
+  const metrics: WorkoutMetricValuesRecord = {};
+  for (const [key, metricValue] of Object.entries(value)) {
+    if (!workoutMetricKeySet.has(key)) throw new AuthApiError("validation", 400, `plannedSetTargets[${targetIndex}].values contains an invalid metric`);
+    if (typeof metricValue !== "number" || !Number.isFinite(metricValue)) {
+      throw new AuthApiError("validation", 400, `plannedSetTargets[${targetIndex}].values.${key} must be a number`);
+    }
+    metrics[key as keyof WorkoutMetricValuesRecord] = metricValue;
+  }
+  return metrics;
 }
 
 function clientProfileGender(input: unknown): "male" | "female" {

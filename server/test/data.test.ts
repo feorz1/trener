@@ -193,8 +193,11 @@ describe("trainer data backend", () => {
       trainerId: null,
       name: "System Squat",
       muscleGroup: "legs",
+      primaryMuscles: ["quads", "glutes"],
+      secondaryMuscles: [],
       equipment: "barbell",
       description: null,
+      resultType: "weight_reps",
       isSystem: true,
       createdAt: now,
       updatedAt: now,
@@ -371,6 +374,310 @@ describe("trainer data backend", () => {
     expect(bootstrapB.json().workoutTemplates).toEqual([]);
     expect(bootstrapB.json().workoutSessions).toEqual([]);
     expect(bootstrapB.json().exercises.map((item: { id: string }) => item.id)).toContain("system-exercise");
+  });
+
+  it("round-trips the additive exercise and workout contract through create, read, bootstrap, and update", async () => {
+    const api = createTestApi();
+    const trainer = await signInByEmail(api, "roundtrip@example.com");
+    const headers = authHeaders(trainer.accessToken);
+    const now = new Date();
+    api.dataRepository.exercises.set("system-roundtrip", {
+      id: "system-roundtrip",
+      trainerId: null,
+      name: "System Carry",
+      muscleGroup: "full_body",
+      primaryMuscles: [],
+      secondaryMuscles: ["core", "grip"],
+      equipment: "kettlebell",
+      description: null,
+      resultType: "distance_time",
+      isSystem: true,
+      createdAt: now,
+      updatedAt: now,
+      deletedAt: null
+    });
+
+    const exercise = await api.app.inject({
+      method: "POST",
+      url: "/exercises",
+      headers,
+      payload: {
+        name: "Custom Complex",
+        muscleGroup: "legacy-group",
+        primaryMuscles: ["back", "biceps"],
+        secondaryMuscles: [],
+        equipment: "barbell",
+        description: "Keep every field",
+        resultType: "weight_reps_rpe"
+      }
+    });
+    expect(exercise.statusCode).toBe(200);
+    expect(exercise.json()).toMatchObject({
+      muscleGroup: "legacy-group",
+      primaryMuscles: ["back", "biceps"],
+      secondaryMuscles: [],
+      resultType: "weight_reps_rpe"
+    });
+
+    const exercises = await api.app.inject({ method: "GET", url: "/exercises", headers });
+    expect(exercises.statusCode).toBe(200);
+    expect(exercises.json().find((item: { id: string }) => item.id === "system-roundtrip")).toMatchObject({
+      primaryMuscles: [],
+      secondaryMuscles: ["core", "grip"],
+      resultType: "distance_time"
+    });
+
+    const updatedExercise = await api.app.inject({
+      method: "PATCH",
+      url: `/exercises/${exercise.json().id}`,
+      headers,
+      payload: { primaryMuscles: [], secondaryMuscles: null, resultType: "reps_only" }
+    });
+    expect(updatedExercise.statusCode).toBe(200);
+    expect(updatedExercise.json()).toMatchObject({
+      muscleGroup: "legacy-group",
+      primaryMuscles: [],
+      secondaryMuscles: null,
+      resultType: "reps_only"
+    });
+
+    const plannedSetTargets = [
+      {
+        id: "target-heavy",
+        order: 1,
+        values: { weight: 100, reps: 5, rpe: 8 },
+        targetWeightKg: 100,
+        targetReps: 5,
+        targetDurationSeconds: 30,
+        targetDistanceMeters: 10
+      },
+      {
+        id: "target-volume",
+        order: 2,
+        values: { weight: 72.5, reps: 12, rpe: 7 },
+        targetWeightKg: 72.5,
+        targetReps: 12,
+        targetDurationSeconds: 45,
+        targetDistanceMeters: 20
+      }
+    ];
+    const template = await api.app.inject({
+      method: "POST",
+      url: "/workout-templates",
+      headers,
+      payload: {
+        title: "Round-trip template",
+        notes: "legacy template notes",
+        items: [
+          {
+            exerciseId: exercise.json().id,
+            order: 1,
+            titleSnapshot: "Custom Complex",
+            resultType: "weight_reps_rpe",
+            day: "monday",
+            supersetWithNext: true,
+            plannedSetTargets,
+            plannedSets: 2,
+            plannedReps: 5,
+            plannedWeight: 100,
+            plannedDurationSec: 30,
+            restSeconds: 90,
+            notes: "legacy item notes"
+          }
+        ]
+      }
+    });
+    expect(template.statusCode).toBe(200);
+    expect(template.json().items[0]).toMatchObject({
+      resultType: "weight_reps_rpe",
+      day: "monday",
+      supersetWithNext: true,
+      plannedSetTargets,
+      plannedSets: 2,
+      plannedReps: 5,
+      plannedWeight: 100,
+      plannedDurationSec: 30,
+      notes: "legacy item notes"
+    });
+
+    const session = await api.app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers,
+      payload: {
+        workoutTemplateId: template.json().id,
+        title: "Recurring workout",
+        scheduledAt: "2026-07-27T06:00:00.000Z",
+        timezone: "Europe/Moscow",
+        durationMinutes: 75,
+        focus: "Technique",
+        location: "Main gym",
+        repeatDays: ["monday", "friday"],
+        scheduleTimes: { monday: "09:00", friday: "18:30" },
+        notes: "legacy session notes"
+      }
+    });
+    expect(session.statusCode).toBe(200);
+    expect(session.json()).toMatchObject({
+      timezone: "Europe/Moscow",
+      durationMinutes: 75,
+      focus: "Technique",
+      location: "Main gym",
+      repeatDays: ["monday", "friday"],
+      scheduleTimes: { monday: "09:00", friday: "18:30" },
+      notes: "legacy session notes"
+    });
+    expect(session.json().items[0]).toMatchObject({
+      resultType: "weight_reps_rpe",
+      day: "monday",
+      supersetWithNext: true,
+      plannedSetTargets,
+      plannedSets: 2,
+      plannedReps: 5,
+      plannedWeight: 100,
+      plannedDurationSec: 30,
+      notes: "legacy item notes"
+    });
+
+    const sessionRead = await api.app.inject({ method: "GET", url: `/workout-sessions/${session.json().id}`, headers });
+    expect(sessionRead.statusCode).toBe(200);
+    expect(sessionRead.json()).toMatchObject(session.json());
+
+    const updatedTargets = [
+      { ...plannedSetTargets[0], values: { weight: 105, reps: 4, rpe: 9 }, targetWeightKg: 105, targetReps: 4 },
+      { ...plannedSetTargets[1], values: {}, targetWeightKg: 70, targetReps: 15 }
+    ];
+    const updatedSession = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-sessions/${session.json().id}`,
+      headers,
+      payload: {
+        timezone: "Asia/Yekaterinburg",
+        durationMinutes: 90,
+        focus: "Volume",
+        location: "Home",
+        repeatDays: [],
+        scheduleTimes: {},
+        items: [{ ...session.json().items[0], plannedSetTargets: updatedTargets }]
+      }
+    });
+    expect(updatedSession.statusCode).toBe(200);
+    expect(updatedSession.json()).toMatchObject({
+      timezone: "Asia/Yekaterinburg",
+      durationMinutes: 90,
+      focus: "Volume",
+      location: "Home",
+      repeatDays: [],
+      scheduleTimes: {}
+    });
+    expect(updatedSession.json().items[0]).toMatchObject({
+      plannedSetTargets: updatedTargets,
+      plannedSets: 2,
+      plannedReps: 5,
+      plannedWeight: 100,
+      plannedDurationSec: 30,
+      notes: "legacy item notes"
+    });
+
+    const legacySession = await api.app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers,
+      payload: {
+        title: "Legacy workout",
+        notes: "legacy-only",
+        items: [
+          {
+            exerciseId: exercise.json().id,
+            order: 1,
+            titleSnapshot: "Legacy item",
+            plannedSets: 3,
+            plannedReps: 8,
+            plannedWeight: 60,
+            plannedDurationSec: 20,
+            notes: "legacy fields survive"
+          }
+        ]
+      }
+    });
+    expect(legacySession.statusCode).toBe(200);
+    expect(legacySession.json()).toMatchObject({
+      timezone: null,
+      durationMinutes: null,
+      focus: null,
+      location: null,
+      repeatDays: null,
+      scheduleTimes: null,
+      notes: "legacy-only"
+    });
+    expect(legacySession.json().items[0]).toMatchObject({
+      resultType: null,
+      day: null,
+      supersetWithNext: null,
+      plannedSetTargets: null,
+      plannedSets: 3,
+      plannedReps: 8,
+      plannedWeight: 60,
+      plannedDurationSec: 20,
+      notes: "legacy fields survive"
+    });
+
+    const bootstrap = await api.app.inject({ method: "GET", url: "/sync/bootstrap", headers });
+    expect(bootstrap.statusCode).toBe(200);
+    expect(bootstrap.json().exercises.find((item: { id: string }) => item.id === exercise.json().id)).toMatchObject({
+      muscleGroup: "legacy-group",
+      primaryMuscles: [],
+      secondaryMuscles: null,
+      resultType: "reps_only"
+    });
+    expect(bootstrap.json().workoutTemplates.find((item: { id: string }) => item.id === template.json().id)?.items[0]).toMatchObject({
+      plannedSetTargets,
+      plannedSets: 2,
+      plannedReps: 5,
+      plannedWeight: 100,
+      plannedDurationSec: 30
+    });
+    expect(bootstrap.json().workoutSessions.find((item: { id: string }) => item.id === session.json().id)).toMatchObject({
+      timezone: "Asia/Yekaterinburg",
+      durationMinutes: 90,
+      focus: "Volume",
+      location: "Home",
+      repeatDays: [],
+      scheduleTimes: {},
+      items: [expect.objectContaining({ plannedSetTargets: updatedTargets })]
+    });
+  });
+
+  it("rejects invalid values in the additive workout contract", async () => {
+    const api = createTestApi();
+    const trainer = await signInByEmail(api, "invalid-roundtrip@example.com");
+    const headers = authHeaders(trainer.accessToken);
+    const invalidExercise = await api.app.inject({
+      method: "POST",
+      url: "/exercises",
+      headers,
+      payload: { name: "Invalid result", resultType: "unknown_result" }
+    });
+    expect(invalidExercise.statusCode).toBe(400);
+
+    const invalidRecurrence = await api.app.inject({
+      method: "POST",
+      url: "/workout-sessions",
+      headers,
+      payload: { title: "Invalid recurrence", repeatDays: ["funday"] }
+    });
+    expect(invalidRecurrence.statusCode).toBe(400);
+
+    const invalidTargets = await api.app.inject({
+      method: "POST",
+      url: "/workout-templates",
+      headers,
+      payload: {
+        title: "Invalid targets",
+        items: [{ order: 1, plannedSetTargets: [{ id: "set-1", order: 1, values: { inventedMetric: 10 } }] }]
+      }
+    });
+    expect(invalidTargets.statusCode).toBe(400);
   });
 
   it("returns validation errors", async () => {

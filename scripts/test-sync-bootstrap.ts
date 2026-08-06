@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { bootstrapPayloadToState, fetchBootstrapState } from "../src/data/remote/bootstrap";
+import { mergeOwnerBootstrapState } from "../src/data/remote/ownerBootstrapMerge";
+import type { LocalDataState } from "../src/data/local/localState";
+import { hydrateDataState, InMemoryPersistenceAdapter, migrateSnapshot, serializeDataState } from "../src/data/persistence";
+import type { QuickValue, Workout } from "../src/data/types";
 import { NetworkTimeoutError } from "../src/utils/networkTimeout";
 
 const state = bootstrapPayloadToState(
@@ -180,6 +184,7 @@ assert.equal(state.workoutsById["session-a"].ownerId, "user-a");
 assert.equal(state.workoutsById["session-a"].status, "completed");
 assert.deepEqual(state.sessionIds, ["session-a"]);
 assert.equal(state.sessionsById["session-a"].status, "completed");
+assert.equal(state.sessionsById["session-a"].durationSeconds, 55 * 60);
 assert.deepEqual(state.workoutsById["session-a"].exercises[0].sets.map((set) => set.id), ["result-a", "result-b"]);
 const pikeWorkoutExercise = state.workoutsById["session-a"].exercises.find((exercise) => exercise.exerciseId === "exercise-pike");
 const assistedWorkoutExercise = state.workoutsById["session-a"].exercises.find((exercise) => exercise.exerciseId === "assisted-pull-up-machine");
@@ -205,6 +210,100 @@ assert.equal(otherState.clientIds.includes("client-a"), false);
 assert.equal(otherState.clientsById["client-b"].goal, "Новая цель");
 assert.deepEqual(otherState.clientsById["client-b"].metrics, { weightKg: 0, heightCm: 0, attendanceRate: 100 });
 assert.equal(otherState.clientsById["client-b"].intake, undefined);
+
+async function testOwnerAwareColdStartMerge() {
+  const ownerADraft: Workout = {
+    id: "draft-owner-a",
+    ownerId: "user-a",
+    clientId: "client-a",
+    title: "Local draft",
+    startsAt: "2026-07-08T11:00:00.000Z",
+    timezone: "Europe/Moscow",
+    durationMinutes: 45,
+    focus: "Draft focus",
+    location: "Local gym",
+    status: "draft",
+    exercises: [
+      {
+        id: "draft-exercise-owner-a",
+        exerciseId: "exercise-custom",
+        exerciseName: "Custom Press",
+        resultType: "weight_reps",
+        order: 1,
+        sets: [{ id: "draft-set-owner-a", order: 1, targetWeightKg: 50, targetReps: 8, completed: false }]
+      }
+    ]
+  };
+  const ownerAQuickValue: QuickValue = {
+    id: "quick-value:user-a:client-a:exercise-custom:weight",
+    ownerId: "user-a",
+    clientId: "client-a",
+    exerciseId: "exercise-custom",
+    metric: "weight",
+    values: [45, 50, 55],
+    updatedAt: "2026-07-07T12:00:00.000Z"
+  };
+  const staleServerWorkout: Workout = {
+    ...state.workoutsById["session-planned"],
+    id: "stale-server-workout",
+    title: "Must not be resurrected"
+  };
+  const persistedOwnerAState: LocalDataState = {
+    ...state,
+    workoutsById: {
+      ...state.workoutsById,
+      "session-planned": { ...state.workoutsById["session-planned"], title: "Stale local title" },
+      [staleServerWorkout.id]: staleServerWorkout,
+      [ownerADraft.id]: ownerADraft
+    },
+    workoutIds: [...state.workoutIds, staleServerWorkout.id, ownerADraft.id],
+    quickValuesById: { [ownerAQuickValue.id]: ownerAQuickValue },
+    quickValueIds: [ownerAQuickValue.id]
+  };
+
+  const ownerAStorage = new InMemoryPersistenceAdapter();
+  await ownerAStorage.save(serializeDataState(persistedOwnerAState, "2026-07-07T12:05:00.000Z"));
+  const coldStartSnapshot = migrateSnapshot(await ownerAStorage.load());
+  const coldStartLocalState = hydrateDataState(coldStartSnapshot);
+
+  const foreignDraft: Workout = { ...ownerADraft, id: "draft-owner-b", ownerId: "user-b" };
+  const foreignQuickValue: QuickValue = { ...ownerAQuickValue, id: "quick-value:user-b", ownerId: "user-b" };
+  const contaminatedLocalState: LocalDataState = {
+    ...coldStartLocalState,
+    workoutsById: { ...coldStartLocalState.workoutsById, [foreignDraft.id]: foreignDraft },
+    workoutIds: [...coldStartLocalState.workoutIds, ownerADraft.id, foreignDraft.id],
+    quickValuesById: { ...coldStartLocalState.quickValuesById, [foreignQuickValue.id]: foreignQuickValue },
+    quickValueIds: [...coldStartLocalState.quickValueIds, ownerAQuickValue.id, foreignQuickValue.id]
+  };
+
+  const mergedOwnerAState = mergeOwnerBootstrapState(contaminatedLocalState, state, "user-a");
+  assert.equal(mergedOwnerAState.workoutsById[ownerADraft.id].title, "Local draft");
+  assert.deepEqual(mergedOwnerAState.quickValuesById[ownerAQuickValue.id].values, [45, 50, 55]);
+  assert.equal(mergedOwnerAState.workoutsById["session-planned"].title, "Planned Strength", "remote server state must win over stale local state");
+  assert.equal(mergedOwnerAState.workoutsById[staleServerWorkout.id], undefined, "a server-backed record missing remotely must stay deleted");
+  assert.equal(mergedOwnerAState.workoutsById[foreignDraft.id], undefined, "another owner's draft must not leak into owner A");
+  assert.equal(mergedOwnerAState.quickValuesById[foreignQuickValue.id], undefined, "another owner's quick values must not leak into owner A");
+  assert.equal(mergedOwnerAState.workoutIds.filter((id) => id === ownerADraft.id).length, 1, "draft ids must be deterministic and unique");
+  assert.equal(mergedOwnerAState.quickValueIds.filter((id) => id === ownerAQuickValue.id).length, 1, "quick-value ids must be deterministic and unique");
+
+  await ownerAStorage.save(serializeDataState(mergedOwnerAState, "2026-07-07T12:10:00.000Z"));
+  const restoredOwnerAState = hydrateDataState(migrateSnapshot(await ownerAStorage.load()));
+  const repeatedMerge = mergeOwnerBootstrapState(restoredOwnerAState, state, "user-a");
+  assert.deepEqual(repeatedMerge, mergedOwnerAState, "repeating online cold-start merge must be idempotent");
+
+  const ownerBState = mergeOwnerBootstrapState(mergedOwnerAState, otherState, "user-b");
+  assert.equal(ownerBState.workoutsById[ownerADraft.id], undefined);
+  assert.equal(ownerBState.quickValuesById[ownerAQuickValue.id], undefined);
+  assert.deepEqual(ownerBState.clientIds, ["client-b"]);
+
+  const returnedOwnerAState = mergeOwnerBootstrapState(restoredOwnerAState, state, "user-a");
+  assert.equal(returnedOwnerAState.workoutsById[ownerADraft.id].ownerId, "user-a");
+  assert.deepEqual(returnedOwnerAState.quickValuesById[ownerAQuickValue.id].values, [45, 50, 55]);
+
+  const corruptedSnapshot = serializeDataState(persistedOwnerAState, "2026-07-07T12:15:00.000Z");
+  corruptedSnapshot.data.quickValues[0].exerciseId = "missing-exercise";
+  assert.throws(() => migrateSnapshot(corruptedSnapshot), /quick value references unknown exercise/);
+}
 
 async function testNeverResolvingBootstrap() {
   let requestSignal: AbortSignal | null | undefined;
@@ -235,7 +334,7 @@ function withWatchdog<T>(promise: Promise<T>, timeoutMs = 250): Promise<T> {
   return Promise.race([promise, watchdog]).finally(() => clearTimeout(timeoutId));
 }
 
-void testNeverResolvingBootstrap()
+void Promise.all([testOwnerAwareColdStartMerge(), testNeverResolvingBootstrap()])
   .then(() => console.log("Sync bootstrap tests passed."))
   .catch((error) => {
     console.error(error);

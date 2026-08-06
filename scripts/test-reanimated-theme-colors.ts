@@ -14,6 +14,34 @@ assert.ok(
   !stagedSwipeDelete.includes("backgroundColor: theme.colors.status.negative"),
   "StagedSwipeDelete must not pass DynamicColorIOS to Reanimated"
 );
+const approach = readSource("../src/components/ui/Approach.tsx");
+assert.doesNotMatch(
+  approach,
+  /swipeRow:\s*\{[^}]*backgroundColor:/s,
+  "Approach must not pass an adaptive background color through StagedSwipeDelete to Reanimated"
+);
+assert.ok(
+  approach.includes("borderColor: resolvedColors.background.border"),
+  "Approach must resolve its root border to the active palette"
+);
+assert.ok(
+  approach.includes('backgroundColor: resolvedColorScheme === "dark" ? resolvedColors.background.canvasSoft : resolvedColors.background.canvas'),
+  "Approach must use the workout-card surface in dark mode and the canonical card surface in light mode"
+);
+assert.doesNotMatch(
+  approach,
+  /root:\s*\{[^}]*backgroundColor:/s,
+  "Approach must not keep an adaptive background color in its static root style"
+);
+assert.ok(
+  approach.includes('const actionSurfaceColor = resolvedColorScheme === "dark" ? resolvedColors.background.canvas : resolvedColors.background.canvasSoft'),
+  "Approach set actions must contrast with the root surface in dark mode and preserve the light surface"
+);
+assert.doesNotMatch(
+  approach,
+  /actionButton:\s*\{[^}]*backgroundColor:/s,
+  "Approach set actions must not reuse an adaptive static surface that merges with the dark root"
+);
 
 const animatedTopNotification = readSource("../src/components/ui/AnimatedTopNotification.tsx");
 assert.ok(
