@@ -212,6 +212,7 @@ export const apiSchemas = {
         equipment: stringField(value, "equipment"),
         result_type: optionalStringField(value, "result_type") as ApiExerciseDto["result_type"],
         search_aliases: optionalStringArrayField(value, "search_aliases"),
+        restriction_tags: optionalStringArrayField(value, "restriction_tags") as ApiExerciseDto["restriction_tags"],
         coach_notes: optionalStringField(value, "coach_notes"),
         notes: optionalStringField(value, "notes"),
         archived_at: optionalStringField(value, "archived_at"),

@@ -22,6 +22,7 @@ import { ListItemCell, type ListItemCellLeading, type ListItemCellState, type Li
 import { Loader, type LoaderSize, type LoaderTone } from "@/components/ui/Loader";
 import { Modal } from "@/components/ui/Modal";
 import { Navigation } from "@/components/ui/Navigation";
+import { Notification, type NotificationEffect, type NotificationVariant } from "@/components/ui/Notification";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Radio, type RadioState } from "@/components/ui/Radio";
 import { Search, type SearchState } from "@/components/ui/Search";
@@ -55,6 +56,7 @@ type ComponentId =
   | "Divider"
   | "Button"
   | "Navigation"
+  | "Notification"
   | "TabBar"
   | "Header"
   | "Select"
@@ -98,6 +100,7 @@ const componentItems: Array<{ value: ComponentId; title: string; updatedAt: stri
   { value: "Loader", title: "Loader", updatedAt: componentUpdates.Loader },
   { value: "Icon", title: "Icon", updatedAt: componentUpdates.Icon },
   { value: "Alert", title: "Alert", updatedAt: componentUpdates.Alert },
+  { value: "Notification", title: "Notification", updatedAt: componentUpdates.Notification },
   { value: "Avatar", title: "Avatar", updatedAt: componentUpdates.Avatar },
   { value: "ListItemCell", title: "List item/Cell", updatedAt: componentUpdates.ListItemCell },
   { value: "Badge", title: "Badge", updatedAt: componentUpdates.Badge },
@@ -187,17 +190,19 @@ const chipStates: ChipState[] = ["default", "selected", "dropdown", "disabled"];
 const listItemGymModes: ListItemGymMode[] = ["default", "selected", "move"];
 const workoutSetVariants: WorkoutSetVariant[] = ["set", "new"];
 const headerSizes: HeaderSize[] = ["xl", "lg", "md", "sm"];
-const webMobileWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.storybookMobileWidth, alignSelf: "center" } as const) : null;
-const webGalleryWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.storybookGalleryWidth, alignSelf: "center" } as const) : null;
+const notificationVariants: NotificationVariant[] = ["default", "plain"];
+const notificationEffects: NotificationEffect[] = ["regular", "clear", "none"];
+const webMobileWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.previewMobileWidth, alignSelf: "center" } as const) : null;
+const webGalleryWidth = Platform.OS === "web" ? ({ maxWidth: theme.sizes.previewGalleryWidth, alignSelf: "center" } as const) : null;
 const webActionWidth = Platform.OS === "web" ? ({ maxWidth: 357 } as const) : null;
 const webResizablePreviewFrame =
   Platform.OS === "web"
     ? ({
         resize: "both",
         overflow: "auto",
-        width: theme.sizes.storybookGalleryCardWidth,
-        minWidth: theme.sizes.storybookGalleryCardWidth,
-        minHeight: theme.sizes.storybookGalleryCardHeight,
+        width: theme.sizes.previewGalleryCardWidth,
+        minWidth: theme.sizes.previewGalleryCardWidth,
+        minHeight: theme.sizes.previewGalleryCardHeight,
         maxWidth: "none",
         alignSelf: "flex-start"
       } as ViewStyle & { resize: "both"; overflow: "auto"; maxWidth: "none" })
@@ -239,6 +244,10 @@ export function MobileStorybook() {
   const [buttonSize, setButtonSize] = useState<ButtonSize>("medium");
   const [buttonState, setButtonState] = useState<ButtonState>("active");
   const [navigationShowSubtitle, setNavigationShowSubtitle] = useState(true);
+  const [notificationVariant, setNotificationVariant] = useState<NotificationVariant>("default");
+  const [notificationEffect, setNotificationEffect] = useState<NotificationEffect>("regular");
+  const [notificationShowIcon, setNotificationShowIcon] = useState(true);
+  const [notificationInteractive, setNotificationInteractive] = useState(false);
   const [tabBarValue, setTabBarValue] = useState("home");
   const [headerSize, setHeaderSize] = useState<HeaderSize>("xl");
   const [headerShowSubtitle, setHeaderShowSubtitle] = useState(true);
@@ -381,6 +390,10 @@ export function MobileStorybook() {
       buttonSize={buttonSize}
       buttonState={buttonState}
       navigationShowSubtitle={navigationShowSubtitle}
+      notificationVariant={item === "Notification" ? notificationVariant : "default"}
+      notificationEffect={notificationEffect}
+      notificationShowIcon={notificationShowIcon}
+      notificationInteractive={notificationInteractive}
       tabBarValue={tabBarValue}
       onTabBarValueChange={setTabBarValue}
       headerSize={headerSize}
@@ -551,6 +564,14 @@ export function MobileStorybook() {
               setButtonState={setButtonState}
               navigationShowSubtitle={navigationShowSubtitle}
               setNavigationShowSubtitle={setNavigationShowSubtitle}
+              notificationVariant={notificationVariant}
+              setNotificationVariant={setNotificationVariant}
+              notificationEffect={notificationEffect}
+              setNotificationEffect={setNotificationEffect}
+              notificationShowIcon={notificationShowIcon}
+              setNotificationShowIcon={setNotificationShowIcon}
+              notificationInteractive={notificationInteractive}
+              setNotificationInteractive={setNotificationInteractive}
               tabBarValue={tabBarValue}
               setTabBarValue={setTabBarValue}
               headerSize={headerSize}
@@ -846,6 +867,10 @@ type PreviewContentProps = {
   buttonSize: ButtonSize;
   buttonState: ButtonState;
   navigationShowSubtitle: boolean;
+  notificationVariant: NotificationVariant;
+  notificationEffect: NotificationEffect;
+  notificationShowIcon: boolean;
+  notificationInteractive: boolean;
   tabBarValue: string;
   onTabBarValueChange: (value: string) => void;
   headerSize: HeaderSize;
@@ -954,6 +979,10 @@ function PreviewContent({
   buttonSize,
   buttonState,
   navigationShowSubtitle,
+  notificationVariant,
+  notificationEffect,
+  notificationShowIcon,
+  notificationInteractive,
   tabBarValue,
   onTabBarValueChange,
   headerSize,
@@ -1218,6 +1247,20 @@ function PreviewContent({
     return <Navigation title="Screen Header" subtitle="Additional Title" showSubtitle={navigationShowSubtitle} />;
   }
 
+  if (component === "Notification") {
+    return (
+      <View style={styles.hugPreviewItem}>
+        <Notification
+          text={notificationVariant === "plain" ? "Удача" : "Тренировка перенесена"}
+          variant={notificationVariant}
+          showIcon={notificationShowIcon}
+          effect={notificationEffect}
+          interactive={notificationInteractive}
+        />
+      </View>
+    );
+  }
+
   if (component === "TabBar") {
     return <TabBar selectedValue={tabBarValue} onValueChange={onTabBarValueChange} />;
   }
@@ -1419,6 +1462,14 @@ type ComponentControlsProps = {
   setButtonState: (value: ButtonState) => void;
   navigationShowSubtitle: boolean;
   setNavigationShowSubtitle: (value: boolean) => void;
+  notificationVariant: NotificationVariant;
+  setNotificationVariant: (value: NotificationVariant) => void;
+  notificationEffect: NotificationEffect;
+  setNotificationEffect: (value: NotificationEffect) => void;
+  notificationShowIcon: boolean;
+  setNotificationShowIcon: (value: boolean) => void;
+  notificationInteractive: boolean;
+  setNotificationInteractive: (value: boolean) => void;
   tabBarValue: string;
   setTabBarValue: (value: string) => void;
   headerSize: HeaderSize;
@@ -1555,6 +1606,14 @@ function ComponentControls({
   setButtonState,
   navigationShowSubtitle,
   setNavigationShowSubtitle,
+  notificationVariant,
+  setNotificationVariant,
+  notificationEffect,
+  setNotificationEffect,
+  notificationShowIcon,
+  setNotificationShowIcon,
+  notificationInteractive,
+  setNotificationInteractive,
   tabBarValue,
   setTabBarValue,
   headerSize,
@@ -1897,6 +1956,39 @@ function ComponentControls({
         <OptionChip label="show" selected={navigationShowSubtitle} onPress={() => setNavigationShowSubtitle(true)} />
         <OptionChip label="hide" selected={!navigationShowSubtitle} onPress={() => setNavigationShowSubtitle(false)} />
       </ControlGroup>
+    );
+  }
+
+  if (component === "Notification") {
+    return (
+      <>
+        <ControlGroup label="variant">
+          {notificationVariants.map((variant) => (
+            <OptionChip
+              key={variant}
+              label={variant}
+              selected={notificationVariant === variant}
+              onPress={() => {
+                setNotificationVariant(variant);
+                setNotificationShowIcon(variant === "default");
+              }}
+            />
+          ))}
+        </ControlGroup>
+        <ControlGroup label="effect">
+          {notificationEffects.map((effect) => (
+            <OptionChip key={effect} label={effect} selected={notificationEffect === effect} onPress={() => setNotificationEffect(effect)} />
+          ))}
+        </ControlGroup>
+        <ControlGroup label="icon">
+          <OptionChip label="show" selected={notificationShowIcon} onPress={() => setNotificationShowIcon(true)} />
+          <OptionChip label="hide" selected={!notificationShowIcon} onPress={() => setNotificationShowIcon(false)} />
+        </ControlGroup>
+        <ControlGroup label="interactive">
+          <OptionChip label="true" selected={notificationInteractive} onPress={() => setNotificationInteractive(true)} />
+          <OptionChip label="false" selected={!notificationInteractive} onPress={() => setNotificationInteractive(false)} />
+        </ControlGroup>
+      </>
     );
   }
 
@@ -2329,10 +2421,10 @@ const styles = StyleSheet.create({
   },
   componentCard: {
     gap: theme.spacing.sm,
-    width: Platform.OS === "web" ? theme.sizes.storybookGalleryCardWidth : undefined,
-    height: Platform.OS === "web" ? theme.sizes.storybookGalleryCardHeight : undefined,
+    width: Platform.OS === "web" ? theme.sizes.previewGalleryCardWidth : undefined,
+    height: Platform.OS === "web" ? theme.sizes.previewGalleryCardHeight : undefined,
     minHeight: 88,
-    maxHeight: Platform.OS === "web" ? theme.sizes.storybookGalleryCardHeight : undefined,
+    maxHeight: Platform.OS === "web" ? theme.sizes.previewGalleryCardHeight : undefined,
     padding: theme.spacing.lg,
     borderRadius: theme.radius.xl,
     overflow: "hidden",

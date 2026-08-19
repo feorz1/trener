@@ -7,7 +7,7 @@ import { CalendarDayStrip, type CalendarDayStripItem } from "@/components/calend
 import { Alert, Button, Card, Header, Icon } from "@/components/ui";
 import { isActiveSessionConflictError, useClients, useDataMutation, useLatestWorkoutDraft, useResults, useSessionActions, useSessions, useWorkouts } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import type { Client, Workout, WorkoutResult, WorkoutSession, WorkoutStatus } from "@/types";
 import { formatRuDayMonth } from "@/utils/date";
 
@@ -172,8 +172,14 @@ function getCompletedExerciseCount(workout: Workout) {
 function getSessionProgress(session: WorkoutSession, results: WorkoutResult[]) {
   const sessionResults = results.filter((result) => result.sessionId === session.id);
   const completedExercises = session.exercises.filter((exercise) => {
-    const exerciseResults = sessionResults.filter((result) => result.exerciseId === exercise.exerciseId);
-    return exerciseResults.length > 0 && exerciseResults.every((result) => result.completed);
+    const exerciseResults = sessionResults.filter((result) =>
+      result.sessionExerciseItemId ? result.sessionExerciseItemId === exercise.id : result.exerciseId === exercise.exerciseId
+    );
+    const highestResultSetIndex = exerciseResults.reduce((highest, result) => Math.max(highest, result.setIndex), 0);
+    const requiredSetCount = Math.max(exercise.plannedSets ?? 0, highestResultSetIndex);
+    if (requiredSetCount === 0) return false;
+    const completedSetIndexes = new Set(exerciseResults.filter((result) => result.completed).map((result) => result.setIndex));
+    return Array.from({ length: requiredSetCount }, (_, index) => index + 1).every((setIndex) => completedSetIndexes.has(setIndex));
   }).length;
 
   return {
@@ -541,6 +547,8 @@ export default function IndexScreen() {
 }
 
 function FloatingAddWorkoutButton({ disabled, onPress }: { disabled?: boolean; onPress: () => void }) {
+  const { resolvedColorScheme } = useAppTheme();
+
   return (
     <Pressable
       accessibilityHint="Открывает планирование тренировки"
@@ -555,7 +563,7 @@ function FloatingAddWorkoutButton({ disabled, onPress }: { disabled?: boolean; o
       <View pointerEvents="none" style={styles.floatingAddShadow} />
       <LiquidGlassView
         animated
-        colorScheme="light"
+        colorScheme={resolvedColorScheme}
         effect="regular"
         style={[styles.floatingAddGlass, !isLiquidGlassSupported && styles.floatingAddFallback]}
         tintColor={theme.colors.background.glass}

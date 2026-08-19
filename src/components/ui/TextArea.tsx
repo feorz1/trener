@@ -10,7 +10,7 @@ import {
   type TextStyle,
   type ViewStyle
 } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme, type ThemeColors } from "@/theme";
 
 export type TextAreaState = "empty" | "default" | "focus" | "error" | "disabled";
 
@@ -27,13 +27,11 @@ export type TextAreaProps = Omit<TextInputProps, "editable" | "multiline" | "onC
   onChangeText?: (value: string) => void;
 };
 
-const stateBorderColor: Record<TextAreaState, string> = {
-  empty: theme.colors.background.canvasSoft,
-  default: theme.colors.background.canvasSoft,
-  focus: theme.colors.content.inkDeep,
-  error: theme.colors.status.negative,
-  disabled: theme.colors.background.canvasSoft
-};
+function resolveTextAreaBorderColor(state: TextAreaState, resolvedColors: ThemeColors) {
+  if (state === "focus") return resolvedColors.content.controlAccent;
+  if (state === "error") return resolvedColors.status.negative;
+  return resolvedColors.background.canvasSoft;
+}
 
 export function TextArea({
   label,
@@ -47,8 +45,12 @@ export function TextArea({
   style,
   placeholder = "Введите текст",
   onChangeText,
+  accessibilityHint,
+  accessibilityLabel,
+  accessibilityState,
   ...textInputProps
 }: TextAreaProps) {
+  const { resolvedColorScheme, resolvedColors } = useAppTheme();
   const inputRef = useRef<NativeTextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const resolvedState: TextAreaState = disabled ? "disabled" : isFocused && state !== "error" ? "focus" : state;
@@ -69,6 +71,9 @@ export function TextArea({
         ? theme.colors.content.mute
         : theme.colors.content.ink;
   const resolvedMessage = message ?? (resolvedState === "error" ? "Проверьте текст" : "Подсказка");
+  const accessibilityMessage = resolvedState === "error" || (showMessage && message) ? resolvedMessage : undefined;
+  const resolvedAccessibilityHint = accessibilityHint ?? accessibilityMessage;
+  const resolvedAccessibilityState = { ...accessibilityState, disabled };
   const moveCaretToEnd = () => {
     const end = value?.length ?? theme.spacing[0];
     const selection = { start: end, end };
@@ -87,6 +92,10 @@ export function TextArea({
         <NativeTextInput
           ref={inputRef}
           {...textInputProps}
+          accessibilityHint={resolvedAccessibilityHint}
+          accessibilityLabel={accessibilityLabel ?? label}
+          accessibilityState={resolvedAccessibilityState}
+          keyboardAppearance={resolvedColorScheme}
           editable={!disabled}
           multiline
           onBlur={(event) => {
@@ -109,12 +118,20 @@ export function TextArea({
           pointerEvents="none"
           style={[
             styles.fieldBorder,
-            { borderColor: stateBorderColor[resolvedState] }
+            { borderColor: resolveTextAreaBorderColor(resolvedState, resolvedColors) }
           ]}
         />
       </View>
 
-      {showMessage ? <Text style={[styles.message, { color: messageColor }]}>{resolvedMessage}</Text> : null}
+      {showMessage ? (
+        <Text
+          accessibilityLiveRegion={resolvedState === "error" ? "polite" : "none"}
+          accessibilityRole={resolvedState === "error" ? "alert" : undefined}
+          style={[styles.message, { color: messageColor }]}
+        >
+          {resolvedMessage}
+        </Text>
+      ) : null}
     </View>
   );
 }

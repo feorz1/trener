@@ -47,9 +47,9 @@ Canonical Avatar sizes are `40`, `48`, `56`, and `72`. `40` is used by dense lis
 | image fallback background | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
 | initials background | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | initials text | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
-| icon background | `color/background/canvas` | `theme.colors.background.canvas` |
-| icon stroke | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
+| icon background | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | icon glyph | `Icons / user` by default | `<Icon name={iconName} />` |
+| icon glyph sizes | component size tokens | `theme.sizes.avatarIcon40`, `theme.sizes.avatarIcon48`, `theme.sizes.avatarIcon56`, `theme.sizes.avatarIcon72` |
 | badge indicator | `color/content/primary` | `theme.colors.content.primary` |
 | notification indicator | `color/status/negative` | `theme.colors.status.negative` |
 | avatar radius | `radius/full` | dynamic full radius from size |
@@ -61,6 +61,8 @@ Canonical Avatar sizes are `40`, `48`, `56`, and `72`. `40` is used by dense lis
 - `Avatar` must accept an optional `source` image and use initials or a themed placeholder when no image is provided.
 - The old flag reference must not be used for canonical variants; image variants represent user photos.
 - The `Icon` variant must use `src/components/ui/Icon.tsx`; default icon is `user`.
+- The `Icon` variant uses a gray `canvas-soft` surface without a border.
+- Icon glyph sizes are `22`, `32`, `36`, and `48` for avatar sizes `40`, `48`, `56`, and `72` respectively.
 - Size values are fixed to `40`, `48`, `56`, and `72`.
 - `count` and `pair` variants must use a white separation ring around the overlapping avatar.
 - `badge` indicator sits on the bottom-right side of the avatar.

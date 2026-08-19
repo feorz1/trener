@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { createInitialState } from "../src/data/seeds/mockSeed";
-import { InMemoryPersistenceAdapter, CURRENT_SCHEMA_VERSION, LEGACY_LOCAL_DATA_STORAGE_KEY, getLocalDataStorageKey, hydrateDataState, migrateSnapshot, serializeDataState } from "../src/data/persistence";
+import { createProductionState } from "../src/data/seeds/productionSeed";
+import { AsyncStoragePersistenceAdapter, InMemoryPersistenceAdapter, PersistenceCoordinator, CURRENT_SCHEMA_VERSION, LEGACY_LOCAL_DATA_STORAGE_KEY, getLocalDataStorageKey, hydrateDataState, migrateSnapshot, serializeDataState } from "../src/data/persistence";
+import { SessionTimerPersistence, getLegacySessionTimerStorageKey, getSessionTimerStorageKey } from "../src/data/persistence/SessionTimerPersistence";
+import { PENDING_ACCOUNT_DELETION_STORAGE_KEY, hasPendingAccountDeletion, markPendingAccountDeletion, readPendingAccountDeletion, recoverPendingAccountDeletion } from "../src/data/persistence/accountDeletionRecovery";
+import { SessionResultWriteQueue } from "../src/data/remote/sessionResultWriteQueue";
+import { getTimerElapsedSeconds, type SetTimerState } from "../src/features/workouts/tracking";
 import { LOCAL_OWNER_ID } from "../src/types";
 
 async function run() {
@@ -8,7 +13,30 @@ async function run() {
   assert.equal(await adapter.load(), null);
   assert.equal(await adapter.hasData(), false);
 
+  const productionState = createProductionState();
+  assert.deepEqual(productionState.clientIds, []);
+  assert.deepEqual(productionState.workoutIds, []);
+  assert.deepEqual(productionState.sessionIds, []);
+  assert.deepEqual(productionState.resultIds, []);
+  assert.deepEqual(productionState.quickValueIds, []);
+  assert.ok(productionState.exerciseIds.length > 0);
+
   const initialState = createInitialState();
+  assert.ok(initialState.clientIds.length > 0);
+  assert.ok(initialState.workoutIds.length > 0);
+  const profiledClientId = initialState.clientIds[0];
+  initialState.clientsById[profiledClientId].restrictions = ["Без осевых нагрузок"];
+  initialState.clientsById[profiledClientId].intake = {
+    ageYears: 31,
+    targetWeightKg: 60,
+    healthConstraints: ["Травмы спины"],
+    exerciseRestrictions: ["Без осевых нагрузок"],
+    activityLevel: "Активная",
+    sleep: "6-8 часов",
+    workoutsPerWeek: 3,
+    trainingExperience: "Занимаюсь регулярно",
+    sports: ["Футбол"]
+  };
   const snapshot = serializeDataState(initialState, "2026-06-19T10:30:00.000Z");
   assert.equal(CURRENT_SCHEMA_VERSION, 2);
   assert.equal(snapshot.schemaVersion, CURRENT_SCHEMA_VERSION);
@@ -25,6 +53,8 @@ async function run() {
 
   const hydrated = hydrateDataState(loadedSnapshot);
   assert.deepEqual(hydrated.clientIds, initialState.clientIds);
+  assert.deepEqual(hydrated.clientsById[profiledClientId].intake, initialState.clientsById[profiledClientId].intake);
+  assert.notEqual(hydrated.clientsById[profiledClientId].intake?.sports, initialState.clientsById[profiledClientId].intake?.sports);
   assert.deepEqual(hydrated.workoutIds, initialState.workoutIds);
 
   const legacySnapshot = JSON.parse(JSON.stringify(snapshot)) as typeof snapshot & { schemaVersion: 1 };
@@ -59,7 +89,279 @@ async function run() {
   delete (invalidV2Snapshot.data.clients[0] as { ownerId?: string }).ownerId;
   assert.throws(() => migrateSnapshot(invalidV2Snapshot));
 
+  const invalidIntakeSnapshot = JSON.parse(JSON.stringify(snapshot)) as typeof snapshot;
+  invalidIntakeSnapshot.data.clients[0].intake!.workoutsPerWeek = 2.5;
+  assert.throws(() => migrateSnapshot(invalidIntakeSnapshot));
+
   assert.throws(() => migrateSnapshot({ schemaVersion: 999, savedAt: snapshot.savedAt, data: {} }));
+
+  const asyncStorageValues = new Map<string, string>();
+  const asyncStorage = {
+    async getItem(key: string) {
+      return asyncStorageValues.get(key) ?? null;
+    },
+    async setItem(key: string, value: string) {
+      asyncStorageValues.set(key, value);
+    },
+    async multiGet(keys: readonly string[]) {
+      return keys.map((key) => [key, asyncStorageValues.get(key) ?? null] as [string, string | null]);
+    },
+    async multiRemove(keys: readonly string[]) {
+      keys.forEach((key) => asyncStorageValues.delete(key));
+    }
+  };
+  const ownerAAdapter = new AsyncStoragePersistenceAdapter("owner-a", asyncStorage);
+  const ownerBAdapter = new AsyncStoragePersistenceAdapter("owner-b", asyncStorage);
+  await ownerAAdapter.save(snapshot);
+  await ownerBAdapter.save(snapshot);
+  await asyncStorage.setItem("trainer-app:data:v1", JSON.stringify(snapshot));
+  await asyncStorage.setItem("trainer-app:theme-preference:v1", "dark");
+  await ownerAAdapter.clear();
+  assert.equal(await ownerAAdapter.load(), null, "deleted owner snapshot must not reappear");
+  assert.notEqual(await asyncStorage.getItem("trainer-app:data:v1"), null, "pre-auth local-only snapshot must survive authenticated-owner deletion");
+  assert.notEqual(await ownerBAdapter.load(), null, "another owner's snapshot must survive deletion");
+  assert.equal(await asyncStorage.getItem("trainer-app:theme-preference:v1"), "dark", "device-global theme must survive deletion");
+  assert.ok(createProductionState().exerciseIds.length > 0, "canonical exercise seed must survive owner-cache deletion");
+
+  const timerValues = new Map<string, string>();
+  const timerStorage = {
+    async getItem(key: string) {
+      return timerValues.get(key) ?? null;
+    },
+    async setItem(key: string, value: string) {
+      timerValues.set(key, value);
+    },
+    async removeItem(key: string) {
+      timerValues.delete(key);
+    },
+    async getAllKeys() {
+      return [...timerValues.keys()];
+    },
+    async multiGet(keys: readonly string[]) {
+      return keys.map((key) => [key, timerValues.get(key) ?? null] as const);
+    },
+    async multiRemove(keys: readonly string[]) {
+      keys.forEach((key) => timerValues.delete(key));
+    }
+  };
+  const runningTimer: SetTimerState = {
+    workoutId: "workout-1",
+    exerciseId: "session-exercise-1",
+    setId: "set-1",
+    metricKey: "duration",
+    mode: "countdown",
+    status: "running",
+    targetSeconds: 30,
+    startedAt: 1_720_000_000_000,
+    endsAt: 1_720_000_030_000,
+    accumulatedSeconds: 0
+  };
+  const firstTimerScreen = new SessionTimerPersistence(timerStorage, "owner-a");
+  await firstTimerScreen.save("session-1", runningTimer);
+  const reopenedTimerScreen = new SessionTimerPersistence(timerStorage, "owner-a");
+  const restoredRunningTimer = await reopenedTimerScreen.load("session-1");
+  assert.deepEqual(restoredRunningTimer, runningTimer);
+  assert.equal(getTimerElapsedSeconds(restoredRunningTimer!, runningTimer.startedAt! + 5_000), 5);
+  assert.equal(await reopenedTimerScreen.load("session-2"), null);
+  const { startedAt: _startedAt, endsAt: _endsAt, ...timerWithoutRunningDates } = runningTimer;
+  const pausedTimer: SetTimerState = {
+    ...timerWithoutRunningDates,
+    status: "paused",
+    accumulatedSeconds: 12
+  };
+  await reopenedTimerScreen.save("session-1", pausedTimer);
+  assert.deepEqual(await firstTimerScreen.load("session-1"), pausedTimer);
+  await reopenedTimerScreen.save("session-1", null);
+  assert.equal(await firstTimerScreen.load("session-1"), null);
+
+  const ownerATimers = new SessionTimerPersistence(timerStorage, "owner-a");
+  const ownerBTimers = new SessionTimerPersistence(timerStorage, "owner-b");
+  await ownerATimers.save("shared-session-name", runningTimer);
+  await ownerBTimers.save("shared-session-name", pausedTimer);
+  assert.deepEqual(await ownerATimers.load("shared-session-name"), runningTimer);
+  assert.deepEqual(await ownerBTimers.load("shared-session-name"), pausedTimer);
+  timerValues.set(getLegacySessionTimerStorageKey("legacy-owner-a"), JSON.stringify(runningTimer));
+  timerValues.set(getLegacySessionTimerStorageKey("legacy-owner-b"), JSON.stringify(pausedTimer));
+  timerValues.set(getLegacySessionTimerStorageKey("legacy-unattributed"), JSON.stringify(pausedTimer));
+  timerValues.set("trainer-app:owner-b:data:v2", JSON.stringify({ data: { sessions: [{ id: "legacy-owner-b" }] } }));
+  assert.equal(await ownerATimers.load("legacy-unattributed"), null, "an authenticated owner must not claim an unattributed v1 timer");
+  assert.equal(timerValues.has(getLegacySessionTimerStorageKey("legacy-unattributed")), true);
+  await ownerATimers.closeAndClearOwner(["shared-session-name", "legacy-owner-a"]);
+  assert.equal(timerValues.has(getSessionTimerStorageKey("owner-a", "shared-session-name")), false);
+  assert.equal(timerValues.has(getLegacySessionTimerStorageKey("legacy-owner-a")), true, "authenticated deletion must preserve pre-auth local-only timers");
+  assert.equal(timerValues.has(getSessionTimerStorageKey("owner-b", "shared-session-name")), true, "another owner's timer must survive deletion");
+  assert.equal(timerValues.has(getLegacySessionTimerStorageKey("legacy-owner-b")), true, "pre-auth local-only timers must survive authenticated deletion");
+  assert.equal(timerValues.has(getLegacySessionTimerStorageKey("legacy-unattributed")), true, "unscoped legacy timers must not be assigned to an authenticated owner");
+
+  let releaseSave: (() => void) | undefined;
+  let markSaveStarted: (() => void) | undefined;
+  const saveStarted = new Promise<void>((resolve) => {
+    markSaveStarted = resolve;
+  });
+  const saveBlocked = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
+  let deferredSnapshot: typeof snapshot | null = null;
+  const deferredAdapter = {
+    async load() {
+      return deferredSnapshot;
+    },
+    async save(nextSnapshot: typeof snapshot) {
+      markSaveStarted?.();
+      await saveBlocked;
+      deferredSnapshot = nextSnapshot;
+    },
+    async clear() {
+      deferredSnapshot = null;
+    },
+    async hasData() {
+      return deferredSnapshot !== null;
+    }
+  };
+  const persistenceCoordinator = new PersistenceCoordinator(deferredAdapter, 0);
+  const pendingSave = persistenceCoordinator.saveImmediately(initialState);
+  await saveStarted;
+  const pendingClear = persistenceCoordinator.closeAndClear();
+  releaseSave?.();
+  await Promise.all([pendingSave, pendingClear]);
+  assert.equal(deferredSnapshot, null, "an in-flight save must not recreate a deleted owner snapshot");
+
+  const writeQueue = new SessionResultWriteQueue();
+  let releaseQueue: (() => void) | undefined;
+  const queueBlocked = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
+  });
+  const queuedWrite = writeQueue.enqueue("session-queue", async () => {
+    await queueBlocked;
+    return "saved";
+  });
+  const queueDrain = writeQueue.pauseAndDrain();
+  await assert.rejects(writeQueue.enqueue("new-session", async () => "unexpected"), /paused/);
+  releaseQueue?.();
+  await queueDrain;
+  assert.equal(await queuedWrite, "saved");
+  writeQueue.resume();
+  assert.equal(await writeQueue.enqueue("resumed-session", async () => "resumed"), "resumed");
+  await writeQueue.close();
+  await assert.rejects(writeQueue.enqueue("closed-session", async () => "unexpected"), /paused/);
+
+  const recoveryValues = new Map<string, string>();
+  const recoveryStorage = {
+    async getItem(key: string) {
+      return recoveryValues.get(key) ?? null;
+    },
+    async setItem(key: string, value: string) {
+      recoveryValues.set(key, value);
+    },
+    async removeItem(key: string) {
+      recoveryValues.delete(key);
+    },
+    async getAllKeys() {
+      return [...recoveryValues.keys()];
+    },
+    async multiGet(keys: readonly string[]) {
+      return keys.map((key) => [key, recoveryValues.get(key) ?? null] as const);
+    },
+    async multiRemove(keys: readonly string[]) {
+      keys.forEach((key) => recoveryValues.delete(key));
+    }
+  };
+  recoveryValues.set(getLocalDataStorageKey("owner-recovery-a"), JSON.stringify(snapshot));
+  recoveryValues.set(getLocalDataStorageKey("owner-recovery-b"), JSON.stringify(snapshot));
+  recoveryValues.set(LEGACY_LOCAL_DATA_STORAGE_KEY, JSON.stringify(snapshot));
+  recoveryValues.set(getSessionTimerStorageKey("owner-recovery-a", "session-a"), JSON.stringify(runningTimer));
+  recoveryValues.set(getSessionTimerStorageKey("owner-recovery-b", "session-b"), JSON.stringify(pausedTimer));
+  recoveryValues.set(getLegacySessionTimerStorageKey("legacy-recovery"), JSON.stringify(runningTimer));
+  recoveryValues.set("trainer-app:theme-preference:v1", "dark");
+  const recoveryOperationA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const recoveryOperationB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const lostResponseOperation = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  await markPendingAccountDeletion(recoveryOperationA, "requested", recoveryStorage);
+  assert.deepEqual(await readPendingAccountDeletion(recoveryStorage), {
+    version: 3,
+    operationId: recoveryOperationA,
+    state: "requested"
+  });
+  assert.equal(recoveryValues.get(PENDING_ACCOUNT_DELETION_STORAGE_KEY)?.includes("owner-recovery-a"), false, "the durable marker must contain no owner PII");
+  let recoveredCredentialsCleared = false;
+  let reconciledOperationId: string | null = null;
+  assert.equal(
+    await recoverPendingAccountDeletion(
+      {
+        async clearAuthTokens() {
+          recoveredCredentialsCleared = true;
+        }
+      },
+      recoveryStorage,
+      async (pending) => {
+        reconciledOperationId = pending.operationId;
+        return { ownerId: "owner-recovery-a" };
+      }
+    ),
+    true
+  );
+  assert.equal(reconciledOperationId, recoveryOperationA);
+  assert.equal(recoveredCredentialsCleared, true);
+  assert.equal(recoveryValues.has(getLocalDataStorageKey("owner-recovery-a")), false);
+  assert.equal(recoveryValues.has(getSessionTimerStorageKey("owner-recovery-a", "session-a")), false);
+  assert.equal(recoveryValues.has(LEGACY_LOCAL_DATA_STORAGE_KEY), true);
+  assert.equal(recoveryValues.has(getLegacySessionTimerStorageKey("legacy-recovery")), true);
+  assert.equal(recoveryValues.has(getLocalDataStorageKey("owner-recovery-b")), true);
+  assert.equal(recoveryValues.has(getSessionTimerStorageKey("owner-recovery-b", "session-b")), true);
+  assert.equal(recoveryValues.get("trainer-app:theme-preference:v1"), "dark");
+  assert.equal(recoveryValues.has(PENDING_ACCOUNT_DELETION_STORAGE_KEY), false);
+
+  await markPendingAccountDeletion(recoveryOperationB, "server_confirmed", recoveryStorage);
+  await assert.rejects(
+    recoverPendingAccountDeletion(
+      {
+        async clearAuthTokens() {
+          throw new Error("transient SecureStore failure");
+        }
+      },
+      recoveryStorage,
+      async () => ({ ownerId: "owner-recovery-a" })
+    ),
+    /transient SecureStore failure/
+  );
+  assert.equal(recoveryValues.has(PENDING_ACCOUNT_DELETION_STORAGE_KEY), true, "recovery marker must survive partial cleanup");
+  await recoverPendingAccountDeletion({ async clearAuthTokens() {} }, recoveryStorage, async () => ({ ownerId: "owner-recovery-a" }));
+  assert.equal(recoveryValues.has(PENDING_ACCOUNT_DELETION_STORAGE_KEY), false);
+
+  const legacyRecoveryOwner = "owner-recovery-legacy";
+  recoveryValues.set(getLocalDataStorageKey(legacyRecoveryOwner), JSON.stringify(snapshot));
+  recoveryValues.set(getSessionTimerStorageKey(legacyRecoveryOwner, "session-legacy"), JSON.stringify(runningTimer));
+  recoveryValues.set(PENDING_ACCOUNT_DELETION_STORAGE_KEY, JSON.stringify({ version: 1, ownerId: legacyRecoveryOwner }));
+  assert.equal(await hasPendingAccountDeletion(recoveryStorage), true);
+  assert.equal(await readPendingAccountDeletion(recoveryStorage), null, "legacy markers are not proof-bearing version 3 operations");
+  let legacyCredentialsCleared = false;
+  assert.equal(
+    await recoverPendingAccountDeletion({
+      async clearAuthTokens() {
+        legacyCredentialsCleared = true;
+      }
+    }, recoveryStorage),
+    true
+  );
+  assert.equal(legacyCredentialsCleared, true);
+  assert.equal(recoveryValues.has(getLocalDataStorageKey(legacyRecoveryOwner)), false);
+  assert.equal(recoveryValues.has(getSessionTimerStorageKey(legacyRecoveryOwner, "session-legacy")), false);
+  assert.equal(await hasPendingAccountDeletion(recoveryStorage), false);
+
+  recoveryValues.set(getLocalDataStorageKey("owner-recovery-a"), JSON.stringify(snapshot));
+  await markPendingAccountDeletion(lostResponseOperation, "requested", recoveryStorage);
+  let purgeAttemptedBeforeReconciliation = false;
+  await assert.rejects(
+    recoverPendingAccountDeletion(
+      { async clearAuthTokens() { purgeAttemptedBeforeReconciliation = true; } },
+      recoveryStorage,
+      async () => { throw new Error("ambiguous network result"); }
+    ),
+    /ambiguous network result/
+  );
+  assert.equal(purgeAttemptedBeforeReconciliation, false, "lost-response recovery must reconcile before purging credentials");
+  assert.notEqual(await recoveryStorage.getItem(getLocalDataStorageKey("owner-recovery-a")), null);
+  assert.notEqual(await recoveryStorage.getItem(PENDING_ACCOUNT_DELETION_STORAGE_KEY), null);
 
   await adapter.clear();
   assert.equal(await adapter.load(), null);

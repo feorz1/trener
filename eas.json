@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.1",
+    "version": "16.18.0",
+    "requireCommit": true,
     "appVersionSource": "remote"
   },
   "build": {
@@ -14,10 +15,42 @@
       "autoIncrement": true
     },
     "production": {
-      "autoIncrement": true
+      "distribution": "store",
+      "environment": "production",
+      "node": "20.19.4",
+      "autoIncrement": true,
+      "env": {
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://api.trener-app.com",
+        "EXPO_PUBLIC_PRIVACY_POLICY_URL": "https://api.trener-app.com/privacy",
+        "EXPO_PUBLIC_SUPPORT_URL": "https://api.trener-app.com/support",
+        "STORYBOOK_ENABLED": "false",
+        "EXPO_PUBLIC_STORYBOOK_ENABLED": "false",
+        "EXPO_PUBLIC_USE_MOCK_AUTH": "false",
+        "EXPO_PUBLIC_AUTH_MOCK_ENABLED": "false",
+        "EXPO_PUBLIC_YANDEX_AUTH_ENABLED": "false",
+        "EXPO_PUBLIC_VK_AUTH_ENABLED": "false",
+        "EXPO_PUBLIC_SOCIAL_AUTH_ENABLED": "false",
+        "EXPO_PUBLIC_EMAIL_AUTH_ENABLED": "true"
+      },
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.0",
+        "cocoapods": "1.16.2",
+        "scheme": "TrainerFoundation",
+        "buildConfiguration": "Release"
+      }
+    },
+    "release-simulator": {
+      "extends": "production",
+      "autoIncrement": false,
+      "ios": {
+        "simulator": true
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {}
+    }
   }
 }

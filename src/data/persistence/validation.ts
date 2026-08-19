@@ -1,4 +1,4 @@
-import { createInitialState } from "../seeds/mockSeed";
+import { createProductionState } from "../seeds/productionSeed";
 import { LOCAL_OWNER_ID, type Client, type Exercise, type QuickValue, type Workout, type WorkoutResult, type WorkoutSession } from "../types";
 import type { LegacyPersistedSnapshot, PersistedSnapshot } from "./PersistedSnapshot";
 
@@ -35,6 +35,15 @@ function isOptionalStringArray(value: unknown): value is string[] | undefined {
 
 function isFiniteOptionalNumber(value: unknown): value is number | undefined {
   return value === undefined || (typeof value === "number" && Number.isFinite(value));
+}
+
+function isOptionalClientIntake(value: unknown) {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  if (!isFiniteOptionalNumber(value.ageYears) || !isFiniteOptionalNumber(value.targetWeightKg)) return false;
+  if (!isOptionalStringArray(value.healthConstraints) || !isOptionalStringArray(value.exerciseRestrictions) || !isOptionalStringArray(value.sports)) return false;
+  if (!isOptionalString(value.activityLevel) || !isOptionalString(value.sleep) || !isOptionalString(value.trainingExperience)) return false;
+  return value.workoutsPerWeek === undefined || (typeof value.workoutsPerWeek === "number" && Number.isInteger(value.workoutsPerWeek));
 }
 
 function isIsoString(value: unknown) {
@@ -89,7 +98,7 @@ function validateClient(value: unknown, requireOwnerId: boolean): value is Clien
   if (!hasValidOwnerId(value.ownerId, requireOwnerId)) return false;
   if (!["active", "paused", "new"].includes(String(value.status))) return false;
   if (value.gender !== undefined && !["male", "female"].includes(String(value.gender))) return false;
-  if (!isOptionalString(value.phone) || !isOptionalString(value.email) || !isOptionalString(value.birthDate) || !isOptionalString(value.telegram) || !isOptionalStringArray(value.restrictions)) return false;
+  if (!isOptionalString(value.phone) || !isOptionalString(value.email) || !isOptionalString(value.birthDate) || !isOptionalString(value.telegram) || !isOptionalStringArray(value.restrictions) || !isOptionalClientIntake(value.intake)) return false;
   if (!isRecord(value.metrics)) return false;
   return typeof value.metrics.weightKg === "number" && Number.isFinite(value.metrics.weightKg)
     && typeof value.metrics.heightCm === "number" && Number.isFinite(value.metrics.heightCm)
@@ -105,6 +114,7 @@ function validateExercise(value: unknown, requireOwnerId: boolean): value is Exe
   if (!value.primaryMuscles.every(isString)) return false;
   if (value.secondaryMuscles !== undefined && (!Array.isArray(value.secondaryMuscles) || !value.secondaryMuscles.every(isString))) return false;
   if (value.searchAliases !== undefined && (!Array.isArray(value.searchAliases) || !value.searchAliases.every(isString))) return false;
+  if (value.restrictionTags !== undefined && (!Array.isArray(value.restrictionTags) || !value.restrictionTags.every(isString))) return false;
   return isOptionalString(value.coachNotes) && isOptionalString(value.notes) && isOptionalString(value.archivedAt) && isOptionalString(value.createdAt) && isOptionalString(value.updatedAt);
 }
 
@@ -195,11 +205,12 @@ function validateSnapshot(value: unknown, schemaVersion: 1 | 2, requireOwnerId: 
   const clientIds = new Set(clients.map((client) => client.id));
   const workoutIds = new Set(workouts.map((workout) => workout.id));
   const sessionIds = new Set(sessions.map((session) => session.id));
-  const exerciseIds = new Set([...createInitialState().exerciseIds, ...exercises.map((exercise) => exercise.id)]);
+  const productionState = createProductionState();
+  const exerciseIds = new Set([...productionState.exerciseIds, ...exercises.map((exercise) => exercise.id)]);
   const clientOwnerById = new Map(clients.map((client) => [client.id, getOwnerId(client)]));
   const workoutOwnerById = new Map(workouts.map((workout) => [workout.id, getOwnerId(workout)]));
   const sessionOwnerById = new Map(sessions.map((session) => [session.id, getOwnerId(session)]));
-  const exerciseOwnerById = new Map([...createInitialState().exerciseIds.map((id) => [id, LOCAL_OWNER_ID] as const), ...exercises.map((exercise) => [exercise.id, getOwnerId(exercise)] as const)]);
+  const exerciseOwnerById = new Map([...productionState.exerciseIds.map((id) => [id, LOCAL_OWNER_ID] as const), ...exercises.map((exercise) => [exercise.id, getOwnerId(exercise)] as const)]);
 
   workouts.forEach((workout) => {
     const ownerId = getOwnerId(workout);

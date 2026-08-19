@@ -45,7 +45,7 @@ Canonical single-choice selection control for radio groups and mutually exclusiv
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| selected outline / dot | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected outline / dot | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | control background | `color/background/canvas` | `theme.colors.background.canvas` |
 | unchecked outline | `color/content/mute` | `theme.colors.content.mute` |
 | error outline / dot | `color/status/negative` | `theme.colors.status.negative` |

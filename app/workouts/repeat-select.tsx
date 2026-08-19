@@ -71,9 +71,15 @@ export default function WorkoutRepeatSelectSheet() {
               title={option.label}
               leading="none"
               density="compact"
-              trailingSlot={<Checkbox selected={selected} showLabel={false} onChange={() => toggleRepeatDay(option.key)} />}
+              trailingSlot={
+                <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+                  <Checkbox selected={selected} showLabel={false} />
+                </View>
+              }
               selected={selected}
               groupPosition={getListItemCellSelectedGroupPosition(selected, previousSelected, nextSelected)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selected }}
               onPress={() => toggleRepeatDay(option.key)}
             />
           );

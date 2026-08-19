@@ -32,7 +32,7 @@ export function Checkbox({
       ? theme.colors.background.canvasSoft
       : isError
         ? theme.colors.status.negative
-        : theme.colors.content.inkDeep
+        : theme.colors.content.controlAccent
     : theme.colors.background.canvas;
   const boxBorderColor = isError ? theme.colors.status.negative : theme.colors.content.mute;
   const checkColor = isDisabled ? theme.colors.content.mute : theme.colors.background.canvas;

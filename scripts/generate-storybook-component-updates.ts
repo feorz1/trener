@@ -82,6 +82,10 @@ const components = [
     files: ["src/components/ui/Navigation.tsx", "src/components/ui/Navigation.stories.tsx"]
   },
   {
+    name: "Notification",
+    files: ["src/components/ui/Notification.tsx", "src/components/ui/Notification.stories.tsx", "src/components/ui/Notification.docs.md"]
+  },
+  {
     name: "TabBar",
     files: ["src/components/ui/TabBar.tsx", "src/components/ui/TabBar.stories.tsx"]
   },

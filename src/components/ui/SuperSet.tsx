@@ -80,7 +80,7 @@ export function SuperSet({
 }
 
 function SuperSetLine({ selected, top, height }: { selected?: boolean; top: number; height: number }) {
-  const backgroundColor = selected ? theme.colors.content.inkDeep : theme.colors.background.canvasSoft;
+  const backgroundColor = selected ? theme.colors.brand.dark : theme.colors.background.canvasSoft;
 
   return <View style={[styles.line, { top, height, backgroundColor }]} />;
 }
@@ -96,8 +96,8 @@ function SuperSetButton({
   center: number;
   onPress?: (id: string) => void;
 }) {
-  const backgroundColor = selected ? theme.colors.content.inkDeep : theme.colors.background.canvasSoft;
-  const iconColor = selected ? theme.colors.background.canvas : theme.colors.content.inkDeep;
+  const backgroundColor = selected ? theme.colors.brand.dark : theme.colors.background.canvasSoft;
+  const iconColor = selected ? theme.colors.brand.primary : theme.colors.content.inkDeep;
 
   return (
     <Pressable

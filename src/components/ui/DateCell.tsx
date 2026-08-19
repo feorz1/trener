@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   selected: {
-    backgroundColor: theme.colors.content.inkDeep
+    backgroundColor: theme.colors.brand.dark
   },
   pressed: {
     backgroundColor: theme.colors.content.primaryPale
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     color: theme.colors.content.ink
   },
   selectedLabel: {
-    color: theme.colors.content.primary
+    color: theme.colors.brand.primary
   },
   disabledLabel: {
     color: theme.colors.content.mute

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { LiquidGlassView, isLiquidGlassSupported } from "@callstack/liquid-glass";
 import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 
 export type ApproachQuickValuesProps = {
   frequentValues?: number[];
@@ -27,6 +27,7 @@ type QuickValueSection = {
 };
 
 export function ApproachQuickValues({ frequentValues = [], popularValues = [], resetKey, formatValue = formatQuickValue, style, onSelectValue }: ApproachQuickValuesProps) {
+  const { resolvedColorScheme } = useAppTheme();
   const scrollRef = useRef<ScrollView>(null);
   const normalizedFrequentValues = useMemo(() => uniqueValues(frequentValues), [frequentValues]);
   const normalizedPopularValues = useMemo(() => uniqueValues(popularValues), [popularValues]);
@@ -55,7 +56,7 @@ export function ApproachQuickValues({ frequentValues = [], popularValues = [], r
     <View style={[styles.root, style]}>
       <LiquidGlassView
         animated
-        colorScheme="light"
+        colorScheme={resolvedColorScheme}
         effect="regular"
         style={[styles.glassRoot, !isLiquidGlassSupported && styles.fallbackGlassRoot]}
         tintColor={theme.colors.background.glass}
@@ -150,6 +151,6 @@ const styles = StyleSheet.create({
   },
   chipText: {
     ...theme.typography.button.md,
-    color: theme.colors.content.inkDeep
+    color: theme.colors.content.controlAccent
   }
 });

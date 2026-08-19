@@ -11,8 +11,9 @@
       "primaryPale": "#E2F6D5",
       "ink": "#0E0F0C",
       "inkDeep": "#163300",
+      "controlAccent": "#163300",
       "body": "#454745",
-      "mute": "#868685",
+      "mute": "#6F716E",
       "disabled": "#CFCFCF"
     },
     "background": {
@@ -38,6 +39,46 @@
     "accent": {
       "orange": "#FFC091",
       "cyan": "#38C8FF"
+    }
+  },
+  "darkColors": {
+    "content": {
+      "primary": "#2F571F",
+      "onPrimary": "#F5F5F4",
+      "primaryActive": "#3B682B",
+      "primaryNeutral": "#416D31",
+      "primaryPale": "#21301D",
+      "ink": "#F5F5F4",
+      "inkDeep": "#F0F0EE",
+      "controlAccent": "#A9EC7D",
+      "body": "#C7C7C4",
+      "mute": "#A0A09C",
+      "disabled": "#6B6B68"
+    },
+    "background": {
+      "canvas": "#141414",
+      "canvasSoft": "#242424",
+      "border": "#3A3A3A",
+      "cardDivider": "#2E2E2E"
+    },
+    "status": {
+      "positive": "#66CF7E",
+      "positiveDeep": "#9FE8AD",
+      "warning": "#F2C94C",
+      "warningDeep": "#FF9F43",
+      "warningDeepSoft": "#3A2813",
+      "warningDarkest": "#FFD29A",
+      "warningContent": "#2C240D",
+      "warningText": "#FFD29A",
+      "negative": "#FF6B70",
+      "negativeDeep": "#FF8C90",
+      "negativeDarkest": "#FFB4B7",
+      "negativeSoft": "#401D20",
+      "negativeBg": "#300B0E"
+    },
+    "accent": {
+      "orange": "#FFB47E",
+      "cyan": "#66D4FF"
     }
   },
   "spacing": {
@@ -72,7 +113,7 @@
     },
     "body": {
       "lg": { "fontFamily": "SF Pro Display", "fontWeight": "600", "fontSize": 20, "lineHeight": 24, "letterSpacing": 0.38 },
-      "md": { "fontFamily": "SF Pro Display", "fontWeight": "400", "fontSize": 16, "lineHeight": 24, "letterSpacing": -0.32 },
+      "md": { "fontFamily": "SF Pro Display", "fontWeight": "400", "fontSize": 16, "lineHeight": 20, "letterSpacing": -0.32 },
       "mdStrong": { "fontFamily": "SF Pro Display", "fontWeight": "500", "fontSize": 16, "lineHeight": 20, "letterSpacing": -0.32 },
       "sm": { "fontFamily": "SF Pro Display", "fontWeight": "400", "fontSize": 14, "lineHeight": 20, "letterSpacing": -0.15 },
       "smStrong": { "fontFamily": "SF Pro Display", "fontWeight": "500", "fontSize": 14, "lineHeight": 18, "letterSpacing": -0.15 },

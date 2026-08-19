@@ -57,6 +57,7 @@ Optional leading/trailing/content controls are component properties on each vari
 | disabled text | `color/content/mute` | `theme.colors.content.mute` |
 | padding | `spacing/lg` | `theme.spacing.lg` |
 | gap | `spacing/lg` | `theme.spacing.lg` |
+| content gap | `spacing/xxs` | `theme.spacing.xxs` |
 | leading avatar size | component size token | `theme.sizes.avatar40` |
 | trailing icon size | component size token | `theme.sizes.listItemCellIcon` |
 | title typography | `Typography/Body/MD Strong` | `theme.typography.body.mdStrong` |
@@ -67,6 +68,7 @@ Optional leading/trailing/content controls are component properties on each vari
 - Use existing canonical components inside slots: `Avatar`, `Button`, `Checkbox`, `Radio`, `Icon`, `Switch`, and `Badge`.
 - `Avatar` in the leading slot uses the canonical 40px size.
 - Disabled rows must not fire row `onPress`.
+- The row is exposed as an accessibility button only when it has `onPress`; otherwise nested controls remain individually accessible.
 - Trailing checkbox, radio, and switch use `selected` and `onSelectedChange`.
 - Trailing checkbox and radio must pass `showLabel={false}` rather than hiding label text with an empty string.
 - Code exposes slot props rather than separate row components for each action type.

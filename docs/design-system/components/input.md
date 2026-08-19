@@ -33,6 +33,7 @@
 | `disabled` | `boolean` | no | Disables editing. |
 | `doubleField` | `boolean` | no | Shows prefix field plus input field. |
 | `prefixValue` | `string` | no | Prefix text for `doubleField`. Defaults to `+1`. |
+| `prefixAccessibilityLabel` | `string` | no | Overrides the screen-reader label for the prefix control in `doubleField` mode. |
 | `onChangePrefixText` | `(value: string) => void` | no | Controlled prefix value callback for `doubleField`. |
 | `showLabel` | `boolean` | no | Shows or hides the label. Defaults to `true`. |
 | `showMessage` | `boolean` | no | Shows or hides the helper/status message row. Defaults to `true`. |
@@ -59,10 +60,10 @@
 | text | `theme.colors.content.ink` |
 | helper text | `theme.colors.content.body` |
 | muted text | `theme.colors.content.mute` |
-| focus border | `theme.colors.content.inkDeep` |
+| focus border | `theme.colors.content.controlAccent` |
 | error | `theme.colors.status.negative` |
 | positive | `theme.colors.status.positiveDeep` |
-| warning | `theme.colors.status.warningContent` |
+| warning | `theme.colors.status.warningText` |
 | status marker size | `theme.spacing.md` |
 | spacing | `theme.spacing.*` |
 | radius | `theme.radius.md`, `theme.radius.pill` |
@@ -76,6 +77,13 @@
 - Message marker is a filled circle with no icon or glyph inside.
 - `showLabel` and `showMessage` must be available in Storybook and mobile preview.
 - Use `width="fill"` only inside constrained containers such as Storybook preview cards; standalone examples keep the fixed Figma component width.
+
+## Accessibility
+
+- `label` is also the native accessibility label when the visual label is hidden.
+- `doubleField` announces two distinct controls: `<label>, код страны` and `<label>, номер`; `prefixAccessibilityLabel` can override the first label.
+- Error, warning, and positive messages are attached to the input as a hint and announced as a polite live-region update when they appear.
+- Disabled state is exposed through `accessibilityState`.
 
 ## Examples
 

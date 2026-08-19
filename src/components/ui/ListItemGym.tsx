@@ -36,6 +36,7 @@ export type ListItemGymProps = Omit<PressableProps, "children" | "style"> & {
   showSets?: boolean;
   setVariant?: "set" | "new";
   setValues?: WorkoutSetValue[];
+  supportingSlot?: ReactNode;
   trailingSlot?: ReactNode;
   onAddSetPress?: () => void;
   onSelectedChange?: (selected: boolean) => void;
@@ -73,6 +74,7 @@ export function ListItemGym({
   showSets = mode === "move",
   setVariant = "new",
   setValues,
+  supportingSlot,
   trailingSlot,
   onAddSetPress,
   onSelectedChange,
@@ -172,6 +174,7 @@ export function ListItemGym({
         <Text numberOfLines={2} style={styles.title}>
           {title}
         </Text>
+        {supportingSlot}
         {showSets ? <Set variant={setVariant} values={setValues} onAddPress={onAddSetPress} /> : null}
       </View>
 

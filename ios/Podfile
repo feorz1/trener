@@ -60,9 +60,47 @@ target 'TrainerFoundation' do
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
 
+    # fmt 11.0.2 does not honor an externally supplied FMT_USE_CONSTEVAL
+    # override. Make its feature detection overridable before setting the
+    # target-local definition below. This is deterministic on every pod install
+    # and avoids carrying an edited Pods header in source control.
+    fmt_base_header = File.join(installer.sandbox.root.to_s, 'fmt/include/fmt/base.h')
+    if File.exist?(fmt_base_header)
+      fmt_source = File.read(fmt_base_header)
+      unless fmt_source.include?('#ifndef FMT_USE_CONSTEVAL')
+        fmt_source.sub!(
+          "// Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.\n#if !defined(__cpp_lib_is_constant_evaluated)",
+          "// Detect consteval, C++20 constexpr extensions and std::is_constant_evaluated.\n#ifndef FMT_USE_CONSTEVAL\n#if !defined(__cpp_lib_is_constant_evaluated)"
+        )
+        fmt_source.sub!(
+          "#else\n#  define FMT_USE_CONSTEVAL 0\n#endif\n#if FMT_USE_CONSTEVAL",
+          "#else\n#  define FMT_USE_CONSTEVAL 0\n#endif\n#endif\n#if FMT_USE_CONSTEVAL"
+        )
+        original_mode = File.stat(fmt_base_header).mode
+        begin
+          File.chmod(original_mode | 0200, fmt_base_header)
+          File.write(fmt_base_header, fmt_source)
+        ensure
+          File.chmod(original_mode, fmt_base_header)
+        end
+      end
+    end
+
     # CocoaPods wraps this Expo Constants script with `bash -c`; quote the
     # resolved script path so builds also work when the project path has spaces.
     installer.pods_project.targets.each do |target|
+      # fmt 11.0.2 (pinned by React Native 0.81) enables a consteval path that
+      # Apple Clang in Xcode 26.4+ rejects. Keep the workaround scoped to fmt;
+      # React Native can remove it when its fmt pin is upgraded.
+      if target.name == 'fmt'
+        target.build_configurations.each do |config|
+          definitions = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+          definitions = [definitions] if definitions.is_a?(String)
+          definitions << 'FMT_USE_CONSTEVAL=0' unless definitions.include?('FMT_USE_CONSTEVAL=0')
+          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = definitions
+        end
+      end
+
       next unless target.name == 'EXConstants'
 
       target.shell_script_build_phases.each do |phase|

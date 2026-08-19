@@ -30,6 +30,7 @@ export type ApiRepositoryOperation =
   | "clients.getById"
   | "clients.create"
   | "clients.update"
+  | "clients.remove"
   | "exercises.list"
   | "exercises.getById"
   | "exercises.create"
@@ -94,6 +95,7 @@ export const API_OPERATION_CONTRACTS = {
   "clients.getById": query,
   "clients.create": mutation,
   "clients.update": mutation,
+  "clients.remove": mutation,
   "exercises.list": query,
   "exercises.getById": query,
   "exercises.create": mutation,
@@ -197,6 +199,7 @@ export type ApiClientRepository = {
   getById(id: ClientId, options?: ApiRequestOptions): ReturnType<DataLayer["clients"]["getById"]>;
   create(input: CreateClientInput, options: ApiRequestOptions & { idempotencyKey: string }): ReturnType<DataLayer["clients"]["create"]>;
   update(id: ClientId, patch: UpdateClientInput, options: ApiRequestOptions & { idempotencyKey: string }): ReturnType<DataLayer["clients"]["update"]>;
+  remove(id: ClientId, options: ApiRequestOptions & { idempotencyKey: string }): ReturnType<DataLayer["clients"]["remove"]>;
 };
 
 export type ApiExerciseRepository = {

@@ -50,6 +50,7 @@ export default function NewExerciseScreen() {
   const sessions = useSessionActions();
   const { scrollProps } = useConditionalScroll();
   const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
   const [equipment, setEquipment] = useState("");
   const [notes, setNotes] = useState("");
   const [primaryMuscles, setPrimaryMuscles] = useState<string[]>(["legs"]);
@@ -60,6 +61,7 @@ export default function NewExerciseScreen() {
   const isMutating = createExerciseMutation.isSubmitting || updateExerciseMutation.isSubmitting || archiveExerciseMutation.isSubmitting;
   const error = createExerciseMutation.error ?? updateExerciseMutation.error ?? archiveExerciseMutation.error;
   const canSave = useMemo(() => Boolean(name.trim() && primaryMuscles.length > 0 && !isMutating), [isMutating, name, primaryMuscles.length]);
+  const showNameError = nameTouched && !name.trim();
 
   useEffect(() => {
     if (!exercise) return;
@@ -149,7 +151,16 @@ export default function NewExerciseScreen() {
 
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAware}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" {...scrollProps}>
-          <Input label="Название" value={name} width="fill" state={!name.trim() ? "error" : "default"} message={!name.trim() ? "Название обязательно" : undefined} onChangeText={setName} />
+          <Input
+            label="Название"
+            value={name}
+            width="fill"
+            state={showNameError ? "error" : name.trim() ? "default" : "empty"}
+            message={showNameError ? "Название обязательно" : undefined}
+            showMessage={showNameError}
+            onBlur={() => setNameTouched(true)}
+            onChangeText={setName}
+          />
           <Input label="Оборудование" value={equipment} width="fill" showMessage={false} onChangeText={setEquipment} />
 
           <View style={styles.muscleSection}>

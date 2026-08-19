@@ -54,7 +54,7 @@ Multi-line text input for longer trainer notes, exercise comments, client limita
 | placeholder text | `color/content/mute` | `theme.colors.content.mute` |
 | message text | `color/content/body` | `theme.colors.content.body` |
 | default border | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
-| focus border | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| focus border | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | error border/message | `color/status/negative` | `theme.colors.status.negative` |
 | disabled fill | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | disabled text | `color/content/mute` | `theme.colors.content.mute` |
@@ -72,6 +72,12 @@ Multi-line text input for longer trainer notes, exercise comments, client limita
 | field min height | design size token | `theme.sizes.textAreaFieldMinHeight` |
 
 Use `width="fill"` only inside constrained containers such as Storybook preview cards; standalone examples keep the fixed Figma component width.
+
+## Accessibility
+
+- `label` is also the native accessibility label when the visual label is hidden.
+- Validation feedback is attached to the native text area as a hint; errors are announced as polite live-region updates.
+- Disabled state is exposed through `accessibilityState`.
 
 ## Usage
 

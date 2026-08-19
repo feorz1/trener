@@ -11,8 +11,9 @@ colors:
   primary-pale: "#e2f6d5"
   ink: "#0e0f0c"
   ink-deep: "#163300"
+  control-accent: "#163300"
   body: "#454745"
-  mute: "#868685"
+  mute: "#6f716e"
   disabled: "#cfcfcf"
   canvas: "#ffffff"
   canvas-soft: "#efefef"
@@ -32,6 +33,38 @@ colors:
   negative-bg: "#320707"
   accent-orange: "#ffc091"
   accent-cyan: "#38c8ff"
+
+dark-colors:
+  primary: "#2f571f"
+  on-primary: "#f5f5f4"
+  primary-active: "#3b682b"
+  primary-neutral: "#416d31"
+  primary-pale: "#21301d"
+  ink: "#f5f5f4"
+  ink-deep: "#f0f0ee"
+  control-accent: "#a9ec7d"
+  body: "#c7c7c4"
+  mute: "#a0a09c"
+  disabled: "#6b6b68"
+  canvas: "#141414"
+  canvas-soft: "#242424"
+  border: "#3a3a3a"
+  card-divider: "#2e2e2e"
+  positive: "#66cf7e"
+  positive-deep: "#9fe8ad"
+  warning: "#f2c94c"
+  warning-deep: "#ff9f43"
+  warning-deep-soft: "#3a2813"
+  warning-darkest: "#ffd29a"
+  warning-content: "#2c240d"
+  warning-text: "#ffd29a"
+  negative: "#ff6b70"
+  negative-deep: "#ff8c90"
+  negative-darkest: "#ffb4b7"
+  negative-soft: "#401d20"
+  negative-bg: "#300b0e"
+  accent-orange: "#ffb47e"
+  accent-cyan: "#66d4ff"
 
 typography:
   display-mega:
@@ -84,7 +117,7 @@ typography:
     fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
     fontSize: 16px
     fontWeight: 400
-    lineHeight: 24px
+    lineHeight: 20px
     letterSpacing: -0.32px
   body-md-strong:
     fontFamily: SF Pro Display, -apple-system, system-ui, sans-serif
@@ -348,6 +381,7 @@ Cards are universally pill-rounded — `{rounded.xl}` 24 px is the brand's signa
 ### Text
 - **Ink** (`{colors.ink}` — `#0e0f0c`): Near-black with a hint of olive warmth — the brand's default text and headings color.
 - **Ink Deep** (`{colors.ink-deep}` — `#163300`): A deep forest-green ink used on positive-state surfaces.
+- **Control Accent** (`{colors.control-accent}` — `#163300` light / `#a9ec7d` dark): Green reserved for primary actions, selected controls, and focus indicators.
 - **Body** (`{colors.body}` — `#454745`): Secondary body text.
 - **Mute** (`{colors.mute}` — `#868685`): Lowest-priority text — captions, placeholder, fine print.
 - **Disabled** (`{colors.disabled}` — `#cfcfcf`): Disabled structural surfaces such as inactive progress tracks.
@@ -384,7 +418,7 @@ SF Pro Display is the single typography family across the design system. In Figm
 | `{typography.display-sm}` | 32px | 600 | 38.4px | 0.4px | Section headings. |
 | `{typography.display-xs}` | 24px | 500 | 31.2px | 0.35px | Sub-section displays. |
 | `{typography.body-lg}` | 20px | 600 | 24px | 0.38px | Lead paragraphs. |
-| `{typography.body-md}` | 16px | 400 | 24px | -0.32px | Default body. |
+| `{typography.body-md}` | 16px | 400 | 20px | -0.32px | Default body. |
 | `{typography.body-md-strong}` | 16px | 500 | 20px | -0.32px | Medium inline body. |
 | `{typography.body-sm}` | 14px | 400 | 20px | -0.15px | Secondary body. |
 | `{typography.body-sm-strong}` | 14px | 500 | 18px | -0.15px | Compact medium labels and approach values. |
@@ -511,11 +545,13 @@ The brand uses surface contrast (`{colors.canvas-soft}` background vs `{colors.c
 - Image is the primary content. Initials and count are fallbacks or group summaries.
 - Sizes: 40, 48, 56, 72 px.
 - Shape `{rounded.full}`. Initials use `{colors.canvas-soft}` background, `{colors.ink-deep}` text, and body/caption typography by size.
+- Icon avatars use `{colors.canvas-soft}` without a stroke; glyph sizes are 22, 32, 36, and 48 px for the 40, 48, 56, and 72 px variants.
 - Status overlays use semantic tokens: badge `{colors.primary}`, notification `{colors.negative}`.
 
 **`list-item-cell`** - the canonical mobile list row.
 - Background `{colors.canvas}`, text `{colors.ink}`, padding `{spacing.lg}`, gap `{spacing.lg}`.
 - Leading slot supports `avatar` 40 px or icon. Content supports optional eyebrow, required title, optional subtitle.
+- Content labels use `{spacing.xxs}` vertical separation.
 - Trailing slot supports button, checkbox, radio, icon, switch, badge, text, or none.
 - Title uses `{typography.body-md-strong}`; eyebrow/subtitle/trailing text use `{typography.body-sm}`.
 - Optional elements must be component properties in Figma and props in code, not duplicated row components.

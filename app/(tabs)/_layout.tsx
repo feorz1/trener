@@ -5,27 +5,27 @@ export default function TrainerTabsLayout() {
   return (
     <NativeTabs
       backgroundColor={theme.colors.background.glass}
-      blurEffect="systemMaterialLight"
+      blurEffect="systemMaterial"
       disableTransparentOnScrollEdge
       iconColor={{
-        default: theme.colors.content.inkDeep,
-        selected: theme.colors.content.inkDeep
+        default: theme.colors.content.body,
+        selected: theme.colors.content.controlAccent
       }}
       labelStyle={{
         default: {
-          color: theme.colors.content.inkDeep,
+          color: theme.colors.content.body,
           fontSize: theme.typography.captionStrong.fontSize,
           fontWeight: theme.typography.captionStrong.fontWeight
         },
         selected: {
-          color: theme.colors.content.inkDeep,
+          color: theme.colors.content.controlAccent,
           fontSize: theme.typography.captionStrong.fontSize,
           fontWeight: theme.typography.captionStrong.fontWeight
         }
       }}
       minimizeBehavior="never"
       shadowColor={theme.colors.background.glassOverlay}
-      tintColor={theme.colors.content.inkDeep}
+      tintColor={theme.colors.content.controlAccent}
     >
       <NativeTabs.Trigger name="index">
         <Icon sf={{ default: "house", selected: "house.fill" }} />

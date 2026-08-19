@@ -6,4 +6,5 @@ export * from "./PersistenceCoordinator";
 export * from "./migrations";
 export * from "./serializeSnapshot";
 export * from "./storageKeys";
+export * from "./accountDeletionRecovery";
 export * from "./validation";

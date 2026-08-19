@@ -26,8 +26,8 @@ export function Radio({
 }: RadioProps) {
   const isDisabled = disabled || state === "disabled";
   const isError = state === "error";
-  const controlBorderColor = isError ? theme.colors.status.negative : selected ? theme.colors.content.inkDeep : theme.colors.content.mute;
-  const dotColor = isDisabled ? theme.colors.content.mute : isError ? theme.colors.status.negative : theme.colors.content.inkDeep;
+  const controlBorderColor = isError ? theme.colors.status.negative : selected ? theme.colors.content.controlAccent : theme.colors.content.mute;
+  const dotColor = isDisabled ? theme.colors.content.mute : isError ? theme.colors.status.negative : theme.colors.content.controlAccent;
   const labelColor = isDisabled ? theme.colors.content.mute : theme.colors.content.ink;
 
   return (

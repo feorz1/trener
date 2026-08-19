@@ -1,8 +1,9 @@
+import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Button, Divider, ListItemCell, Loader, Navigation, getListItemCellGroupPosition } from "@/components/ui";
-import { useClient, useClientWorkoutHistory } from "@/data";
+import { Badge, Button, Divider, Icon, ListItemCell, Loader, Modal, Navigation, getListItemCellGroupPosition } from "@/components/ui";
+import { useClient, useClientActions, useClientWorkoutHistory, useDataMutation } from "@/data";
 import { formatDurationCompact } from "@/features/workouts/sessionHistory";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
@@ -16,12 +17,39 @@ export default function ClientProfileScreen() {
   const clientId = firstParam(rawClientId);
   const clientQuery = useClient(clientId);
   const historyQuery = useClientWorkoutHistory(clientId);
+  const clientActions = useClientActions();
+  const removeClientMutation = useDataMutation(clientActions.remove);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
   const { client, notFound } = clientQuery;
   const { sessions } = historyQuery;
   const { scrollProps } = useConditionalScroll();
   const latestSessions = sessions.slice(0, 3);
   const isLoading = clientQuery.isLoading || historyQuery.isLoading;
   const error = clientQuery.error ?? historyQuery.error;
+  const isDeleting = removeClientMutation.isSubmitting;
+
+  const openDeleteModal = () => {
+    removeClientMutation.reset();
+    setDeleteModalVisible(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    removeClientMutation.reset();
+    setDeleteModalVisible(false);
+  };
+
+  const confirmDeleteClient = async () => {
+    if (!client || isDeleting) return;
+
+    try {
+      await removeClientMutation.mutate(client.id);
+      setDeleteModalVisible(false);
+      router.replace("/clients");
+    } catch {
+      // The mutation state renders the error in the confirmation modal.
+    }
+  };
 
   if (isLoading) {
     return <ClientState title="Загружаем клиента" loading />;
@@ -37,14 +65,27 @@ export default function ClientProfileScreen() {
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-      <Navigation title={client.name} onBack={() => router.back()} />
+      <Navigation
+        title={client.name}
+        onBack={() => router.back()}
+        trailingSlot={
+          <Button
+            type="tertiary"
+            size="mediumIcon"
+            accessibilityLabel="Удалить клиента"
+            state={isDeleting ? "loading" : "active"}
+            onPress={openDeleteModal}
+            icon={<Icon name="trash" size={theme.sizes.navigationIcon} color={theme.colors.status.negative} />}
+          />
+        }
+      />
 
       <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <View style={styles.topSection}>
           <View style={[styles.listGroup, styles.clientDataGroup]}>
             <ListItemCell
               title="Данные клиента"
-              subtitle="Имя, контакты, цель тренировки, заметки"
+              subtitle="Имя, контакты, анкета, цель и заметки"
               leading="none"
               trailing="icon"
               trailingIconName="chevron right"
@@ -111,6 +152,33 @@ export default function ClientProfileScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      <Modal
+        visible={deleteModalVisible}
+        presentation="overlay"
+        title="Удалить клиента?"
+        subline={client.name}
+        subheader="Будут удалены карточка клиента, его тренировки, история и связанные результаты."
+        description="Это действие нельзя отменить."
+        actionLayout="stacked"
+        primaryAction={{
+          label: "Удалить",
+          type: "destructive",
+          state: isDeleting ? "loading" : "active",
+          onPress: () => {
+            void confirmDeleteClient();
+          }
+        }}
+        secondaryAction={{
+          label: "Отмена",
+          type: "secondaryNeutral",
+          disabled: isDeleting,
+          onPress: closeDeleteModal
+        }}
+        onClose={isDeleting ? undefined : closeDeleteModal}
+      >
+        {removeClientMutation.error ? <Text style={styles.deleteError}>{removeClientMutation.error.message}</Text> : null}
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -240,5 +308,9 @@ const styles = StyleSheet.create({
     ...theme.typography.body.md,
     color: theme.colors.content.body,
     textAlign: "center"
+  },
+  deleteError: {
+    ...theme.typography.body.sm,
+    color: theme.colors.status.negative
   }
 });

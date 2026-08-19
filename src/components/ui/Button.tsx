@@ -24,7 +24,7 @@ export type ButtonProps = Omit<PressableProps, "children" | "disabled" | "style"
 
 const typeStyles: Record<ButtonType, { backgroundColor: string; color: string }> = {
   primary: {
-    backgroundColor: theme.colors.content.inkDeep,
+    backgroundColor: theme.colors.content.controlAccent,
     color: theme.colors.content.primary
   },
   secondary: {
@@ -37,7 +37,7 @@ const typeStyles: Record<ButtonType, { backgroundColor: string; color: string }>
   },
   destructive: {
     backgroundColor: theme.colors.status.negative,
-    color: theme.colors.background.canvas
+    color: theme.colors.status.onNegative
   },
   tertiary: {
     backgroundColor: theme.colors.background.canvas,

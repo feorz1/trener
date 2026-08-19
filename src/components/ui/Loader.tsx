@@ -27,7 +27,7 @@ type LoaderFrame = {
 };
 
 const toneColor: Record<LoaderTone, string> = {
-  brand: theme.colors.content.inkDeep,
+  brand: theme.colors.content.controlAccent,
   inverse: theme.colors.content.primary,
   negative: theme.colors.status.negative,
   neutral: theme.colors.content.body,

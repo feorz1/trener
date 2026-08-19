@@ -1,74 +1,123 @@
-import { StyleSheet, Text, View } from "react-native";
+import { router } from "expo-router";
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { initialWindowMetrics, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/auth";
-import { Button, Header, ListItemCell } from "@/components/ui";
-import { theme } from "@/theme";
+import { Button, Divider, Header, Icon, ListItemCell } from "@/components/ui";
+import { releaseLinks } from "@/config/releaseLinks";
+import { getThemePreferenceLabel } from "@/features/settings/themeOptions";
+import { theme, useAppTheme } from "@/theme";
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
-  const { state, signOut } = useAuth();
+  const { state } = useAuth();
+  const { preference } = useAppTheme();
+  const user = state.user;
+  const profileEmail = user?.email || "Почта не указана";
+  const appearanceLabel = getThemePreferenceLabel(preference);
+
+  const openReleaseLink = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert("Не удалось открыть ссылку", "Проверьте подключение к интернету и попробуйте ещё раз.");
+    }
+  };
 
   return (
     <View style={[styles.safeArea, { paddingTop: topInset }]}>
-      <View style={styles.body}>
-        <View style={styles.headerRow}>
-          <Header title="Настройки" showSubtitle={false} size="xl" style={styles.header} />
-        </View>
+      <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+        <Header title="Настройки" showSubtitle={false} size="xl" style={styles.screenHeader} />
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Профиль</Text>
-          <View style={styles.listGroup}>
-            <ListItemCell
-              title="Тренер"
-              subtitle="Профиль будет доступен позже"
-              leading="avatar"
-              avatarType="icon"
-              leadingIconName="user"
-              trailing="none"
-              disabled
-              groupPosition="single"
-            />
-          </View>
+          <Header title="Основное" showSubtitle={false} size="lg" style={styles.sectionHeader} />
+          <ListItemCell
+            title="Оформление"
+            showSubtitle={false}
+            leading="avatar"
+            avatarType="icon"
+            leadingIconName="positive"
+            density="compact"
+            trailingSlot={
+              <View style={styles.appearanceTrailing}>
+                <Text style={styles.appearanceValue}>{appearanceLabel}</Text>
+                <Icon name="chevron right" size={theme.sizes.listItemCellIcon} color={theme.colors.content.inkDeep} />
+              </View>
+            }
+            groupPosition="single"
+            accessibilityLabel={`Оформление, ${appearanceLabel.toLowerCase()}`}
+            accessibilityHint="Открывает выбор темы приложения"
+            onPress={() => router.push("/settings/appearance")}
+          />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Основные параметры</Text>
-          <View style={styles.listGroup}>
-            <ListItemCell
-              title="Уведомления"
-              subtitle="Будет доступно позже"
-              leading="icon"
-              leadingIconName="bell"
-              trailing="switch"
-              selected={false}
-              disabled
-              groupPosition="first"
-            />
-            <ListItemCell
-              title="Автозапуск таймера"
-              subtitle="Будет доступно позже"
-              leading="icon"
-              leadingIconName="clock"
-              trailing="switch"
-              selected={false}
-              disabled
-              groupPosition="middle"
-            />
-            <ListItemCell title="Единицы измерения" subtitle="Будет доступно позже" leading="icon" leadingIconName="chart" trailing="text" trailingText="кг / см" disabled groupPosition="middle" />
-            <ListItemCell title="Тема" subtitle="Будет доступно позже" leading="icon" leadingIconName="settings" trailing="text" trailingText="Системная" disabled groupPosition="last" />
-          </View>
-        </View>
+        <Divider width="fill" tone="canvasSoft" />
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Доступ</Text>
-          <View style={styles.authPanel}>
-            <Text style={styles.authTitle}>{state.session?.displayName ?? "Локальный тренер"}</Text>
-            <Text style={styles.authCopy}>Локальные данные сохранятся после выхода.</Text>
-            <Button label="Выйти" type="secondaryNeutral" size="large" width="fill" onPress={() => void signOut({ mode: "preserve_local_data" })} />
-          </View>
+          <Header title="Профиль" showSubtitle={false} size="lg" style={styles.sectionHeader} />
+          <ListItemCell
+            eyebrow="Почта"
+            title={profileEmail}
+            showEyebrow
+            showSubtitle={false}
+            leading="avatar"
+            avatarType="icon"
+            leadingIconName="user"
+            trailingSlot={<Button label="Выйти" type="secondaryNeutral" size="small" onPress={() => router.push("/settings/logout")} />}
+            groupPosition="first"
+          />
+          <ListItemCell
+            title="Данные аккаунта"
+            showSubtitle={false}
+            leading="avatar"
+            avatarType="icon"
+            leadingIconName="trash"
+            density="compact"
+            trailingSlot={
+              <Button
+                label="Удалить"
+                accessibilityLabel="Удалить аккаунт"
+                type="destructive"
+                size="small"
+                onPress={() => router.push("/settings/delete-account")}
+              />
+            }
+            groupPosition="last"
+          />
         </View>
-      </View>
+
+        <Divider width="fill" tone="canvasSoft" />
+
+        <View style={styles.section}>
+          <Header title="Помощь и документы" showSubtitle={false} size="lg" style={styles.sectionHeader} />
+          <ListItemCell
+            title="Политика конфиденциальности"
+            showSubtitle={false}
+            leading="avatar"
+            avatarType="icon"
+            leadingIconName="document"
+            trailing="icon"
+            trailingIconName="chevron right"
+            density="compact"
+            groupPosition="first"
+            accessibilityHint="Открывает политику конфиденциальности во внешнем браузере"
+            onPress={() => void openReleaseLink(releaseLinks.privacyPolicyUrl)}
+          />
+          <ListItemCell
+            title="Поддержка"
+            showSubtitle={false}
+            leading="avatar"
+            avatarType="icon"
+            leadingIconName="question circle"
+            trailing="icon"
+            trailingIconName="chevron right"
+            density="compact"
+            groupPosition="last"
+            accessibilityHint="Открывает страницу поддержки во внешнем браузере"
+            onPress={() => void openReleaseLink(releaseLinks.supportUrl)}
+          />
+        </View>
+      </ScrollView>
     </View>
   );
 }
@@ -79,43 +128,28 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   body: {
-    gap: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing["3xl"] + theme.spacing["3xl"]
+  },
+  screenHeader: {
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm
-  },
-  headerRow: {
-    minHeight: theme.sizes.buttonSmHeight,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.md
-  },
-  header: {
-    flex: 1,
-    paddingHorizontal: theme.spacing[0],
     paddingTop: theme.spacing[0],
     paddingBottom: theme.spacing[0]
   },
   section: {
-    gap: theme.spacing.sm
-  },
-  sectionTitle: {
-    ...theme.typography.body.lg,
-    color: theme.colors.content.ink
-  },
-  listGroup: {
     gap: theme.spacing.xxs
   },
-  authPanel: {
-    gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.background.canvasSoft
+  sectionHeader: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.sm
   },
-  authTitle: {
-    ...theme.typography.body.mdStrong,
-    color: theme.colors.content.ink
+  appearanceTrailing: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.lg
   },
-  authCopy: {
+  appearanceValue: {
     ...theme.typography.body.sm,
     color: theme.colors.content.body
   }

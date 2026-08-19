@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Alert as NativeAlert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Alert, Badge, Button, Divider, Header, Icon, ListItemGym, Loader, Navigation } from "@/components/ui";
+import { Alert, AnimatedTopNotification, Badge, Button, Divider, Header, Icon, ListItemGym, Loader, Navigation } from "@/components/ui";
 import { isActiveSessionConflictError, useClient, useDataMutation, useSessionActions, useSessions, useWorkout, useWorkoutActions } from "@/data";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { theme } from "@/theme";
@@ -10,6 +10,8 @@ import { theme } from "@/theme";
 function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
+
+const rescheduleNotificationDelay = 320;
 
 function formatWorkoutBadgeDate(value: string) {
   const date = new Date(value);
@@ -24,8 +26,12 @@ function formatWorkoutBadgeDate(value: string) {
 }
 
 export default function WorkoutDetailsScreen() {
-  const { workoutId: rawWorkoutId } = useLocalSearchParams<{ workoutId?: string | string[] }>();
+  const {
+    workoutId: rawWorkoutId,
+    rescheduleConfirmed: rawRescheduleConfirmed
+  } = useLocalSearchParams<{ workoutId?: string | string[]; rescheduleConfirmed?: string | string[] }>();
   const workoutId = firstParam(rawWorkoutId);
+  const rescheduleConfirmed = firstParam(rawRescheduleConfirmed) === "true";
   const workoutQuery = useWorkout(workoutId);
   const { workout, notFound } = workoutQuery;
   const clientQuery = useClient(workout?.clientId);
@@ -47,6 +53,33 @@ export default function WorkoutDetailsScreen() {
   const cancelWorkoutMutation = useDataMutation(async (id: string) => workouts.cancel(id));
   const mutationError = startSessionMutation.error ?? editWorkoutMutation.error ?? cancelWorkoutMutation.error;
   const isMutating = startSessionMutation.isSubmitting || editWorkoutMutation.isSubmitting || cancelWorkoutMutation.isSubmitting;
+  const [notificationVisible, setNotificationVisible] = useState(false);
+  const shownNotificationRef = useRef(false);
+  const notificationDelayTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!rescheduleConfirmed) {
+      shownNotificationRef.current = false;
+      return;
+    }
+    if (shownNotificationRef.current) return;
+
+    shownNotificationRef.current = true;
+    if (notificationDelayTimeoutRef.current) {
+      clearTimeout(notificationDelayTimeoutRef.current);
+    }
+    notificationDelayTimeoutRef.current = setTimeout(() => {
+      notificationDelayTimeoutRef.current = null;
+      setNotificationVisible(true);
+    }, rescheduleNotificationDelay);
+    router.setParams({ rescheduleConfirmed: undefined });
+  }, [rescheduleConfirmed]);
+
+  useEffect(() => () => {
+    if (notificationDelayTimeoutRef.current) {
+      clearTimeout(notificationDelayTimeoutRef.current);
+    }
+  }, []);
 
   const startSession = async () => {
     if (!workoutId || !workout || workout.status === "cancelled" || isMutating) return;
@@ -97,17 +130,27 @@ export default function WorkoutDetailsScreen() {
 
   return (
     <SafeAreaView edges={["top", "bottom"]} style={styles.safeArea}>
-      <Navigation
-        title="Тренировка"
-        trailingSlot={
-          canEditPlan ? (
-            <Pressable accessibilityLabel="Отменить тренировку" accessibilityRole="button" accessibilityState={{ disabled: isMutating }} disabled={isMutating} hitSlop={theme.spacing.sm} onPress={cancelWorkout} style={[styles.trashButton, isMutating && styles.iconButtonDisabled]}>
-              <Icon name="trash" size={theme.spacing.xl} color={theme.colors.status.negative} />
-            </Pressable>
-          ) : null
-        }
-        onBack={() => router.back()}
-      />
+      <View style={styles.navigationLayer}>
+        <Navigation
+          title="Тренировка"
+          trailingSlot={
+            canEditPlan ? (
+              <Pressable accessibilityLabel="Отменить тренировку" accessibilityRole="button" accessibilityState={{ disabled: isMutating }} disabled={isMutating} hitSlop={theme.spacing.sm} onPress={cancelWorkout} style={[styles.trashButton, isMutating && styles.iconButtonDisabled]}>
+                <Icon name="trash" size={theme.spacing.xl} color={theme.colors.status.negative} />
+              </Pressable>
+            ) : null
+          }
+          onBack={() => router.back()}
+        />
+        <AnimatedTopNotification
+          visible={notificationVisible}
+          message="Тренировка перенесена"
+          topOffset={theme.spacing.xxs}
+          respectSafeArea={false}
+          onFinish={() => setNotificationVisible(false)}
+          testID="workout-reschedule-notification"
+        />
+      </View>
 
       <ScrollView contentContainerStyle={styles.content} {...scrollProps}>
         <View style={styles.headerBlock}>
@@ -195,6 +238,10 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: theme.colors.background.canvas
+  },
+  navigationLayer: {
+    position: "relative",
+    zIndex: theme.spacing["3xl"]
   },
   content: {
     flexGrow: 1,

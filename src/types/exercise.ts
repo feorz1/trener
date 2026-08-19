@@ -3,6 +3,18 @@ import type { WorkoutResultType } from "./workout";
 
 export type ExerciseCategory = "strength" | "mobility" | "cardio";
 export type ExerciseSource = "built_in" | "custom";
+export type ExerciseRestrictionTag =
+  | "axialLoads"
+  | "behindNeckPull"
+  | "breathHold"
+  | "gentleOnly"
+  | "intensity"
+  | "jumps"
+  | "kneeStress"
+  | "running"
+  | "shoulderStress"
+  | "staticLoads"
+  | "twists";
 
 export type Exercise = {
   id: string;
@@ -15,6 +27,7 @@ export type Exercise = {
   equipment: string;
   resultType?: WorkoutResultType;
   searchAliases?: string[];
+  restrictionTags?: ExerciseRestrictionTag[];
   coachNotes?: string;
   notes?: string;
   archivedAt?: string;

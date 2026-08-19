@@ -4,6 +4,9 @@ export * from "./spacing";
 export * from "./radius";
 export * from "./sizes";
 export * from "./shadows";
+export * from "./palettes";
+export * from "./themePreference";
+export * from "./ThemeProvider";
 
 import { colors } from "./colors";
 import { radius } from "./radius";

@@ -1,83 +1,52 @@
-export const colors = {
-  content: {
-    primary: "#9FE870",
-    onPrimary: "#0E0F0C",
-    primaryActive: "#CDFFAD",
-    primaryNeutral: "#C5EDAB",
-    primaryPale: "#E2F6D5",
-    ink: "#0E0F0C",
-    inkDeep: "#163300",
-    body: "#454745",
-    mute: "#868685",
-    disabled: "#CFCFCF"
-  },
-  background: {
-    canvas: "#FFFFFF",
-    canvasSoft: "#EFEFEF",
-    border: "#E9E9E9",
-    cardDivider: "#F5F4F2",
-    glass: "rgba(239, 239, 239, 0.72)",
-    glassOverlay: "rgba(255, 255, 255, 0.24)",
+import { DynamicColorIOS, Platform, PlatformColor } from "react-native";
+import { darkColors, lightColors, type ThemeColors } from "./palettes";
 
-    // Compatibility aliases for the pre-Wise app screens.
-    app: "#EFEFEF",
-    surface: "#FFFFFF",
-    surfaceSoft: "#E2F6D5",
-    surfaceMuted: "#EFEFEF",
-    overlay: "#0E0F0C"
-  },
-  status: {
-    positive: "#2EAD4B",
-    positiveDeep: "#054D28",
-    warning: "#FFD11A",
-    warningDeep: "#F38800",
-    warningDeepSoft: "#FDE7CC",
-    warningDarkest: "#9A5600",
-    warningContent: "#4A3B1C",
-    negative: "#D03238",
-    negativeDeep: "#A72027",
-    negativeDarkest: "#A7000D",
-    negativeSoft: "#F6D6D7",
-    negativeBg: "#320707",
+function androidResourceName(path: string[]) {
+  return `trainer_${path
+    .join("_")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()}`;
+}
 
-    // Compatibility aliases for existing components.
-    success: "#2EAD4B",
-    successSoft: "#E2F6D5",
-    warningSoft: "#FFF6CC",
-    error: "#D03238",
-    errorSoft: "#FDEAEA",
-    neutral: "#EFEFEF"
-  },
-  accent: {
-    orange: "#FFC091",
-    cyan: "#38C8FF"
-  },
-
-  // Compatibility aliases. New code should prefer theme.colors.content/background/status/accent.
-  text: {
-    primary: "#0E0F0C",
-    secondary: "#454745",
-    muted: "#868685",
-    inverse: "#FFFFFF",
-    disabled: "#CFCFCF"
-  },
-  border: {
-    default: "#0E0F0C",
-    active: "#9FE870",
-    soft: "#EFEFEF"
-  },
-  brand: {
-    primary: "#9FE870",
-    dark: "#163300",
-    soft: "#E2F6D5",
-    contrast: "#0E0F0C"
-  },
-  workout: {
-    planned: "#E2F6D5",
-    inProgress: "#FFD11A",
-    completed: "#E2F6D5",
-    cancelled: "#FDEAEA"
+function adaptiveColor(light: string, dark: string, path: string[]) {
+  if (light === dark) {
+    return light;
   }
-} as const;
 
+  if (Platform.OS === "ios") {
+    return DynamicColorIOS({ light, dark }) as unknown as string;
+  }
+
+  if (Platform.OS === "android") {
+    return PlatformColor(`@color/${androidResourceName(path)}`) as unknown as string;
+  }
+
+  if (Platform.OS === "web") {
+    return `light-dark(${light}, ${dark})`;
+  }
+
+  return light;
+}
+
+function createAdaptiveColors(light: Record<string, unknown>, dark: Record<string, unknown>, path: string[] = []): unknown {
+  return Object.fromEntries(
+    Object.entries(light).map(([key, lightValue]) => {
+      const darkValue = dark[key];
+      const tokenPath = path.concat(key);
+
+      if (typeof lightValue === "string" && typeof darkValue === "string") {
+        return [key, adaptiveColor(lightValue, darkValue, tokenPath)];
+      }
+
+      return [
+        key,
+        createAdaptiveColors(lightValue as Record<string, unknown>, darkValue as Record<string, unknown>, tokenPath)
+      ];
+    })
+  );
+}
+
+export const colors = createAdaptiveColors(lightColors, darkColors) as ThemeColors;
+
+export { darkColors, lightColors } from "./palettes";
 export type ColorToken = typeof colors;

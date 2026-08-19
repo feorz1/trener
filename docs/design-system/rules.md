@@ -21,6 +21,7 @@ Content colors:
 - `color/content/primary-pale`
 - `color/content/ink`
 - `color/content/ink-deep`
+- `color/content/control-accent`
 - `color/content/body`
 - `color/content/mute`
 - `color/content/disabled`

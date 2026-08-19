@@ -19,6 +19,14 @@ export function cloneClient(client: Client): Client {
   return {
     ...client,
     restrictions: client.restrictions ? [...client.restrictions] : undefined,
+    intake: client.intake
+      ? {
+          ...client.intake,
+          healthConstraints: client.intake.healthConstraints ? [...client.intake.healthConstraints] : undefined,
+          exerciseRestrictions: client.intake.exerciseRestrictions ? [...client.intake.exerciseRestrictions] : undefined,
+          sports: client.intake.sports ? [...client.intake.sports] : undefined
+        }
+      : undefined,
     metrics: { ...client.metrics }
   };
 }
@@ -28,7 +36,8 @@ export function cloneExercise(exercise: Exercise): Exercise {
     ...exercise,
     primaryMuscles: [...exercise.primaryMuscles],
     secondaryMuscles: exercise.secondaryMuscles ? [...exercise.secondaryMuscles] : undefined,
-    searchAliases: exercise.searchAliases ? [...exercise.searchAliases] : undefined
+    searchAliases: exercise.searchAliases ? [...exercise.searchAliases] : undefined,
+    restrictionTags: exercise.restrictionTags ? [...exercise.restrictionTags] : undefined
   };
 }
 
@@ -47,7 +56,13 @@ export function cloneWorkout(workout: Workout): Workout {
 export function cloneSession(session: WorkoutSession): WorkoutSession {
   return {
     ...session,
-    exercises: session.exercises.map((exercise) => ({ ...exercise }))
+    exercises: session.exercises.map((exercise) => ({
+      ...exercise,
+      plannedSetTargets: exercise.plannedSetTargets?.map((target) => ({
+        ...target,
+        values: target.values ? { ...target.values } : undefined
+      }))
+    }))
   };
 }
 

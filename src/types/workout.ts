@@ -49,6 +49,7 @@ export type WorkoutExercise = {
   comment?: string;
   collapsed?: boolean;
   supersetWithNext?: boolean;
+  restSeconds?: number;
   sets: WorkoutSet[];
 };
 
@@ -76,6 +77,16 @@ export type Workout = {
 };
 
 export type WorkoutSessionStatus = "active" | "completed" | "cancelled";
+
+export type WorkoutPlannedSetTarget = {
+  id: string;
+  order: number;
+  values?: MetricValues;
+  targetWeightKg?: number;
+  targetReps?: number;
+  targetDurationSeconds?: number;
+  targetDistanceMeters?: number;
+};
 
 export type WorkoutResultType =
   | "weight_reps"
@@ -108,10 +119,15 @@ export type WorkoutSessionExercise = {
   exerciseNameSnapshot?: string;
   resultTypeSnapshot?: WorkoutResultType;
   order: number;
+  day?: RepeatDay;
   comment?: string;
+  supersetWithNext?: boolean;
+  plannedSetTargets?: WorkoutPlannedSetTarget[];
   plannedSets?: number;
   plannedRepetitions?: number;
   plannedWeight?: number;
+  plannedDurationSeconds?: number;
+  restSeconds?: number;
 };
 
 export type WorkoutSession = {

@@ -1,42 +1,76 @@
-import type { AuthCredential, AuthSession, AuthState, SignedOutReason } from "./types";
+import type { AuthError, AuthProvidersAvailability, AuthSession, AuthState, AuthUser } from "./types";
 
 export const initialAuthState: AuthState = {
-  status: "loading",
-  session: null,
-  signedOutReason: null
+  status: "checking",
+  user: null,
+  accessToken: null,
+  expiresAt: null,
+  isAuthenticated: false,
+  isLoading: true,
+  error: null,
+  pendingEmail: null,
+  providers: null
 };
 
-export function isAuthSessionExpired(session: AuthSession, now = new Date()): boolean {
-  if (!session.expiresAt) return false;
-  return new Date(session.expiresAt).getTime() <= now.getTime();
-}
-
-export function authStateFromCredential(credential: AuthCredential | null, now = new Date()): AuthState {
-  if (!credential) return signedOutState("initial");
-  if (isAuthSessionExpired(credential.session, now)) return expiredAuthState();
-  return signedInState(credential.session);
-}
-
-export function signedInState(session: AuthSession): AuthState {
+export function createUnauthenticatedState(input: Partial<Pick<AuthState, "error" | "pendingEmail" | "providers">> = {}): AuthState {
   return {
-    status: "signed_in",
-    session,
-    signedOutReason: null
+    status: "unauthenticated",
+    user: null,
+    accessToken: null,
+    expiresAt: null,
+    isAuthenticated: false,
+    isLoading: false,
+    error: input.error ?? null,
+    pendingEmail: input.pendingEmail ?? null,
+    providers: input.providers ?? null
   };
 }
 
-export function signedOutState(reason: SignedOutReason): AuthState {
+export function createAuthenticatingState(previous: AuthState, next: Partial<Pick<AuthState, "pendingEmail" | "error">> = {}): AuthState {
   return {
-    status: "signed_out",
-    session: null,
-    signedOutReason: reason
+    ...previous,
+    status: "authenticating",
+    isLoading: true,
+    isAuthenticated: false,
+    error: next.error ?? null,
+    pendingEmail: next.pendingEmail ?? previous.pendingEmail
   };
 }
 
-export function expiredAuthState(): AuthState {
+export function createAuthenticatedState(session: AuthSession, providers: AuthProvidersAvailability | null): AuthState {
   return {
-    status: "expired",
-    session: null,
-    signedOutReason: "expired"
+    status: "authenticated",
+    user: session.user,
+    accessToken: session.accessToken,
+    expiresAt: session.expiresAt,
+    isAuthenticated: true,
+    isLoading: false,
+    error: null,
+    pendingEmail: null,
+    providers
+  };
+}
+
+export function createAuthenticatedStateFromUser(user: AuthUser, accessToken: string, expiresAt: string, providers: AuthProvidersAvailability | null): AuthState {
+  return {
+    status: "authenticated",
+    user,
+    accessToken,
+    expiresAt,
+    isAuthenticated: true,
+    isLoading: false,
+    error: null,
+    pendingEmail: null,
+    providers
+  };
+}
+
+export function createAuthErrorState(error: AuthError, previous: AuthState): AuthState {
+  return {
+    ...previous,
+    status: "error",
+    isAuthenticated: false,
+    isLoading: false,
+    error
   };
 }

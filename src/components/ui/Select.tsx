@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View, type PressableProps } from "react-native";
-import { theme } from "@/theme";
+import { theme, useAppTheme, type ThemeColors } from "@/theme";
 import { Icon } from "./Icon";
 
 export type SelectState = "empty" | "default" | "focus" | "error" | "positive" | "warning" | "disabled";
@@ -21,22 +21,18 @@ export type SelectProps = Omit<PressableProps, "children" | "disabled" | "style"
 const stateColor: Record<SelectState, string> = {
   empty: theme.colors.content.mute,
   default: theme.colors.content.body,
-  focus: theme.colors.content.inkDeep,
+  focus: theme.colors.content.controlAccent,
   error: theme.colors.status.negative,
   positive: theme.colors.status.positiveDeep,
-  warning: theme.colors.status.warningContent,
+  warning: theme.colors.status.warningText,
   disabled: theme.colors.content.mute
 };
 
-const stateBorderColor: Record<SelectState, string> = {
-  empty: theme.colors.background.canvasSoft,
-  default: theme.colors.background.canvasSoft,
-  focus: theme.colors.content.inkDeep,
-  error: theme.colors.status.negative,
-  positive: theme.colors.background.canvasSoft,
-  warning: theme.colors.background.canvasSoft,
-  disabled: theme.colors.background.canvasSoft
-};
+function resolveSelectBorderColor(state: SelectState, resolvedColors: ThemeColors) {
+  if (state === "focus") return resolvedColors.content.controlAccent;
+  if (state === "error") return resolvedColors.status.negative;
+  return resolvedColors.background.canvasSoft;
+}
 
 const statusMessages: Record<"error" | "positive" | "warning", string> = {
   error: "Проверьте значение",
@@ -55,11 +51,16 @@ export function Select({
   showMessage = true,
   width = "fixed",
   inset = "default",
+  accessibilityHint,
   accessibilityLabel,
+  accessibilityRole,
+  accessibilityState,
+  accessibilityValue,
   onBlur,
   onFocus,
   ...pressableProps
 }: SelectProps) {
+  const { resolvedColors } = useAppTheme();
   const [isFocused, setIsFocused] = useState(false);
   const resolvedState: SelectState = disabled ? "disabled" : isFocused ? "focus" : state;
   const statusState = state === "error" || state === "positive" || state === "warning" ? state : null;
@@ -68,6 +69,7 @@ export function Select({
   const hasValue = Boolean(value);
   const labelColor = disabled ? theme.colors.content.mute : theme.colors.content.ink;
   const valueColor = disabled || !hasValue ? theme.colors.content.mute : theme.colors.content.ink;
+  const resolvedAccessibilityHint = accessibilityHint ?? (statusState ? `${resolvedMessage}. Открывает список вариантов` : "Открывает список вариантов");
 
   return (
     <View style={[styles.root, inset === "none" && styles.rootNoInset, width === "fill" && styles.rootFill]}>
@@ -75,9 +77,11 @@ export function Select({
 
       <Pressable
         {...pressableProps}
+        accessibilityHint={resolvedAccessibilityHint}
         accessibilityLabel={accessibilityLabel ?? label}
-        accessibilityRole="button"
-        accessibilityState={{ disabled, expanded: resolvedState === "focus" }}
+        accessibilityRole={accessibilityRole ?? "button"}
+        accessibilityState={{ ...accessibilityState, disabled }}
+        accessibilityValue={accessibilityValue ?? { text: hasValue ? value : placeholder }}
         disabled={disabled}
         onBlur={(event) => {
           setIsFocused(false);
@@ -93,13 +97,17 @@ export function Select({
           {hasValue ? value : placeholder}
         </Text>
         <Icon name="chevron down" size={theme.spacing.lg} color={disabled ? theme.colors.content.mute : theme.colors.content.body} />
-        <View pointerEvents="none" style={[styles.fieldBorder, { borderColor: stateBorderColor[resolvedState] }]} />
+        <View pointerEvents="none" style={[styles.fieldBorder, { borderColor: resolveSelectBorderColor(resolvedState, resolvedColors) }]} />
       </Pressable>
 
       {showMessage ? (
         <View style={styles.messageRow}>
           {showStatus && statusState ? <View style={[styles.statusMarker, { backgroundColor: stateColor[statusState] }]} /> : null}
-          <Text style={[styles.message, { color: showStatus && statusState ? stateColor[statusState] : stateColor[disabled ? "disabled" : "default"] }]}>
+          <Text
+            accessibilityLiveRegion={showStatus ? "polite" : "none"}
+            accessibilityRole={showStatus ? "alert" : undefined}
+            style={[styles.message, { color: showStatus && statusState ? stateColor[statusState] : stateColor[disabled ? "disabled" : "default"] }]}
+          >
             {resolvedMessage}
           </Text>
         </View>

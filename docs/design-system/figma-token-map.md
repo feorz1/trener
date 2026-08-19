@@ -2,7 +2,7 @@
 
 `DESIGN.md` is the source of truth for the trainer app design system. Figma local variables and text styles must mirror it, and generated code theme files must mirror those Figma tokens.
 
-Current Figma collection: `Wise / Trainer Tokens`.
+Current Figma collection: `Wise / Trainer Tokens` with `Light` and `Dark` modes.
 
 ## Color Variables
 
@@ -15,8 +15,9 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/content/primary-pale` | `#E2F6D5` | `theme.colors.content.primaryPale` |
 | `color/content/ink` | `#0E0F0C` | `theme.colors.content.ink` |
 | `color/content/ink-deep` | `#163300` | `theme.colors.content.inkDeep` |
+| `color/content/control-accent` | `#163300` | `theme.colors.content.controlAccent` |
 | `color/content/body` | `#454745` | `theme.colors.content.body` |
-| `color/content/mute` | `#868685` | `theme.colors.content.mute` |
+| `color/content/mute` | `#6F716E` | `theme.colors.content.mute` |
 | `color/content/disabled` | `#CFCFCF` | `theme.colors.content.disabled` |
 | `color/background/canvas` | `#FFFFFF` | `theme.colors.background.canvas` |
 | `color/background/canvas-soft` | `#EFEFEF` | `theme.colors.background.canvasSoft` |
@@ -36,6 +37,43 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `color/status/negative-bg` | `#320707` | `theme.colors.status.negativeBg` |
 | `color/accent/orange` | `#FFC091` | `theme.colors.accent.orange` |
 | `color/accent/cyan` | `#38C8FF` | `theme.colors.accent.cyan` |
+
+## Dark Mode Values
+
+The code palette keeps the same semantic paths and resolves these values in dark mode. Neutral content and surfaces use graphite values; green stays limited to brand actions, selection, and positive states. These values are the target for the Figma collection's `Dark` mode.
+
+| Semantic token | Dark value |
+|---|---:|
+| `color/content/primary` | `#2F571F` |
+| `color/content/on-primary` | `#F5F5F4` |
+| `color/content/primary-active` | `#3B682B` |
+| `color/content/primary-neutral` | `#416D31` |
+| `color/content/primary-pale` | `#21301D` |
+| `color/content/ink` | `#F5F5F4` |
+| `color/content/ink-deep` | `#F0F0EE` |
+| `color/content/control-accent` | `#A9EC7D` |
+| `color/content/body` | `#C7C7C4` |
+| `color/content/mute` | `#A0A09C` |
+| `color/content/disabled` | `#6B6B68` |
+| `color/background/canvas` | `#141414` |
+| `color/background/canvas-soft` | `#242424` |
+| `color/background/border` | `#3A3A3A` |
+| `card-divider` | `#2E2E2E` |
+| `color/status/positive` | `#66CF7E` |
+| `color/status/positive-deep` | `#9FE8AD` |
+| `color/status/warning` | `#F2C94C` |
+| `color/status/warning-deep` | `#FF9F43` |
+| `color/status/warning-deep-soft` | `#3A2813` |
+| `color/status/warning-darkest` | `#FFD29A` |
+| `color/status/warning-content` | `#2C240D` |
+| `color/status/warning-text` | `#FFD29A` |
+| `color/status/negative` | `#FF6B70` |
+| `color/status/negative-deep` | `#FF8C90` |
+| `color/status/negative-darkest` | `#FFB4B7` |
+| `color/status/negative-soft` | `#401D20` |
+| `color/status/negative-bg` | `#300B0E` |
+| `color/accent/orange` | `#FFB47E` |
+| `color/accent/cyan` | `#66D4FF` |
 
 ## Spacing Variables
 
@@ -75,7 +113,7 @@ Current Figma collection: `Wise / Trainer Tokens`.
 | `Typography/Display/SM` | SF Pro Display Semibold | `32` | `38.4` | `0.4` | `theme.typography.display.sm` |
 | `Typography/Display/XS` | SF Pro Display Medium | `24` | `31.2` | `0.35` | `theme.typography.display.xs` |
 | `Typography/Body/LG` | SF Pro Display Semibold | `20` | `24` | `0.38` | `theme.typography.body.lg` |
-| `Typography/Body/MD` | SF Pro Display Regular | `16` | `24` | `-0.32` | `theme.typography.body.md` |
+| `Typography/Body/MD` | SF Pro Display Regular | `16` | `20` | `-0.32` | `theme.typography.body.md` |
 | `Typography/Body/MD Strong` | SF Pro Display Medium | `16` | `20` | `-0.32` | `theme.typography.body.mdStrong` |
 | `Typography/Body/SM` | SF Pro Display Regular | `14` | `20` | `-0.15` | `theme.typography.body.sm` |
 | `Typography/Body/SM Strong` | SF Pro Display Medium | `14` | `18` | `-0.15` | `theme.typography.body.smStrong` |

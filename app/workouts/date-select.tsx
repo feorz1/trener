@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   saveText: {
     ...theme.typography.body.smStrong,
-    color: theme.colors.content.inkDeep,
+    color: theme.colors.content.controlAccent,
     textAlign: "right"
   },
   saveTextDisabled: {
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.canvas
   },
   dateCellSelected: {
-    backgroundColor: theme.colors.content.inkDeep
+    backgroundColor: theme.colors.brand.dark
   },
   dateCellDisabled: {
     opacity: 0.5
@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
     textAlign: "center"
   },
   dateTextSelected: {
-    color: theme.colors.content.primary
+    color: theme.colors.brand.primary
   },
   dateTextDisabled: {
     color: theme.colors.content.mute

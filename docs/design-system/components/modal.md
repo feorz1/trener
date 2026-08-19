@@ -46,6 +46,7 @@ Canonical mobile modal container for titled dialogs with body content and footer
 | title text | `color/content/ink` | `theme.colors.content.ink` |
 | subline text | `color/content/ink` | `theme.colors.content.ink` |
 | body text | `color/content/ink` | `theme.colors.content.ink` |
+| overlay dimming | `color/background/overlay` | `theme.colors.background.overlay` |
 | header top / horizontal padding | `spacing/xl` | `theme.spacing.xl` |
 | header bottom padding | `spacing/md` | `theme.spacing.md` |
 | header gap | `spacing/lg` | `theme.spacing.lg` |
@@ -68,6 +69,7 @@ Canonical mobile modal container for titled dialogs with body content and footer
 - Header uses 24px top/horizontal padding and 12px bottom padding to match the bottom-sheet reference height.
 - `ModalBody` keeps 8px horizontal and 8px vertical padding with no default child gap, so `List item/Cell` can keep its own canonical 16px internal padding while aligning to the modal 24px rhythm.
 - `showBodyText=false` hides the internal subheader/description block and keeps only slotted body content.
+- When body text is hidden and no slotted content exists, `ModalBody` collapses completely so the action area follows the header without an empty padded row, matching Figma node `1077:16009`.
 - Do not remove or override `List item/Cell` padding for modal usage.
 - `presentation="inline"` renders the panel for Storybook and embedded previews.
 - `presentation="overlay"` uses React Native `Modal` with a dimmed overlay and bottom-sheet slide animation.
@@ -75,6 +77,9 @@ Canonical mobile modal container for titled dialogs with body content and footer
 - Overlay modals must lift above the native keyboard while preserving the `spacing/xl` gap so body inputs remain editable immediately after focus.
 - Overlay modals animate layout changes when their internal content changes, including bottom-sheet height changes between steps.
 - Closing the overlay preserves the last rendered content while animating the sheet down before unmounting.
+- Overlay modals isolate their accessibility tree with `accessibilityViewIsModal`; the visual backdrop and dismiss hit area stay hidden from assistive technologies.
+- When an overlay finishes opening, VoiceOver/TalkBack focus moves to the modal title, which exposes the header role.
+- Overlay modals support the iOS Accessibility Escape gesture through `onClose`, and the icon-only close action uses a localized accessibility label.
 - All styling must come from `src/theme`.
 
 ## Examples

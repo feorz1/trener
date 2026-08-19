@@ -21,6 +21,8 @@ export * from "./Loader";
 export * from "./MeasurementSlider";
 export * from "./Modal";
 export * from "./Navigation";
+export * from "./Notification";
+export * from "./AnimatedTopNotification";
 export * from "./ProgressBar";
 export * from "./Radio";
 export * from "./Search";

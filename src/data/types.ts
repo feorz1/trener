@@ -1,4 +1,4 @@
-import type { Client, Exercise, OwnerId, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise } from "@/types";
+import type { Client, Exercise, ExerciseRestrictionTag, OwnerId, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise } from "@/types";
 export { LOCAL_OWNER_ID } from "@/types";
 
 export type EntityId = string;
@@ -10,7 +10,7 @@ export type SessionId = EntityId;
 export type ResultId = EntityId;
 export type QuickValueId = EntityId;
 
-export type { Client, Exercise, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise };
+export type { Client, Exercise, ExerciseRestrictionTag, QuickValue, QuickValueMetric, RepeatDay, Workout, WorkoutResult, WorkoutResultType, WorkoutSession, WorkoutSessionExercise };
 
 export type CreateClientInput = {
   name: string;
@@ -26,6 +26,7 @@ export type CreateClientInput = {
   nextWorkoutAt?: string;
   notes?: string;
   metrics?: Partial<Client["metrics"]>;
+  intake?: Client["intake"];
 };
 
 export type UpdateClientInput = Partial<Omit<Client, "id" | "ownerId">>;
@@ -38,6 +39,7 @@ export type CreateExerciseInput = {
   equipment?: string;
   resultType?: WorkoutResultType;
   searchAliases?: string[];
+  restrictionTags?: ExerciseRestrictionTag[];
   coachNotes?: string;
   notes?: string;
 };
@@ -72,7 +74,7 @@ export type SetDraftExercisesOptions = {
 export type UpdateWorkoutDraftExerciseInput = Partial<Omit<Workout["exercises"][number], "id" | "exerciseId">>;
 
 export type UpdateSessionInput = Partial<
-  Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "startedTimezone" | "completedAt" | "completedTimezone" | "durationSeconds" | "workoutTitleSnapshot">
+  Pick<WorkoutSession, "clientId" | "status" | "startedAt" | "startedTimezone" | "completedAt" | "completedTimezone" | "durationSeconds" | "workoutTitleSnapshot" | "exercises">
 >;
 
 export type UpsertWorkoutResultInput = {

@@ -1,0 +1,23 @@
+{
+	email admin@trener-app.com
+}
+
+api.trener-app.com {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+	reverse_proxy api:3000
+}
+
+admin.trener-app.com {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+	}
+	reverse_proxy admin:80
+}

@@ -14,11 +14,11 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 
 ## Anatomy
 
-- `root`: 359px white card with 8px padding, 8px gap, 24px radius, and subtle border stroke.
+- `root`: 359px adaptive card with 8px padding, 8px gap, 24px radius, and subtle border stroke. It uses the white card surface in light mode and the workout-card surface in dark mode.
 - `header`: 40x40 thumbnail slot with 16px rounding, title/note text stack, and 32x24 edit note button.
 - `set list`: vertical stack of 65px rows with 4px gap; in Move state rows can be reordered by long press drag.
 - `set row`: number chip, two editable metric fields, and status/move affordance.
-- `add action`: full-width secondary neutral button with plus icon.
+- `set actions`: paired secondary neutral buttons for removing the last set and adding a set. Their surface stays distinct from the root in both themes.
 - `note modal`: bottom-sheet modal with `TextArea` and a single save action.
 
 ## Props
@@ -39,8 +39,9 @@ Workout exercise approach editor with set rows, add action, swipe delete, and no
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| root surface | `color/background/canvas` | `theme.colors.background.canvas` |
+| root surface | `color/background/canvas` (Light), `color/background/canvas-soft` (Dark) | `resolvedColors.background.canvas`, `resolvedColors.background.canvasSoft` |
 | root stroke | `color/background/border` | `theme.colors.background.border` |
+| set action surface | `color/background/canvas-soft` (Light), `color/background/canvas` (Dark) | `resolvedColors.background.canvasSoft`, `resolvedColors.background.canvas` |
 | move row | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | selected row | `color/content/primary-pale` | `theme.colors.content.primaryPale` |
 | title/value text | `color/content/ink` | `theme.colors.content.ink` |

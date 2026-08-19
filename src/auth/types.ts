@@ -1,65 +1,91 @@
-import type { OwnerId } from "@/types";
+export type AuthProvider = "email" | "yandex" | "vk";
 
-export type AuthStatus = "loading" | "signed_out" | "signed_in" | "expired";
+export type AuthStatus = "checking" | "unauthenticated" | "authenticating" | "authenticated" | "error";
 
-export type AuthProviderKind = "development";
+export type AuthUser = {
+  id: string;
+  email?: string | null;
+  emailVerified: boolean;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  providers: AuthProvider[];
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 export type AuthSession = {
-  id: string;
-  ownerId: OwnerId;
-  provider: AuthProviderKind;
-  displayName: string;
-  issuedAt: string;
-  expiresAt?: string;
-};
-
-export type AuthCredential = {
-  session: AuthSession;
   accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+  user: AuthUser;
 };
 
-export type SignedOutReason = "initial" | "logout" | "expired" | "provider_unavailable";
-
-export type AuthState =
-  | {
-      status: "loading";
-      session: null;
-      signedOutReason: null;
-    }
-  | {
-      status: "signed_out";
-      session: null;
-      signedOutReason: SignedOutReason;
-    }
-  | {
-      status: "signed_in";
-      session: AuthSession;
-      signedOutReason: null;
-    }
-  | {
-      status: "expired";
-      session: null;
-      signedOutReason: "expired";
-    };
-
-export type SignInInput = {
-  displayName?: string;
+export type AuthProvidersAvailability = {
+  email: boolean;
+  yandex: boolean;
+  vk: boolean;
 };
 
-export type SignOutMode = "preserve_local_data" | "clear_local_data";
+export type AuthErrorCode =
+  | "network_error"
+  | "invalid_email"
+  | "invalid_code"
+  | "code_expired"
+  | "too_many_attempts"
+  | "resend_too_soon"
+  | "session_expired"
+  | "invalid_refresh_token"
+  | "provider_disabled"
+  | "server_error"
+  | "unknown";
 
-export type SignOutOptions = {
-  mode?: SignOutMode;
+export type AuthError = {
+  code: AuthErrorCode;
+  message: string;
 };
 
-export interface AuthProviderClient {
-  restore(): Promise<AuthCredential | null>;
-  signIn(input?: SignInInput): Promise<AuthCredential>;
-  signOut(credential: AuthCredential | null): Promise<void>;
+export type AuthState = {
+  status: AuthStatus;
+  user: AuthUser | null;
+  accessToken: string | null;
+  expiresAt: string | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: AuthError | null;
+  pendingEmail: string | null;
+  providers: AuthProvidersAvailability | null;
+};
+
+export type EmailLoginStartResult = {
+  ok: true;
+  ttlSeconds: number;
+  resendAfterSeconds: number;
+};
+
+export type AuthRefreshResult = {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+};
+
+export interface AuthApiClient {
+  getAuthProviders(): Promise<AuthProvidersAvailability>;
+  startEmailLogin(email: string): Promise<EmailLoginStartResult>;
+  verifyEmailCode(email: string, code: string): Promise<AuthSession>;
+  refresh(refreshToken: string): Promise<AuthRefreshResult>;
+  logout(refreshToken: string): Promise<void>;
+  deleteAccount(accessToken: string | null, operationId: string, recoverySecret: string): Promise<void>;
+  getMe(accessToken: string): Promise<AuthUser>;
 }
 
-export interface CredentialVault {
-  read(): Promise<AuthCredential | null>;
-  write(credential: AuthCredential): Promise<void>;
-  clear(): Promise<void>;
+export type AuthorizedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+export interface TokenStorage {
+  getRefreshToken(): Promise<string | null>;
+  setRefreshToken(token: string): Promise<void>;
+  removeRefreshToken(): Promise<void>;
+  getAccessToken(): Promise<string | null>;
+  setAccessToken(token: string): Promise<void>;
+  removeAccessToken(): Promise<void>;
+  clearAuthTokens(): Promise<void>;
 }

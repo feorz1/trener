@@ -27,7 +27,7 @@ Canonical loading indicator for buttons and compact waiting states. The visual i
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| brand tone | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| brand tone | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | inverse tone | `color/content/primary` | `theme.colors.content.primary` |
 | negative tone | `color/status/negative` | `theme.colors.status.negative` |
 | neutral tone | `color/content/body` | `theme.colors.content.body` |

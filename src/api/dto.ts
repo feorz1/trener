@@ -57,6 +57,7 @@ export type ApiExerciseDto = {
   equipment: string;
   result_type?: WorkoutResultType;
   search_aliases?: string[];
+  restriction_tags?: Exercise["restrictionTags"];
   coach_notes?: string;
   notes?: string;
   archived_at?: ApiIsoDateString;

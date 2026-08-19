@@ -195,7 +195,6 @@ const writeThemeFile = (fileName: string, body: string) => {
   writeFileSync(path, `${body.trim()}\n`, "utf8");
 };
 
-const colors = resolveGroup(rawTokens.color ?? {});
 const spacing = resolveGroup(rawTokens.spacing ?? {});
 const radius = resolveGroup(rawTokens.radius ?? {});
 const sizes = resolveGroup(rawTokens.size ?? {});
@@ -275,15 +274,6 @@ const typography = {
 };
 
 writeThemeFile(
-  "colors.ts",
-  `
-export const colors = ${serialize(colors)} as const;
-
-export type ColorToken = typeof colors;
-`
-);
-
-writeThemeFile(
   "spacing.ts",
   `
 export const spacing = ${serialize(spacing)} as const;
@@ -317,16 +307,5 @@ export const typography = ${serialize(typography)} as const;
 `
 );
 
-writeThemeFile(
-  "index.ts",
-  `
-export * from "./colors";
-export * from "./typography";
-export * from "./spacing";
-export * from "./radius";
-export * from "./sizes";
-export * from "./shadows";
-`
-);
-
-console.log("Theme files generated from design-tokens/figma-light.json");
+console.log("Non-color theme files generated from design-tokens/figma-light.json");
+console.log("Color modes are curated in src/theme/palettes.ts and are not overwritten by this command.");

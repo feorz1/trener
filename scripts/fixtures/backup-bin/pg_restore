@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+[[ "${FAKE_PG_RESTORE_MODE:-success}" == "success" ]] || exit 61
+[[ "$1" == "--list" ]] || exit 62
+printf '%s\n' '; Archive created by pg_dump fixture'

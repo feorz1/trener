@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${FAKE_GZIP_MODE:-success}:$1" in
+  fail:-c)
+    exit 51
+    ;;
+  corrupt:-c)
+    printf '%s' 'not-a-gzip-stream'
+    exit 0
+    ;;
+esac
+
+exec "${REAL_GZIP:?REAL_GZIP is required}" "$@"

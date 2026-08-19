@@ -1,7 +1,7 @@
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { CalendarMonth } from "@/components/calendar";
 import { Modal } from "@/components/ui";
 import { getDateKey, parseDateKey, startOfDay } from "@/features/workouts/scheduleOptions";
 import { theme } from "@/theme";
@@ -47,17 +47,14 @@ export default function RescheduleDateSelectSheet() {
         actionLayout="single"
         primaryAction={{ label: "Сохранить", type: "primary", onPress: saveDate }}
         onClose={closeSheet}
+        actionStyle={styles.action}
         bodyStyle={styles.body}
         style={styles.modal}
       >
-        <DateTimePicker
-          display={Platform.OS === "ios" ? "inline" : "calendar"}
-          mode="date"
-          minimumDate={startOfDay(new Date())}
-          value={pendingDate}
-          onChange={(_, date) => {
-            if (date) setPendingDate(startOfDay(date));
-          }}
+        <CalendarMonth
+          minDate={startOfDay(new Date())}
+          selectedKey={getDateKey(pendingDate)}
+          onSelect={(_, date) => setPendingDate(startOfDay(date))}
         />
       </Modal>
     </View>
@@ -73,7 +70,11 @@ const styles = StyleSheet.create({
     width: "100%"
   },
   body: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.md
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    gap: theme.spacing.xs
+  },
+  action: {
+    padding: theme.spacing.lg
   }
 });

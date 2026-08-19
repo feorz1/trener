@@ -11,7 +11,7 @@ import Animated, {
   useSharedValue,
   withTiming
 } from "react-native-reanimated";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import type { GroupedListItemShapeStyle } from "./groupedListItem";
 import { Icon } from "./Icon";
 
@@ -59,6 +59,7 @@ export function StagedSwipeDelete({
   shapeStyle,
   style
 }: StagedSwipeDeleteProps) {
+  const { resolvedColors } = useAppTheme();
   const controlledOpen = open !== undefined;
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const [deleteOpen, setDeleteOpen] = useState(open ?? defaultOpen);
@@ -238,7 +239,10 @@ export function StagedSwipeDelete({
         rowWidth.value = event.nativeEvent.layout.width || theme.sizes.approachWidth;
       }}
     >
-      <Animated.View style={[styles.deleteActionFill, shapeStyle, deleteActionStyle]} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.deleteActionFill, { backgroundColor: resolvedColors.status.negative }, shapeStyle, deleteActionStyle]}
+        pointerEvents="box-none"
+      >
         <Pressable
           accessibilityLabel={accessibilityLabel}
           accessibilityRole="button"
@@ -247,7 +251,7 @@ export function StagedSwipeDelete({
           style={styles.deletePressable}
         >
           <View style={styles.deleteIconLayer}>
-            <Icon name="trash" size={theme.sizes.approachStatusIcon} color={theme.colors.background.canvas} />
+            <Icon name="trash" size={theme.sizes.approachStatusIcon} color={resolvedColors.status.onNegative} />
           </View>
         </Pressable>
       </Animated.View>
@@ -273,8 +277,7 @@ const styles = StyleSheet.create({
     right: theme.spacing[0],
     bottom: theme.spacing[0],
     overflow: "hidden",
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.status.negative
+    borderRadius: theme.radius.lg
   },
   deletePressable: {
     flex: 1,

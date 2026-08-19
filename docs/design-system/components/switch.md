@@ -39,7 +39,7 @@ Binary on/off control for settings that apply immediately.
 
 | Usage | Figma token | Code token |
 |---|---|---|
-| selected track | `color/content/ink-deep` | `theme.colors.content.inkDeep` |
+| selected track | `color/content/control-accent` | `theme.colors.content.controlAccent` |
 | off track | `color/background/canvas-soft` | `theme.colors.background.canvasSoft` |
 | thumb default | `color/background/canvas` | `theme.colors.background.canvas` |
 | thumb disabled | `color/content/mute` | `theme.colors.content.mute` |

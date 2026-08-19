@@ -20,6 +20,7 @@ import {
   Variant
 } from "@/components/ui";
 import { useClientActions, useDataMutation, useWorkoutActions } from "@/data";
+import { CLIENT_CUSTOM_ANSWER_MAX_LENGTH, getClientIntakeStepError } from "@/features/clients/clientIntakeValidation";
 import { useConditionalScroll } from "@/hooks/useConditionalScroll";
 import { useKeyboardInset } from "@/hooks/useKeyboardInset";
 import { theme } from "@/theme";
@@ -54,18 +55,18 @@ type ClientForm = {
   height: number;
   weight: number;
   targetWeight: number;
-  gender: Gender;
+  gender: Gender | "";
   healthConstraints: HealthConstraint[];
   healthOther: string;
   exerciseRestrictions: ExerciseRestriction[];
   exerciseRestrictionsOther: string;
-  activityLevel: ActivityLevel;
-  sleepMode: SleepMode;
+  activityLevel: ActivityLevel | "";
+  sleepMode: SleepMode | "";
   workoutsPerWeek: string;
-  trainingExperience: TrainingExperience;
+  trainingExperience: TrainingExperience | "";
   sports: SportKind[];
   sportsOther: string;
-  goal: Goal;
+  goal: Goal | "";
 };
 
 const STEPS: ClientStep[] = ["basic", "age", "height", "weight", "targetWeight", "health", "restrictions", "lifestyle", "experience", "goal", "summary"];
@@ -154,26 +155,26 @@ const goalOptions: { key: Goal; title: string }[] = [
 ];
 
 const initialForm: ClientForm = {
-  name: "Константин",
+  name: "",
   phonePrefix: "+7",
-  phone: "999-312-21-42",
-  telegram: "@konstantin",
-  age: 30,
-  height: 175,
-  weight: 80,
-  targetWeight: 75,
-  gender: "male",
-  healthConstraints: ["hernia"],
+  phone: "",
+  telegram: "",
+  age: 0,
+  height: 0,
+  weight: 0,
+  targetWeight: 0,
+  gender: "",
+  healthConstraints: [],
   healthOther: "",
   exerciseRestrictions: [],
   exerciseRestrictionsOther: "",
-  activityLevel: "active",
-  sleepMode: "sixToEight",
-  workoutsPerWeek: "3",
-  trainingExperience: "regular",
-  sports: ["football"],
+  activityLevel: "",
+  sleepMode: "",
+  workoutsPerWeek: "",
+  trainingExperience: "",
+  sports: [],
   sportsOther: "",
-  goal: "keepFit"
+  goal: ""
 };
 
 function firstParam(value?: string | string[]) {
@@ -187,7 +188,7 @@ function getSelectedStartIso(value?: string) {
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
-function getLabel<T extends string>(items: { key: T; label?: string; title?: string }[], key: T) {
+function getLabel<T extends string>(items: { key: T; label?: string; title?: string }[], key: string) {
   const item = items.find((option) => option.key === key);
   return item?.label ?? item?.title ?? key;
 }
@@ -200,10 +201,42 @@ function getDefaultTargetWeight(weight: number) {
   return Math.max(0, weight - 5);
 }
 
+function uniqueLabels(values: Array<string | undefined>) {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value))));
+}
+
+function getHealthConstraintLabels(form: ClientForm) {
+  return uniqueLabels([
+    ...form.healthConstraints.filter((key) => key !== "other").map((key) => getLabel(healthOptions, key)),
+    form.healthConstraints.includes("other") ? form.healthOther : undefined
+  ]);
+}
+
+function getExerciseRestrictionLabels(form: ClientForm) {
+  return uniqueLabels([
+    ...form.exerciseRestrictions.filter((key) => key !== "other").map((key) => getLabel(exerciseRestrictionOptions, key)),
+    form.exerciseRestrictions.includes("other") ? form.exerciseRestrictionsOther : undefined
+  ]);
+}
+
+function getSportLabels(form: ClientForm) {
+  return uniqueLabels([
+    ...form.sports.filter((key) => key !== "other").map((key) => getLabel(sportOptions, key)),
+    form.sports.includes("other") ? form.sportsOther : undefined
+  ]);
+}
+
 function getRestrictionLabels(form: ClientForm) {
   const healthRestrictionLabels = form.healthConstraints.flatMap((key) => healthOptions.find((option) => option.key === key)?.restrictions ?? []);
-  const directRestrictionLabels = form.exerciseRestrictions.map((key) => exerciseRestrictionOptions.find((option) => option.key === key)?.summaryLabel ?? key);
-  return Array.from(new Set([...healthRestrictionLabels, ...directRestrictionLabels]));
+  const directRestrictionLabels = form.exerciseRestrictions
+    .filter((key) => key !== "other")
+    .map((key) => exerciseRestrictionOptions.find((option) => option.key === key)?.summaryLabel ?? key);
+  return uniqueLabels([
+    ...healthRestrictionLabels,
+    ...directRestrictionLabels,
+    form.healthConstraints.includes("other") ? form.healthOther : undefined,
+    form.exerciseRestrictions.includes("other") ? form.exerciseRestrictionsOther : undefined
+  ]);
 }
 
 function getGoalSummary(form: ClientForm) {
@@ -226,12 +259,13 @@ export default function NewClientScreen() {
   }>();
   const [stepIndex, setStepIndex] = useState(0);
   const [form, setForm] = useState<ClientForm>(initialForm);
+  const [validationAttemptedSteps, setValidationAttemptedSteps] = useState<Partial<Record<ClientStep, boolean>>>({});
   const clients = useClientActions();
   const workouts = useWorkoutActions();
   const step = STEPS[stepIndex];
   const sectionStep = sectionByStep[step];
-  const selectedHealthLabels = form.healthConstraints.map((key) => getLabel(healthOptions, key));
-  const selectedSportLabels = form.sports.map((key) => getLabel(sportOptions, key));
+  const selectedHealthLabels = getHealthConstraintLabels(form);
+  const selectedSportLabels = getSportLabels(form);
   const restrictionLabels = useMemo(() => getRestrictionLabels(form), [form]);
   const { scrollProps } = useConditionalScroll();
   const keyboardInset = useKeyboardInset();
@@ -241,20 +275,34 @@ export default function NewClientScreen() {
     (step === "restrictions" && form.exerciseRestrictions.includes("other")) ||
     (step === "experience" && form.sports.includes("other"));
   const keyboardOffset = hasVisibleTextArea ? CLIENT_FORM_TEXT_AREA_KEYBOARD_OFFSET : CLIENT_FORM_KEYBOARD_OFFSET;
+  const stepError = getClientIntakeStepError(step, form);
+  const visibleStepError = validationAttemptedSteps[step] ? stepError : undefined;
   const createClientAction = useCallback(async () => {
+    const restrictions = getRestrictionLabels(form);
     const createdClient = await clients.create({
       name: form.name,
       phone: [form.phonePrefix, form.phone].filter(Boolean).join(" "),
       telegram: form.telegram,
-      gender: form.gender,
+      gender: form.gender || undefined,
       goal: getGoalSummary(form),
       status: "new",
-      notes: getRestrictionLabels(form).join(", "),
-      restrictions: getRestrictionLabels(form),
+      notes: restrictions.join(", "),
+      restrictions,
       metrics: {
         weightKg: form.weight,
         heightCm: form.height,
         attendanceRate: 100
+      },
+      intake: {
+        ageYears: form.age,
+        targetWeightKg: form.targetWeight,
+        healthConstraints: getHealthConstraintLabels(form),
+        exerciseRestrictions: getExerciseRestrictionLabels(form),
+        activityLevel: getLabel(activityOptions, form.activityLevel),
+        sleep: getLabel(sleepOptions, form.sleepMode),
+        workoutsPerWeek: Number(form.workoutsPerWeek),
+        trainingExperience: getLabel(experienceOptions, form.trainingExperience),
+        sports: getSportLabels(form)
       }
     });
 
@@ -292,6 +340,10 @@ export default function NewClientScreen() {
   };
 
   const goNext = () => {
+    if (stepError) {
+      setValidationAttemptedSteps((current) => ({ ...current, [step]: true }));
+      return;
+    }
     if (stepIndex < STEPS.length - 1) {
       setStepIndex((current) => current + 1);
     }
@@ -356,13 +408,18 @@ export default function NewClientScreen() {
             onChange={(value) => updateForm("targetWeight", value)}
           />
         ) : null}
-        {step === "health" ? <HealthStep form={form} updateForm={updateForm} /> : null}
-        {step === "restrictions" ? <RestrictionsStep form={form} updateForm={updateForm} /> : null}
+        {step === "health" ? <HealthStep form={form} error={visibleStepError} updateForm={updateForm} /> : null}
+        {step === "restrictions" ? <RestrictionsStep form={form} error={visibleStepError} updateForm={updateForm} /> : null}
         {step === "lifestyle" ? <LifestyleStep form={form} updateForm={updateForm} /> : null}
-        {step === "experience" ? <ExperienceStep form={form} updateForm={updateForm} /> : null}
+        {step === "experience" ? <ExperienceStep form={form} error={visibleStepError} updateForm={updateForm} /> : null}
         {step === "goal" ? <GoalStep form={form} updateForm={updateForm} /> : null}
         {step === "summary" ? (
           <SummaryStep form={form} selectedHealthLabels={selectedHealthLabels} selectedSportLabels={selectedSportLabels} restrictionLabels={restrictionLabels} />
+        ) : null}
+        {visibleStepError && step !== "health" && step !== "restrictions" && step !== "experience" ? (
+          <View style={styles.inlineAlert}>
+            <Alert tone="negative" layout="compact" title={visibleStepError} width="fill" />
+          </View>
         ) : null}
         {createClientMutation.error ? (
           <View style={styles.inlineAlert}>
@@ -467,9 +524,11 @@ function BodySliderStep({
 
 function HealthStep({
   form,
+  error,
   updateForm
 }: {
   form: ClientForm;
+  error?: string;
   updateForm: <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => void;
 }) {
   return (
@@ -485,7 +544,10 @@ function HealthStep({
           label="Опишите ограничение"
           value={form.healthOther}
           width="fill"
-          showMessage={false}
+          maxLength={CLIENT_CUSTOM_ANSWER_MAX_LENGTH}
+          state={error ? "error" : undefined}
+          message={error}
+          showMessage={Boolean(error)}
           placeholder="Что важно учитывать на тренировках"
           onChangeText={(value) => updateForm("healthOther", value)}
         />
@@ -496,9 +558,11 @@ function HealthStep({
 
 function RestrictionsStep({
   form,
+  error,
   updateForm
 }: {
   form: ClientForm;
+  error?: string;
   updateForm: <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => void;
 }) {
   return (
@@ -514,7 +578,10 @@ function RestrictionsStep({
           label="Опишите запрет"
           value={form.exerciseRestrictionsOther}
           width="fill"
-          showMessage={false}
+          maxLength={CLIENT_CUSTOM_ANSWER_MAX_LENGTH}
+          state={error ? "error" : undefined}
+          message={error}
+          showMessage={Boolean(error)}
           placeholder="Например, нельзя выпады"
           onChangeText={(value) => updateForm("exerciseRestrictionsOther", value)}
         />
@@ -555,9 +622,11 @@ function LifestyleStep({
 
 function ExperienceStep({
   form,
+  error,
   updateForm
 }: {
   form: ClientForm;
+  error?: string;
   updateForm: <K extends keyof ClientForm>(key: K, value: ClientForm[K]) => void;
 }) {
   return (
@@ -581,7 +650,10 @@ function ExperienceStep({
             label="Другой спорт"
             value={form.sportsOther}
             width="fill"
-            showMessage={false}
+            maxLength={CLIENT_CUSTOM_ANSWER_MAX_LENGTH}
+            state={error ? "error" : undefined}
+            message={error}
+            showMessage={Boolean(error)}
             placeholder="Например, йога или танцы"
             onChangeText={(value) => updateForm("sportsOther", value)}
           />
@@ -617,9 +689,7 @@ function SummaryStep({
   selectedSportLabels: string[];
   restrictionLabels: string[];
 }) {
-  const allRestrictionLabels = Array.from(
-    new Set([...selectedHealthLabels, ...restrictionLabels, form.healthOther, form.exerciseRestrictionsOther].filter(Boolean))
-  );
+  const allRestrictionLabels = Array.from(new Set([...selectedHealthLabels, ...restrictionLabels]));
   const summaryRows = [
     ["Возраст", `${form.age} лет`],
     ["Рост / Вес", `${form.height} см / ${form.weight} кг`],
@@ -705,7 +775,7 @@ function RadioGroup<T extends string>({
   onChange
 }: {
   items: { key: T; title: string; subtitle?: string }[];
-  value: T;
+  value: T | "";
   onChange: (value: T) => void;
 }) {
   return (
