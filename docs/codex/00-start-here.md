@@ -70,3 +70,10 @@ Batch-sync mode, run separately when requested:
 npm run typecheck
 npm run design:audit
 ```
+
+## Running the iOS development build
+
+For production API access through the local machine proxy, follow
+[`ios-dev-build-through-proxy.md`](./ios-dev-build-through-proxy.md). It includes
+the required native Debug build, Metro configuration, verification checks, and
+known dead ends.

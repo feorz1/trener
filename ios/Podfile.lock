@@ -331,6 +331,34 @@ PODS:
     - Yoga
   - NativeSpringsShaders (0.3.2):
     - ExpoModulesCore
+  - NFMaskedView (0.4.0):
+    - boost
+    - DoubleConversion
+    - fast_float
+    - fmt
+    - glog
+    - hermes-engine
+    - RCT-Folly
+    - RCT-Folly/Fabric
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - SocketRocket
+    - Yoga
   - RCT-Folly (2024.11.18.00):
     - boost
     - DoubleConversion
@@ -3218,6 +3246,7 @@ DEPENDENCIES:
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - "LiquidGlass (from `../node_modules/@callstack/liquid-glass`)"
   - "NativeSpringsShaders (from `../node_modules/@native-springs/shaders/ios`)"
+  - "NFMaskedView (from `../node_modules/@rednegniw/masked-view`)"
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
@@ -3358,6 +3387,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@callstack/liquid-glass"
   NativeSpringsShaders:
     :path: "../node_modules/@native-springs/shaders/ios"
+  NFMaskedView:
+    :path: "../node_modules/@rednegniw/masked-view"
   RCT-Folly:
     :podspec: "../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec"
   RCTDeprecation:
@@ -3538,6 +3569,7 @@ SPEC CHECKSUMS:
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
   LiquidGlass: 4b7646a0368035a80bf638b1ab54e04ab0ef1f9f
   NativeSpringsShaders: a13fda2a81ddebf741b6957fe814d510bbff1cf0
+  NFMaskedView: 666e6753f9d24b9a3944b53ee72b91d363ceb63e
   RCT-Folly: 59ec0ac1f2f39672a0c6e6cecdd39383b764646f
   RCTDeprecation: 5eb1d2eeff5fb91151e8a8eef45b6c7658b6c897
   RCTRequired: cebcf9442fc296c9b89ac791dfd463021d9f6f23

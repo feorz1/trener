@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
+import { NumberFlow } from "number-flow-react-native";
 import {
   Platform,
   ScrollView,
@@ -13,7 +14,7 @@ import {
   type NativeSyntheticEvent
 } from "react-native";
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from "react-native-svg";
-import { theme } from "@/theme";
+import { theme, useAppTheme } from "@/theme";
 import { Icon } from "./Icon";
 
 export type MeasurementSliderProps = {
@@ -44,6 +45,13 @@ type AccessibilityUnitForms = {
 
 type AccessibilityPluralCategory = keyof AccessibilityUnitForms;
 
+type AnimatedNumberCharacter = {
+  character: string;
+  digit?: number;
+  isLeadingInteger?: boolean;
+  key: string;
+};
+
 function clampValue(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
@@ -59,6 +67,43 @@ function getAccessibilityStepValue(value: number, action: "increment" | "decreme
 
 function formatAccessibilityNumber(value: number) {
   return accessibilityNumberFormatter.format(value);
+}
+
+function getAnimatedNumberCharacters(value: number): AnimatedNumberCharacter[] {
+  const flatCharacters = Array.from(formatAccessibilityNumber(value));
+  const decimalIndex = flatCharacters.findIndex((character) => character === "," || character === ".");
+  const isDigit = (character: string) => character >= "0" && character <= "9";
+  const characters: AnimatedNumberCharacter[] = flatCharacters.map((character, index) => ({
+    character,
+    key: `symbol:${index}`
+  }));
+  let integerPosition = 0;
+  let fractionPosition = 0;
+
+  for (let index = flatCharacters.length - 1; index >= 0; index -= 1) {
+    const character = flatCharacters[index];
+    const digit = Number(character);
+    if ((decimalIndex < 0 || index < decimalIndex) && isDigit(character)) {
+      characters[index] = { character, digit, key: `integer:${integerPosition}` };
+      integerPosition += 1;
+    }
+  }
+
+  for (let index = decimalIndex + 1; decimalIndex >= 0 && index < flatCharacters.length; index += 1) {
+    const character = flatCharacters[index];
+    const digit = Number(character);
+    if (isDigit(character)) {
+      characters[index] = { character, digit, key: `fraction:${fractionPosition}` };
+      fractionPosition += 1;
+    }
+  }
+
+  const leadingIntegerIndex = flatCharacters.findIndex(isDigit);
+  if (leadingIntegerIndex >= 0 && integerPosition > 1) {
+    characters[leadingIntegerIndex].isLeadingInteger = true;
+  }
+
+  return characters;
 }
 
 function getAccessibilityUnitForms(title: string): AccessibilityUnitForms | undefined {
@@ -107,6 +152,39 @@ function getOffsetForValue(value: number, min: number, max: number, step: number
   return ((clampValue(value, min, max) - min) / step) * tickSpacing;
 }
 
+function AnimatedMeasurementValue({ value, tone = "default" }: { value: number; tone?: "default" | "positive" }) {
+  const previousValue = useRef(value);
+  const trend = value === previousValue.current ? 0 : value > previousValue.current ? 1 : -1;
+  const characters = getAnimatedNumberCharacters(value);
+  const valueStyle = tone === "positive" ? targetValueStyle : styles.valueText;
+
+  useEffect(() => {
+    previousValue.current = value;
+  }, [value]);
+
+  return (
+    <View accessible={false} style={styles.animatedValue}>
+      {characters.map(({ character, digit, isLeadingInteger, key }) =>
+        typeof digit === "number" ? (
+          <NumberFlow
+            key={key}
+            animated={!isLeadingInteger}
+            locales="ru-RU"
+            mask
+            trend={trend}
+            value={digit}
+            style={valueStyle}
+          />
+        ) : (
+          <Text key={key} style={valueStyle}>
+            {character}
+          </Text>
+        )
+      )}
+    </View>
+  );
+}
+
 export function MeasurementSlider({
   title,
   value,
@@ -117,6 +195,7 @@ export function MeasurementSlider({
   onChange,
   referenceValue
 }: MeasurementSliderProps) {
+  const { resolvedColors } = useAppTheme();
   const scrollRef = useRef<ScrollView>(null);
   const lastHapticValue = useRef(value);
   const liveValue = useRef(value);
@@ -316,20 +395,20 @@ export function MeasurementSlider({
         <View pointerEvents="none" style={styles.valueRow}>
           {typeof referenceValue === "number" ? (
             <>
-              <Text style={styles.valueText}>{referenceValue}</Text>
+              <AnimatedMeasurementValue value={referenceValue} />
               <Icon name="chevron right" size={theme.spacing.xl} color={theme.colors.content.ink} />
-              <Text style={[styles.valueText, styles.targetValueText]}>{displayValue}</Text>
+              <AnimatedMeasurementValue tone="positive" value={displayValue} />
             </>
           ) : (
-            <Text style={styles.valueText}>{displayValue}</Text>
+            <AnimatedMeasurementValue value={displayValue} />
           )}
         </View>
         <View pointerEvents="none" style={[styles.leftFade, styles.nonInteractive, { top: rulerOffset }]}>
           <Svg pointerEvents="none" width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} style={styles.nonInteractive}>
             <Defs>
               <LinearGradient id="leftFade" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor={theme.colors.background.canvas} stopOpacity="1" />
-                <Stop offset="1" stopColor={theme.colors.background.canvas} stopOpacity="0.5" />
+                <Stop offset="0" stopColor={resolvedColors.background.canvas} stopOpacity="1" />
+                <Stop offset="1" stopColor={resolvedColors.background.canvas} stopOpacity="0.5" />
               </LinearGradient>
             </Defs>
             <Rect width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} fill="url(#leftFade)" />
@@ -339,8 +418,8 @@ export function MeasurementSlider({
           <Svg pointerEvents="none" width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} style={styles.nonInteractive}>
             <Defs>
               <LinearGradient id="rightFade" x1="0" y1="0" x2="1" y2="0">
-                <Stop offset="0" stopColor={theme.colors.background.canvas} stopOpacity="0.5" />
-                <Stop offset="1" stopColor={theme.colors.background.canvas} stopOpacity="1" />
+                <Stop offset="0" stopColor={resolvedColors.background.canvas} stopOpacity="0.5" />
+                <Stop offset="1" stopColor={resolvedColors.background.canvas} stopOpacity="1" />
               </LinearGradient>
             </Defs>
             <Rect width={theme.sizes.measurementSliderFadeWidth} height={theme.sizes.measurementSliderFadeHeight} fill="url(#rightFade)" />
@@ -380,12 +459,16 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     alignSelf: "stretch"
   },
+  animatedValue: {
+    flexDirection: "row",
+    alignItems: "center"
+  },
   valueText: {
     ...theme.typography.display.xl,
     lineHeight: theme.sizes.measurementSliderValueHeight,
     fontVariant: ["tabular-nums"],
     color: theme.colors.content.ink,
-    textAlign: "center"
+    textAlign: "left"
   },
   targetValueText: {
     color: theme.colors.status.positive
@@ -455,3 +538,5 @@ const styles = StyleSheet.create({
     pointerEvents: "none"
   }
 });
+
+const targetValueStyle = StyleSheet.flatten([styles.valueText, styles.targetValueText]);
