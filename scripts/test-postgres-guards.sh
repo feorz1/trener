@@ -119,7 +119,7 @@ fi
 preflight_run_output="$(env -i \
   PATH="$PREFLIGHT_FIXTURE_BIN:$PATH" \
   PREFLIGHT_DATABASE_URL=postgresql://fixture:do-not-print-me@database.trener-app.com:5432/trainer_app \
-  EXPECTED_MIGRATION=0008_add_account_deletion_receipts \
+  EXPECTED_MIGRATION=0010_workout_series \
   bash "$PREFLIGHT")" || fail "mocked read-only preflight did not pass"
 grep -q 'production preflight passed without reading or printing row-level data' <<<"$preflight_run_output" \
   || fail "preflight success evidence is absent"
@@ -129,7 +129,7 @@ fi
 if env -i \
   PATH="$PREFLIGHT_FIXTURE_BIN:$PATH" \
   PREFLIGHT_DATABASE_URL=postgresql://fixture:do-not-print-me@database.trener-app.com:5432/trainer_app \
-  EXPECTED_MIGRATION=0008_add_account_deletion_receipts \
+  EXPECTED_MIGRATION=0010_workout_series \
   FAKE_PREFLIGHT_FAIL=true \
   bash "$PREFLIGHT" >/dev/null 2>&1; then
   fail "preflight accepted an invariant violation"
@@ -137,7 +137,7 @@ fi
 if env -i \
   PATH="$PREFLIGHT_FIXTURE_BIN:$PATH" \
   PREFLIGHT_DATABASE_URL=postgresql://fixture:do-not-print-me@database.trener-app.com:5432/trainer_app \
-  EXPECTED_MIGRATION=0008_add_account_deletion_receipts \
+  EXPECTED_MIGRATION=0010_workout_series \
   FAKE_PREFLIGHT_EMPTY=true \
   bash "$PREFLIGHT" >/dev/null 2>&1; then
   fail "preflight accepted an empty check result"

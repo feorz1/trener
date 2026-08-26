@@ -19,6 +19,7 @@ export const AUTH_ERROR_MESSAGES: Record<AuthErrorCode, string> = {
   validation: "Проверьте данные и попробуйте ещё раз",
   not_found: "Запись не найдена",
   forbidden: "Нет доступа к этой записи",
+  conflict: "Данные уже изменились на другом устройстве",
   server_error: "Что-то пошло не так. Попробуйте позже",
   unknown: "Что-то пошло не так. Попробуйте ещё раз"
 };

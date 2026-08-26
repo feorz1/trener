@@ -1,5 +1,6 @@
 export type ClientStatusRecord = "ACTIVE" | "ARCHIVED";
-export type WorkoutSessionStatusRecord = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type WorkoutSessionStatusRecord = "PLANNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED" | "SUPERSEDED";
+export type WorkoutSeriesStatusRecord = "ACTIVE" | "PAUSED" | "ENDED";
 
 export const REPEAT_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const;
 export type RepeatDayRecord = (typeof REPEAT_DAYS)[number];
@@ -208,10 +209,16 @@ export type WorkoutSessionRecord = {
   trainerId: string;
   clientId: string | null;
   workoutTemplateId: string | null;
+  seriesId: string | null;
+  seriesSlotId: string | null;
   title: string;
   status: WorkoutSessionStatusRecord;
+  occurrenceKey: string | null;
   scheduledAt: Date | null;
+  scheduledLocalDate: Date | null;
+  scheduledLocalTime: string | null;
   timezone: string | null;
+  labelSnapshot: string | null;
   durationMinutes: number | null;
   focus: string | null;
   location: string | null;
@@ -220,10 +227,65 @@ export type WorkoutSessionRecord = {
   startedAt: Date | null;
   finishedAt: Date | null;
   notes: string | null;
+  version: number;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
   items: WorkoutSessionItemRecord[];
+};
+
+export type WorkoutSeriesItemRecord = {
+  id: string;
+  seriesId: string;
+  seriesSlotId: string;
+  exerciseId: string | null;
+  order: number;
+  titleSnapshot: string;
+  resultType: WorkoutResultTypeRecord | null;
+  supersetWithNext: boolean | null;
+  plannedSetTargets: PlannedSetTargetRecord[] | null;
+  plannedSets: number | null;
+  plannedReps: number | null;
+  plannedWeight: number | null;
+  plannedDurationSec: number | null;
+  restSeconds: number | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type WorkoutSeriesSlotRecord = {
+  id: string;
+  seriesId: string;
+  weekday: RepeatDayRecord;
+  localTime: string;
+  revision: number;
+  order: number;
+  createdAt: Date;
+  updatedAt: Date;
+  items: WorkoutSeriesItemRecord[];
+};
+
+export type WorkoutSeriesRecord = {
+  id: string;
+  trainerId: string;
+  clientId: string;
+  label: string | null;
+  startDate: Date;
+  timezone: string;
+  status: WorkoutSeriesStatusRecord;
+  durationMinutes: number | null;
+  focus: string | null;
+  location: string | null;
+  notes: string | null;
+  scheduleVersion: number;
+  version: number;
+  generationThrough: Date | null;
+  creationKey: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  slots: WorkoutSeriesSlotRecord[];
 };
 
 export type ListClientsQuery = {
@@ -302,12 +364,14 @@ export type WorkoutTemplateInput = {
 };
 
 export type WorkoutSessionInput = {
+  expectedVersion?: number;
   clientId?: string | null;
   workoutTemplateId?: string | null;
   title?: string;
   status?: WorkoutSessionStatusRecord;
   scheduledAt?: Date | null;
   timezone?: string | null;
+  labelSnapshot?: string | null;
   durationMinutes?: number | null;
   focus?: string | null;
   location?: string | null;
@@ -319,11 +383,55 @@ export type WorkoutSessionInput = {
   items?: WorkoutItemInput[];
 };
 
+export type WorkoutSeriesSlotInput = {
+  id?: string;
+  weekday: RepeatDayRecord;
+  localTime: string;
+  order: number;
+  items: WorkoutItemInput[];
+};
+
+export type WorkoutSeriesInput = {
+  clientId: string;
+  label?: string | null;
+  startDate: Date;
+  timezone: string;
+  status?: WorkoutSeriesStatusRecord;
+  durationMinutes?: number | null;
+  focus?: string | null;
+  location?: string | null;
+  notes?: string | null;
+  creationKey: string;
+  slots: WorkoutSeriesSlotInput[];
+};
+
+export type WorkoutSeriesUpdateInput = {
+  label?: string | null;
+  startDate?: Date;
+  timezone?: string;
+  status?: WorkoutSeriesStatusRecord;
+  durationMinutes?: number | null;
+  focus?: string | null;
+  location?: string | null;
+  notes?: string | null;
+  slots?: WorkoutSeriesSlotInput[];
+  effectiveFrom: Date;
+  expectedVersion: number;
+  mutationKey: string;
+};
+
+export type WorkoutSeriesMutationResult = {
+  series: WorkoutSeriesRecord;
+  workoutSessions: WorkoutSessionRecord[];
+  applied: boolean;
+};
+
 export type TrainerDataBootstrap = {
   serverTime: Date;
   clients: ClientRecord[];
   exercises: ExerciseRecord[];
   workoutTemplates: WorkoutTemplateRecord[];
+  workoutSeries: WorkoutSeriesRecord[];
   workoutSessions: WorkoutSessionRecord[];
 };
 
@@ -347,6 +455,12 @@ export interface TrainerDataRepository {
   updateWorkoutTemplate(trainerId: string, id: string, input: WorkoutTemplateInput): Promise<WorkoutTemplateRecord | null>;
   softDeleteWorkoutTemplate(trainerId: string, id: string): Promise<WorkoutTemplateRecord | null>;
 
+  listWorkoutSeries(trainerId: string): Promise<WorkoutSeriesRecord[]>;
+  createWorkoutSeries(trainerId: string, input: WorkoutSeriesInput): Promise<WorkoutSeriesMutationResult>;
+  getWorkoutSeries(trainerId: string, id: string): Promise<WorkoutSeriesRecord | null>;
+  updateWorkoutSeries(trainerId: string, id: string, input: WorkoutSeriesUpdateInput): Promise<WorkoutSeriesMutationResult | null>;
+  ensureWorkoutSeriesOccurrences(trainerId: string, id: string, throughDate: Date, mutationKey: string): Promise<WorkoutSessionRecord[] | null>;
+
   listWorkoutSessions(trainerId: string, query?: ListSessionsQuery): Promise<{ data: WorkoutSessionRecord[]; nextCursor: string | null }>;
   createWorkoutSession(trainerId: string, input: WorkoutSessionInput & { title: string }): Promise<WorkoutSessionRecord>;
   getWorkoutSession(trainerId: string, id: string): Promise<WorkoutSessionRecord | null>;
@@ -356,5 +470,5 @@ export interface TrainerDataRepository {
   updateWorkoutResults(trainerId: string, id: string, items: Array<{ id: string; setResults: SetResultInput[] }>): Promise<WorkoutSessionRecord | null>;
 
   bootstrap(trainerId: string, updatedSince?: Date): Promise<TrainerDataBootstrap>;
-  logActivity(userId: string | null, type: string, entityType?: string, entityId?: string, metadata?: unknown): Promise<void>;
+  logActivity(userId: string | null, type: string, entityType?: string, entityId?: string, metadata?: unknown, deduplicationKey?: string): Promise<void>;
 }

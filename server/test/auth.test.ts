@@ -920,6 +920,7 @@ describe("production auth backend", () => {
     expect([...api.dataRepository.clients.values()].some((record) => record.trainerId === deletedUserId)).toBe(false);
     expect([...api.dataRepository.exercises.values()].some((record) => record.trainerId === deletedUserId)).toBe(false);
     expect([...api.dataRepository.workoutTemplates.values()].some((record) => record.trainerId === deletedUserId)).toBe(false);
+    expect([...api.dataRepository.workoutSeries.values()].some((record) => record.trainerId === deletedUserId)).toBe(false);
     expect([...api.dataRepository.workoutSessions.values()].some((record) => record.trainerId === deletedUserId)).toBe(false);
     expect(activityEvents(api).some((record) => record.userId === deletedUserId)).toBe(false);
     expect(api.adminRepository.trainers.has(deletedUserId)).toBe(false);
@@ -930,6 +931,7 @@ describe("production auth backend", () => {
     expect(api.dataRepository.clients.has(otherGraph.clientId)).toBe(true);
     expect(api.dataRepository.exercises.has(otherGraph.exerciseId)).toBe(true);
     expect(api.dataRepository.workoutTemplates.has(otherGraph.templateId)).toBe(true);
+    expect(api.dataRepository.workoutSeries.has(otherGraph.seriesId)).toBe(true);
     expect(api.dataRepository.workoutSessions.has(otherGraph.sessionId)).toBe(true);
     expect(activityEvents(api).some((record) => record.userId === otherUserId)).toBe(true);
     expect(api.adminRepository.trainers.has(otherUserId)).toBe(true);
@@ -1298,6 +1300,21 @@ async function seedTrainerGraph(api: ReturnType<typeof createTestApi>, trainerId
     title: `${prefix} session`,
     items: [{ exerciseId: exercise.id, order: 0, titleSnapshot: `${prefix} exercise` }]
   });
+  const series = await api.dataRepository.createWorkoutSeries(trainerId, {
+    clientId: client.id,
+    label: `${prefix} series`,
+    startDate: new Date(Date.UTC(2030, 0, 7)),
+    timezone: "UTC",
+    creationKey: `${prefix}-series-create`,
+    slots: [
+      {
+        weekday: "monday",
+        localTime: "10:00",
+        order: 0,
+        items: [{ exerciseId: exercise.id, order: 0, titleSnapshot: `${prefix} exercise` }]
+      }
+    ]
+  });
   await api.dataRepository.updateWorkoutResults(trainerId, session.id, [
     {
       id: session.items[0].id,
@@ -1305,7 +1322,7 @@ async function seedTrainerGraph(api: ReturnType<typeof createTestApi>, trainerId
     }
   ]);
   await api.dataRepository.logActivity(trainerId, "workout_session.completed", "workout_session", session.id);
-  return { clientId: client.id, exerciseId: exercise.id, templateId: template.id, sessionId: session.id };
+  return { clientId: client.id, exerciseId: exercise.id, templateId: template.id, seriesId: series.series.id, sessionId: session.id };
 }
 
 function activityEvents(api: ReturnType<typeof createTestApi>) {
@@ -1323,6 +1340,7 @@ function snapshotDeletionStores(api: ReturnType<typeof createTestApi>) {
     clients: [...api.dataRepository.clients.entries()],
     exercises: [...api.dataRepository.exercises.entries()],
     workoutTemplates: [...api.dataRepository.workoutTemplates.entries()],
+    workoutSeries: [...api.dataRepository.workoutSeries.entries()],
     workoutSessions: [...api.dataRepository.workoutSessions.entries()],
     activityEvents: api.dataRepository.activityEvents,
     adminTrainers: [...api.adminRepository.trainers.entries()],

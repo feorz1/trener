@@ -69,6 +69,243 @@ describe("trainer data backend", () => {
     expect(response.statusCode).toBe(401);
   });
 
+  it("creates an idempotent infinite series, materializes dated sessions, and edits only future occurrences", async () => {
+    const api = createTestApi();
+    const trainer = await signInByEmail(api, "series@example.com");
+    const headers = { ...authHeaders(trainer.accessToken), "idempotency-key": "series-create-2030" };
+    const client = await api.app.inject({
+      method: "POST",
+      url: "/clients",
+      headers,
+      payload: { name: "Series Client" }
+    });
+    const exercise = await api.app.inject({
+      method: "POST",
+      url: "/exercises",
+      headers,
+      payload: { name: "Series Squat" }
+    });
+    const seriesPayload = {
+      clientId: client.json().id,
+      label: "Ноги",
+      startDate: "2030-01-07",
+      timezone: "Europe/Moscow",
+      durationMinutes: 60,
+      slots: [
+        {
+          weekday: "monday",
+          localTime: "19:00",
+          order: 0,
+          items: [{ exerciseId: exercise.json().id, order: 0, titleSnapshot: "Понедельник" }]
+        },
+        {
+          weekday: "wednesday",
+          localTime: "18:00",
+          order: 1,
+          items: [{ exerciseId: exercise.json().id, order: 0, titleSnapshot: "Среда" }]
+        },
+        {
+          weekday: "saturday",
+          localTime: "12:00",
+          order: 2,
+          items: [{ exerciseId: exercise.json().id, order: 0, titleSnapshot: "Суббота" }]
+        }
+      ]
+    };
+
+    const created = await api.app.inject({ method: "POST", url: "/workout-series", headers, payload: seriesPayload });
+    expect(created.statusCode).toBe(200);
+    expect(created.json().series).toMatchObject({ label: "Ноги", version: 1, scheduleVersion: 1 });
+    expect(created.json().workoutSessions.slice(0, 4).map((session: { scheduledLocalDate: string }) => session.scheduledLocalDate)).toEqual([
+      "2030-01-07",
+      "2030-01-09",
+      "2030-01-12",
+      "2030-01-14"
+    ]);
+    expect(created.json().workoutSessions.slice(0, 3).map((session: { items: Array<{ titleSnapshot: string }> }) => session.items.map((item) => item.titleSnapshot))).toEqual([
+      ["Понедельник"],
+      ["Среда"],
+      ["Суббота"]
+    ]);
+
+    const retried = await api.app.inject({ method: "POST", url: "/workout-series", headers, payload: seriesPayload });
+    expect(retried.statusCode).toBe(200);
+    expect(retried.json().series.id).toBe(created.json().series.id);
+    expect(retried.json().workoutSessions).toHaveLength(created.json().workoutSessions.length);
+    expect(
+      api.dataRepository.activityEvents.filter(
+        (event) => (event as { type?: string }).type === "workout_series.created"
+      )
+    ).toHaveLength(1);
+
+    const edited = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-series/${created.json().series.id}/future`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-edit-2030" },
+      payload: {
+        expectedVersion: 1,
+        effectiveFrom: "2030-01-09",
+        label: "Техника",
+        slots: [
+          {
+            weekday: "wednesday",
+            localTime: "20:00",
+            order: 0,
+            items: [{ exerciseId: exercise.json().id, order: 0, titleSnapshot: "Новая среда" }]
+          }
+        ]
+      }
+    });
+    expect(edited.statusCode).toBe(200);
+    expect(edited.json().series).toMatchObject({ label: "Техника", version: 2, scheduleVersion: 2 });
+    const preservedPast = Array.from(api.dataRepository.workoutSessions.values()).find(
+      (session) => session.seriesId === created.json().series.id && session.scheduledLocalDate?.toISOString().slice(0, 10) === "2030-01-07"
+    );
+    expect(preservedPast).toMatchObject({
+      labelSnapshot: "Ноги"
+    });
+    expect(
+      edited.json().workoutSessions
+        .filter((session: { scheduledLocalDate: string }) => session.scheduledLocalDate >= "2030-01-09")
+        .every((session: { scheduledLocalTime: string; labelSnapshot: string; items: Array<{ titleSnapshot: string }> }) =>
+          session.scheduledLocalTime === "20:00" && session.labelSnapshot === "Техника" && session.items[0]?.titleSnapshot === "Новая среда"
+        )
+    ).toBe(true);
+
+    const retriedEdit = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-series/${created.json().series.id}/future`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-edit-2030" },
+      payload: {
+        expectedVersion: 1,
+        effectiveFrom: "2030-01-09",
+        label: "Техника",
+        slots: [
+          {
+            weekday: "wednesday",
+            localTime: "20:00",
+            order: 0,
+            items: [{ exerciseId: exercise.json().id, order: 0, titleSnapshot: "Новая среда" }]
+          }
+        ]
+      }
+    });
+    expect(retriedEdit.statusCode).toBe(200);
+    expect(retriedEdit.json().series.version).toBe(2);
+    expect(retriedEdit.json().workoutSessions).toHaveLength(edited.json().workoutSessions.length);
+
+    const cancelledOccurrence = edited.json().workoutSessions.find(
+      (session: { scheduledLocalDate: string }) => session.scheduledLocalDate === "2030-01-16"
+    );
+    expect(cancelledOccurrence).toBeTruthy();
+    const cancelled = await api.app.inject({
+      method: "POST",
+      url: `/workout-sessions/${cancelledOccurrence.id}/cancel`,
+      headers: authHeaders(trainer.accessToken)
+    });
+    expect(cancelled.statusCode).toBe(200);
+
+    const relabeled = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-series/${created.json().series.id}/future`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-label-edit-2030" },
+      payload: { expectedVersion: 2, effectiveFrom: "2030-01-16", label: "Техника 2" }
+    });
+    expect(relabeled.statusCode).toBe(200);
+    expect(relabeled.json().series).toMatchObject({ label: "Техника 2", version: 3, scheduleVersion: 3 });
+    expect(
+      relabeled.json().workoutSessions
+        .filter((session: { scheduledLocalDate: string; status: string }) => session.scheduledLocalDate >= "2030-01-16" && session.status === "planned")
+        .every((session: { labelSnapshot: string }) => session.labelSnapshot === "Техника 2")
+    ).toBe(true);
+    const sessionsOnCancelledDate = Array.from(api.dataRepository.workoutSessions.values()).filter(
+      (session) =>
+        session.seriesId === created.json().series.id &&
+        session.status !== "SUPERSEDED" &&
+        session.scheduledLocalDate?.toISOString().slice(0, 10) === "2030-01-16"
+    );
+    expect(sessionsOnCancelledDate).toHaveLength(1);
+    expect(sessionsOnCancelledDate[0]?.status).toBe("CANCELLED");
+
+    const ensureHeaders = { ...authHeaders(trainer.accessToken), "idempotency-key": "series-ensure-2030" };
+    const ensured = await api.app.inject({
+      method: "POST",
+      url: `/workout-series/${created.json().series.id}/ensure-occurrences`,
+      headers: ensureHeaders,
+      payload: { throughDate: "2030-04-07" }
+    });
+    expect(ensured.statusCode).toBe(200);
+    const ensuredRetry = await api.app.inject({
+      method: "POST",
+      url: `/workout-series/${created.json().series.id}/ensure-occurrences`,
+      headers: ensureHeaders,
+      payload: { throughDate: "2030-04-07" }
+    });
+    expect(ensuredRetry.statusCode).toBe(200);
+    expect(ensuredRetry.json()).toEqual(ensured.json());
+    const reusedEnsureKey = await api.app.inject({
+      method: "POST",
+      url: `/workout-series/${created.json().series.id}/ensure-occurrences`,
+      headers: ensureHeaders,
+      payload: { throughDate: "2030-04-06" }
+    });
+    expect(reusedEnsureKey.statusCode).toBe(409);
+
+    const beyondServerHorizon = await api.app.inject({
+      method: "POST",
+      url: `/workout-series/${created.json().series.id}/ensure-occurrences`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-ensure-too-far-2030" },
+      payload: { throughDate: "2030-04-08" }
+    });
+    expect(beyondServerHorizon.statusCode).toBe(400);
+    expect(beyondServerHorizon.json().message).toContain("90 days");
+
+    const delayedFirstRetry = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-series/${created.json().series.id}/future`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-edit-2030" },
+      payload: {
+        expectedVersion: 1,
+        effectiveFrom: "2030-01-09",
+        label: "Техника",
+        slots: [{ weekday: "wednesday", localTime: "20:00", order: 0, items: [{ exerciseId: exercise.json().id, order: 0, titleSnapshot: "Новая среда" }] }]
+      }
+    });
+    expect(delayedFirstRetry.statusCode).toBe(200);
+    expect(delayedFirstRetry.json().series.version).toBe(3);
+
+    const reusedKey = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-series/${created.json().series.id}/future`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-edit-2030" },
+      payload: { expectedVersion: 1, effectiveFrom: "2030-01-09", label: "Другой запрос" }
+    });
+    expect(reusedKey.statusCode).toBe(409);
+
+    expect(
+      api.dataRepository.activityEvents.filter(
+        (event) => (event as { type?: string }).type === "workout_series.future_updated"
+      )
+    ).toHaveLength(2);
+
+    const staleEdit = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-series/${created.json().series.id}/future`,
+      headers: { ...authHeaders(trainer.accessToken), "idempotency-key": "series-stale-edit" },
+      payload: { expectedVersion: 1, effectiveFrom: "2030-01-09", label: "Устаревшее изменение" }
+    });
+    expect(staleEdit.statusCode).toBe(409);
+    expect(staleEdit.json()).toMatchObject({ code: "conflict" });
+
+    const oversizedPreview = await api.app.inject({
+      method: "POST",
+      url: "/workout-series/preview",
+      headers: authHeaders(trainer.accessToken),
+      payload: { ...seriesPayload, startDate: "2030-01-01", throughDate: "2032-01-01" }
+    });
+    expect(oversizedPreview.statusCode).toBe(400);
+  });
+
   it("creates, updates, paginates, and soft deletes clients scoped to the trainer", async () => {
     const api = createTestApi();
     const trainerA = await signInByEmail(api, "a@example.com");
@@ -290,8 +527,18 @@ describe("trainer data backend", () => {
     expect(rescheduled.json()).toMatchObject({
       clientId: client.json().id,
       workoutTemplateId: template.json().id,
-      scheduledAt: "2026-07-06T10:00:00.000Z"
+      scheduledAt: "2026-07-06T10:00:00.000Z",
+      version: 2
     });
+
+    const staleReschedule = await api.app.inject({
+      method: "PATCH",
+      url: `/workout-sessions/${session.json().id}`,
+      headers: authHeaders(trainerA.accessToken),
+      payload: { expectedVersion: 1, scheduledAt: "2026-07-07T10:00:00.000Z" }
+    });
+    expect(staleReschedule.statusCode).toBe(409);
+    expect(staleReschedule.json()).toMatchObject({ code: "conflict" });
 
     const forbiddenStatusPatch = await api.app.inject({
       method: "PATCH",
@@ -346,9 +593,20 @@ describe("trainer data backend", () => {
     });
     expect(forbiddenResults.statusCode).toBe(404);
 
+    const started = await api.app.inject({ method: "POST", url: `/workout-sessions/${session.json().id}/start`, headers: authHeaders(trainerA.accessToken) });
+    expect(started.statusCode).toBe(200);
+    expect(started.json().status).toBe("in_progress");
+
     const completed = await api.app.inject({ method: "POST", url: `/workout-sessions/${session.json().id}/complete`, headers: authHeaders(trainerA.accessToken) });
     expect(completed.statusCode).toBe(200);
     expect(completed.json().status).toBe("completed");
+
+    const completedAgain = await api.app.inject({ method: "POST", url: `/workout-sessions/${session.json().id}/complete`, headers: authHeaders(trainerA.accessToken) });
+    expect(completedAgain.statusCode).toBe(200);
+    expect(completedAgain.json().finishedAt).toBe(completed.json().finishedAt);
+
+    const cancelCompleted = await api.app.inject({ method: "POST", url: `/workout-sessions/${session.json().id}/cancel`, headers: authHeaders(trainerA.accessToken) });
+    expect(cancelCompleted.statusCode).toBe(409);
 
     const forbiddenCompletedStructurePatch = await api.app.inject({
       method: "PATCH",

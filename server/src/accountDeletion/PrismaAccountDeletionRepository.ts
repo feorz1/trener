@@ -64,6 +64,11 @@ export class PrismaAccountDeletionRepository implements AccountDeletionRepositor
                 WHERE wt.trainer_id <> ${userId}::uuid AND c.trainer_id = ${userId}::uuid
                 UNION ALL
                 SELECT 1
+                FROM workout_series series
+                JOIN clients c ON c.id = series.client_id
+                WHERE series.trainer_id <> ${userId}::uuid AND c.trainer_id = ${userId}::uuid
+                UNION ALL
+                SELECT 1
                 FROM workout_sessions ws
                 JOIN clients c ON c.id = ws.client_id
                 WHERE ws.trainer_id <> ${userId}::uuid AND c.trainer_id = ${userId}::uuid
@@ -84,6 +89,17 @@ export class PrismaAccountDeletionRepository implements AccountDeletionRepositor
                 JOIN workout_sessions ws ON ws.id = wsi.workout_session_id
                 JOIN exercises e ON e.id = wsi.exercise_id
                 WHERE ws.trainer_id <> ${userId}::uuid AND e.trainer_id = ${userId}::uuid
+                UNION ALL
+                SELECT 1
+                FROM workout_series_items series_item
+                JOIN workout_series series ON series.id = series_item.series_id
+                JOIN exercises e ON e.id = series_item.exercise_id
+                WHERE series.trainer_id <> ${userId}::uuid AND e.trainer_id = ${userId}::uuid
+                UNION ALL
+                SELECT 1
+                FROM workout_sessions ws
+                JOIN workout_series series ON series.id = ws.series_id
+                WHERE ws.trainer_id <> ${userId}::uuid AND series.trainer_id = ${userId}::uuid
               ) AS "hasConflict"
             `;
             if (crossOwner?.hasConflict) throw deletionConflict();

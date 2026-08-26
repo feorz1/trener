@@ -70,6 +70,8 @@ export class InMemoryAccountDeletionRepository implements AccountDeletionReposit
       const clients = cloneMap(this.dataRepository.clients);
       const exercises = cloneMap(this.dataRepository.exercises);
       const workoutTemplates = cloneMap(this.dataRepository.workoutTemplates);
+      const workoutSeries = cloneMap(this.dataRepository.workoutSeries);
+      const workoutSeriesCommands = cloneMap(this.dataRepository.workoutSeriesCommands);
       const workoutSessions = cloneMap(this.dataRepository.workoutSessions);
       const activityEvents = structuredClone(this.dataRepository.activityEvents) as ActivityEvent[];
       const adminTrainers = this.adminRepository ? cloneMap(this.adminRepository.trainers) : null;
@@ -87,6 +89,10 @@ export class InMemoryAccountDeletionRepository implements AccountDeletionReposit
       deleteMapValues(clients, (record) => record.trainerId === userId);
       deleteMapValues(exercises, (record) => record.trainerId === userId);
       deleteMapValues(workoutTemplates, (record) => record.trainerId === userId);
+      deleteMapValues(workoutSeries, (record) => record.trainerId === userId);
+      for (const key of workoutSeriesCommands.keys()) {
+        if (key.startsWith(`${userId}:`)) workoutSeriesCommands.delete(key);
+      }
       deleteMapValues(workoutSessions, (record) => record.trainerId === userId);
       const retainedActivityEvents = activityEvents.filter((record) => record.userId !== userId);
 
@@ -115,6 +121,8 @@ export class InMemoryAccountDeletionRepository implements AccountDeletionReposit
       replaceMap(this.dataRepository.clients, clients);
       replaceMap(this.dataRepository.exercises, exercises);
       replaceMap(this.dataRepository.workoutTemplates, workoutTemplates);
+      replaceMap(this.dataRepository.workoutSeries, workoutSeries);
+      replaceMap(this.dataRepository.workoutSeriesCommands, workoutSeriesCommands);
       replaceMap(this.dataRepository.workoutSessions, workoutSessions);
       replaceArray(this.dataRepository.activityEvents, retainedActivityEvents);
       replaceMap(this.receipts, receipts);
@@ -169,6 +177,9 @@ function hasCrossOwnerReferences(repository: InMemoryTrainerDataRepository, user
   const templateIds = new Set(
     [...repository.workoutTemplates.values()].filter((record) => record.trainerId === userId).map((record) => record.id)
   );
+  const seriesIds = new Set(
+    [...repository.workoutSeries.values()].filter((record) => record.trainerId === userId).map((record) => record.id)
+  );
 
   const templateConflict = [...repository.workoutTemplates.values()].some(
     (record) =>
@@ -178,11 +189,20 @@ function hasCrossOwnerReferences(repository: InMemoryTrainerDataRepository, user
   );
   if (templateConflict) return true;
 
+  const seriesConflict = [...repository.workoutSeries.values()].some(
+    (record) =>
+      record.trainerId !== userId &&
+      (clientIds.has(record.clientId) ||
+        record.slots.some((slot) => slot.items.some((item) => item.exerciseId !== null && exerciseIds.has(item.exerciseId))))
+  );
+  if (seriesConflict) return true;
+
   return [...repository.workoutSessions.values()].some(
     (record) =>
       record.trainerId !== userId &&
       ((record.clientId !== null && clientIds.has(record.clientId)) ||
         (record.workoutTemplateId !== null && templateIds.has(record.workoutTemplateId)) ||
+        (record.seriesId !== null && seriesIds.has(record.seriesId)) ||
         record.items.some((item) => item.exerciseId !== null && exerciseIds.has(item.exerciseId)))
   );
 }

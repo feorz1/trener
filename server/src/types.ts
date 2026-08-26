@@ -20,6 +20,7 @@ export type AuthErrorCode =
   | "validation"
   | "not_found"
   | "forbidden"
+  | "conflict"
   | "server_error"
   | "unknown";
 

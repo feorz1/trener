@@ -56,6 +56,8 @@ WITH checks(name, failures) AS (
   SELECT 'cross_owner_links',
     (SELECT count(*) FROM workout_templates t JOIN clients c ON c.id = t.client_id WHERE c.trainer_id <> t.trainer_id)
     + (SELECT count(*) FROM workout_sessions s JOIN clients c ON c.id = s.client_id WHERE c.trainer_id <> s.trainer_id)
+    + (SELECT count(*) FROM workout_series s JOIN clients c ON c.id = s.client_id WHERE c.trainer_id <> s.trainer_id)
+    + (SELECT count(*) FROM workout_sessions occurrence JOIN workout_series series ON series.id = occurrence.series_id WHERE series.trainer_id <> occurrence.trainer_id)
     + (SELECT count(*) FROM workout_sessions s JOIN workout_templates t ON t.id = s.workout_template_id WHERE t.trainer_id <> s.trainer_id)
     + (SELECT count(*) FROM workout_template_items i JOIN workout_templates t ON t.id = i.workout_template_id JOIN exercises e ON e.id = i.exercise_id WHERE e.trainer_id IS NOT NULL AND e.trainer_id <> t.trainer_id)
     + (SELECT count(*) FROM workout_session_items i JOIN workout_sessions s ON s.id = i.workout_session_id JOIN exercises e ON e.id = i.exercise_id WHERE e.trainer_id IS NOT NULL AND e.trainer_id <> s.trainer_id)
@@ -66,6 +68,10 @@ WITH checks(name, failures) AS (
     + (SELECT count(*) FROM workout_templates t LEFT JOIN users u ON u.id = t.trainer_id LEFT JOIN clients c ON c.id = t.client_id WHERE u.id IS NULL OR (t.client_id IS NOT NULL AND c.id IS NULL))
     + (SELECT count(*) FROM workout_template_items i LEFT JOIN workout_templates t ON t.id = i.workout_template_id LEFT JOIN exercises e ON e.id = i.exercise_id WHERE t.id IS NULL OR (i.exercise_id IS NOT NULL AND e.id IS NULL))
     + (SELECT count(*) FROM workout_sessions s LEFT JOIN users u ON u.id = s.trainer_id LEFT JOIN clients c ON c.id = s.client_id LEFT JOIN workout_templates t ON t.id = s.workout_template_id WHERE u.id IS NULL OR (s.client_id IS NOT NULL AND c.id IS NULL) OR (s.workout_template_id IS NOT NULL AND t.id IS NULL))
+    + (SELECT count(*) FROM workout_series s LEFT JOIN users u ON u.id = s.trainer_id LEFT JOIN clients c ON c.id = s.client_id WHERE u.id IS NULL OR c.id IS NULL)
+    + (SELECT count(*) FROM workout_series_slots slot LEFT JOIN workout_series series ON series.id = slot.series_id WHERE series.id IS NULL)
+    + (SELECT count(*) FROM workout_series_items item LEFT JOIN workout_series series ON series.id = item.series_id LEFT JOIN workout_series_slots slot ON slot.id = item.series_slot_id LEFT JOIN exercises exercise ON exercise.id = item.exercise_id WHERE series.id IS NULL OR slot.id IS NULL OR (item.exercise_id IS NOT NULL AND exercise.id IS NULL))
+    + (SELECT count(*) FROM workout_series_commands command LEFT JOIN users u ON u.id = command.trainer_id LEFT JOIN workout_series series ON series.id = command.series_id WHERE u.id IS NULL OR series.id IS NULL OR series.trainer_id <> command.trainer_id)
     + (SELECT count(*) FROM workout_session_items i LEFT JOIN workout_sessions s ON s.id = i.workout_session_id LEFT JOIN exercises e ON e.id = i.exercise_id WHERE s.id IS NULL OR (i.exercise_id IS NOT NULL AND e.id IS NULL))
     + (SELECT count(*) FROM workout_set_results r LEFT JOIN workout_session_items i ON i.id = r.workout_session_item_id WHERE i.id IS NULL)
     + (SELECT count(*) FROM auth_identities i LEFT JOIN users u ON u.id = i.user_id WHERE u.id IS NULL)
@@ -86,6 +92,16 @@ WITH checks(name, failures) AS (
       ('workout_sessions', 'users', 'c'),
       ('workout_sessions', 'clients', 'n'),
       ('workout_sessions', 'workout_templates', 'n'),
+      ('workout_series', 'users', 'c'),
+      ('workout_series', 'clients', 'c'),
+      ('workout_series_slots', 'workout_series', 'c'),
+      ('workout_series_items', 'workout_series', 'c'),
+      ('workout_series_items', 'workout_series_slots', 'c'),
+      ('workout_series_items', 'exercises', 'n'),
+      ('workout_series_commands', 'users', 'c'),
+      ('workout_series_commands', 'workout_series', 'c'),
+      ('workout_sessions', 'workout_series', 'n'),
+      ('workout_sessions', 'workout_series_slots', 'n'),
       ('workout_session_items', 'workout_sessions', 'c'),
       ('workout_session_items', 'exercises', 'n'),
       ('workout_set_results', 'workout_session_items', 'c'),
@@ -112,13 +128,28 @@ WITH checks(name, failures) AS (
   FROM exercises
   WHERE is_system = true AND deleted_at IS NULL
   UNION ALL
-  SELECT 'release_schema_contract', count(*) FROM (
+  SELECT 'release_schema_contract', count(*) + CASE
+    WHEN EXISTS (
+      SELECT 1
+      FROM pg_index index_row
+      JOIN pg_class index_class ON index_class.oid = index_row.indexrelid
+      WHERE index_class.relname = 'workout_sessions_series_local_date_active_key'
+        AND pg_get_expr(index_row.indpred, index_row.indrelid) LIKE '%deleted_at IS NULL%'
+        AND pg_get_expr(index_row.indpred, index_row.indrelid) LIKE '%SUPERSEDED%'
+    ) THEN 0 ELSE 1 END
+  FROM (
     VALUES
       ('exercises', 'primary_muscles'),
       ('workout_template_items', 'planned_set_targets'),
       ('workout_sessions', 'timezone'),
       ('workout_session_items', 'planned_set_targets'),
       ('account_deletion_receipts', 'operation_id')
+      , ('workout_series', 'schedule_version')
+      , ('workout_series_slots', 'local_time')
+      , ('workout_series_commands', 'request_hash')
+      , ('workout_series_commands', 'result_through')
+      , ('workout_sessions', 'occurrence_key')
+      , ('activity_events', 'deduplication_key')
   ) expected(table_name, column_name)
   WHERE NOT EXISTS (
     SELECT 1 FROM information_schema.columns actual

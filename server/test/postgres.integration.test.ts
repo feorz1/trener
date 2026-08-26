@@ -139,7 +139,7 @@ describePostgres("real PostgreSQL integration", () => {
     await prisma.$disconnect();
   });
 
-  it("applies migrations 0006, 0007, and 0008 with their required schema contracts", async () => {
+  it("applies migrations through 0010 with their required schema contracts", async () => {
     const migrations = await prisma.$queryRaw<Array<{ migrationName: string }>>`
       SELECT migration_name AS "migrationName"
       FROM "_prisma_migrations"
@@ -149,11 +149,23 @@ describePostgres("real PostgreSQL integration", () => {
       expect.arrayContaining([
         "0006_active_user_email_uniqueness",
         "0007_add_workout_roundtrip_contract",
-        "0008_add_account_deletion_receipts"
+        "0008_add_account_deletion_receipts",
+        "0009_add_superseded_workout_session_status",
+        "0010_workout_series"
       ])
     );
 
-    const [schema] = await prisma.$queryRaw<Array<{ activeEmailIndex: boolean; jsonbColumns: bigint; receiptTable: boolean }>>`
+    const [schema] = await prisma.$queryRaw<Array<{
+      activeEmailIndex: boolean;
+      jsonbColumns: bigint;
+      receiptTable: boolean;
+      workoutSeriesTable: boolean;
+      workoutSeriesCommandsTable: boolean;
+      workoutSeriesCommandResultThrough: boolean;
+      activityEventDeduplication: boolean;
+      workoutSeriesLocalDateIndex: boolean;
+      occurrenceColumns: bigint;
+    }>>`
       SELECT
         to_regclass('public.users_email_lower_active_unique') IS NOT NULL AS "activeEmailIndex",
         (
@@ -170,9 +182,48 @@ describePostgres("real PostgreSQL integration", () => {
               ('workout_session_items', 'planned_set_targets')
             )
         ) AS "jsonbColumns",
-        to_regclass('public.account_deletion_receipts') IS NOT NULL AS "receiptTable"
+        to_regclass('public.account_deletion_receipts') IS NOT NULL AS "receiptTable",
+        to_regclass('public.workout_series') IS NOT NULL AS "workoutSeriesTable",
+        to_regclass('public.workout_series_commands') IS NOT NULL AS "workoutSeriesCommandsTable",
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'workout_series_commands'
+            AND column_name = 'result_through'
+        ) AS "workoutSeriesCommandResultThrough",
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'activity_events'
+            AND column_name = 'deduplication_key'
+        ) AS "activityEventDeduplication",
+        EXISTS (
+          SELECT 1
+          FROM pg_index index_row
+          JOIN pg_class index_class ON index_class.oid = index_row.indexrelid
+          WHERE index_class.relname = 'workout_sessions_series_local_date_active_key'
+            AND pg_get_expr(index_row.indpred, index_row.indrelid) LIKE '%deleted_at IS NULL%'
+            AND pg_get_expr(index_row.indpred, index_row.indrelid) LIKE '%SUPERSEDED%'
+        ) AS "workoutSeriesLocalDateIndex",
+        (
+          SELECT count(*)
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'workout_sessions'
+            AND column_name IN ('series_id', 'series_slot_id', 'occurrence_key', 'scheduled_local_date', 'scheduled_local_time', 'label_snapshot', 'version')
+        ) AS "occurrenceColumns"
     `;
-    expect(schema).toEqual({ activeEmailIndex: true, jsonbColumns: 6n, receiptTable: true });
+    expect(schema).toEqual({
+      activeEmailIndex: true,
+      jsonbColumns: 6n,
+      receiptTable: true,
+      workoutSeriesTable: true,
+      workoutSeriesCommandsTable: true,
+      workoutSeriesCommandResultThrough: true,
+      activityEventDeduplication: true,
+      workoutSeriesLocalDateIndex: true,
+      occurrenceColumns: 7n
+    });
     await expect(dataRepository.ready()).resolves.toBeUndefined();
   });
 

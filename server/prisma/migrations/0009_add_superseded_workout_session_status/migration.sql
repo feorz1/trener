@@ -1,0 +1,1 @@
+ALTER TYPE workout_session_status ADD VALUE IF NOT EXISTS 'SUPERSEDED';

@@ -90,7 +90,7 @@ sudo docker compose \
   up -d
 ```
 
-The current release migrations `0007_add_workout_roundtrip_contract` and `0008_add_account_deletion_receipts` are additive, so they can run while the previous API is live. A single API replica can still have a short restart gap; this sequence provides compatibility and fail-closed ordering, not zero downtime.
+The current release migrations `0007_add_workout_roundtrip_contract`, `0008_add_account_deletion_receipts`, `0009_add_superseded_workout_session_status`, and `0010_workout_series` are additive. Before applying `0010`, require the Stage 1 app version (or temporarily freeze recurring-workout writes), drain old API replicas, and only then migrate and start the new API. Old clients may continue reading materialized sessions, but an old recurring-session write made after the one-time backfill would not create a series. A single API replica can still have a short restart gap; this sequence provides fail-closed ordering, not zero downtime.
 
 Verify job exits and service health without printing env values:
 

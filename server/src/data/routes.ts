@@ -12,14 +12,36 @@ import {
   type WorkoutItemInput,
   type WorkoutMetricValuesRecord,
   type WorkoutResultTypeRecord,
+  type WorkoutSeriesInput,
+  type WorkoutSeriesSlotInput,
   type WorkoutSessionInput,
   type WorkoutSessionRecord,
   type WorkoutSessionStatusRecord
 } from "./types";
+import {
+  IdempotencyKeyReuseError,
+  WorkoutSeriesVersionConflictError,
+  WorkoutSessionTransitionError,
+  WorkoutSessionVersionConflictError
+} from "./domainErrors";
+import {
+  addLocalDays,
+  assertTimezone,
+  dateOnlyToLocalDate,
+  DEFAULT_OCCURRENCE_WINDOW_DAYS,
+  generateWorkoutSeriesOccurrences,
+  localDateToDateOnly,
+  utcDateToLocalDate,
+  WorkoutSeriesLocalTimeError,
+  WorkoutSeriesRangeError
+} from "./workoutSeriesSchedule";
 
 const repeatDaySet = new Set<string>(REPEAT_DAYS);
 const workoutMetricKeySet = new Set<string>(WORKOUT_METRIC_KEYS);
 const workoutResultTypeSet = new Set<string>(WORKOUT_RESULT_TYPES);
+const MAX_WORKOUT_ITEMS = 200;
+const MAX_SERIES_SLOT_ITEMS = 100;
+const MAX_SERIES_TOTAL_ITEMS = 350;
 
 type RegisterTrainerDataRoutesInput = {
   app: FastifyInstance;
@@ -171,6 +193,133 @@ export function registerTrainerDataRoutes({ app, authService, dataRepository }: 
     return serializeTemplate(template);
   });
 
+  app.post("/workout-series/preview", async (request) => {
+    const trainerId = await requireTrainerId(request);
+    const input = readSeriesInput(readBody(request), "preview", true);
+    await assertClientBelongsToTrainer(dataRepository, trainerId, input.clientId);
+    await assertItemsVisible(dataRepository, trainerId, input.slots.flatMap((slot) => slot.items));
+    const throughDate = readRequiredDateOnly(readBody(request).throughDate, "throughDate");
+    try {
+      return {
+        occurrences: generateWorkoutSeriesOccurrences({
+        seriesId: "preview",
+        scheduleVersion: 1,
+        timezone: input.timezone,
+        startDate: dateOnlyToLocalDate(input.startDate),
+        throughDate: dateOnlyToLocalDate(throughDate),
+        slots: input.slots.map((slot, index) => ({
+          id: slot.id ?? `preview-${index}`,
+          weekday: slot.weekday,
+          localTime: slot.localTime
+        }))
+        }).map((occurrence) => ({
+          seriesSlotId: occurrence.seriesSlotId,
+          occurrenceKey: occurrence.occurrenceKey,
+          scheduledAt: occurrence.scheduledAt.toISOString(),
+          scheduledLocalDate: occurrence.scheduledLocalDate,
+          scheduledLocalTime: occurrence.scheduledLocalTime
+        }))
+      };
+    } catch (error) {
+      if (error instanceof WorkoutSeriesRangeError || error instanceof WorkoutSeriesLocalTimeError) {
+        throw new AuthApiError("validation", 400, error.message);
+      }
+      throw error;
+    }
+  });
+
+  app.get("/workout-series", async (request) => {
+    const trainerId = await requireTrainerId(request);
+    return dataRepository.listWorkoutSeries(trainerId).then((series) => series.map(serializeSeries));
+  });
+
+  app.post("/workout-series", async (request) => {
+    const trainerId = await requireTrainerId(request);
+    const input = readSeriesInput(readBody(request), readIdempotencyKey(request), true);
+    await assertClientBelongsToTrainer(dataRepository, trainerId, input.clientId);
+    await assertActiveClient(dataRepository, trainerId, input.clientId);
+    await assertItemsVisible(dataRepository, trainerId, input.slots.flatMap((slot) => slot.items));
+    try {
+      const result = await dataRepository.createWorkoutSeries(trainerId, input);
+      await dataRepository.logActivity(
+        trainerId,
+        "workout_series.created",
+        "workout_series",
+        result.series.id,
+        undefined,
+        `workout-series:create:${trainerId}:${input.creationKey}`
+      );
+      return serializeSeriesMutation(result);
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError) throw new AuthApiError("conflict", 409, error.message);
+      if (error instanceof WorkoutSeriesLocalTimeError) throw new AuthApiError("validation", 400, error.message);
+      throw error;
+    }
+  });
+
+  app.get<{ Params: { id: string } }>("/workout-series/:id", async (request) => {
+    const trainerId = await requireTrainerId(request);
+    const series = await dataRepository.getWorkoutSeries(trainerId, request.params.id);
+    if (!series) throw new AuthApiError("not_found", 404);
+    return serializeSeries(series);
+  });
+
+  app.patch<{ Params: { id: string } }>("/workout-series/:id/future", async (request) => {
+    const trainerId = await requireTrainerId(request);
+    const input = readSeriesUpdateInput(readBody(request), readIdempotencyKey(request));
+    await assertItemsVisible(dataRepository, trainerId, input.slots?.flatMap((slot) => slot.items));
+    try {
+      const result = await dataRepository.updateWorkoutSeries(trainerId, request.params.id, input);
+      if (!result) throw new AuthApiError("not_found", 404);
+      await dataRepository.logActivity(
+        trainerId,
+        "workout_series.future_updated",
+        "workout_series",
+        result.series.id,
+        undefined,
+        `workout-series:update:${trainerId}:${input.mutationKey}`
+      );
+      return serializeSeriesMutation(result);
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError) {
+        throw new AuthApiError("conflict", 409, error.message);
+      }
+      if (error instanceof WorkoutSeriesVersionConflictError) {
+        throw new AuthApiError("conflict", 409, "Серия уже изменена на другом устройстве");
+      }
+      if (error instanceof WorkoutSeriesLocalTimeError) throw new AuthApiError("validation", 400, error.message);
+      throw error;
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/workout-series/:id/ensure-occurrences", async (request) => {
+    const trainerId = await requireTrainerId(request);
+    const mutationKey = readIdempotencyKey(request);
+    const throughDate = readRequiredDateOnly(readBody(request).throughDate, "throughDate");
+    const series = await dataRepository.getWorkoutSeries(trainerId, request.params.id);
+    if (!series) throw new AuthApiError("not_found", 404);
+    const localToday = utcDateToLocalDate(new Date(), series.timezone);
+    const seriesStart = dateOnlyToLocalDate(series.startDate);
+    const maximumThroughDate = addLocalDays(seriesStart > localToday ? seriesStart : localToday, DEFAULT_OCCURRENCE_WINDOW_DAYS);
+    if (dateOnlyToLocalDate(throughDate) > maximumThroughDate) {
+      throw new AuthApiError(
+        "validation",
+        400,
+        `Occurrence horizon cannot exceed ${DEFAULT_OCCURRENCE_WINDOW_DAYS} days`
+      );
+    }
+    try {
+      const sessions = await dataRepository.ensureWorkoutSeriesOccurrences(trainerId, request.params.id, throughDate, mutationKey);
+      if (!sessions) throw new AuthApiError("not_found", 404);
+      return { workoutSessions: sessions.map(serializeSession) };
+    } catch (error) {
+      if (error instanceof IdempotencyKeyReuseError) throw new AuthApiError("conflict", 409, error.message);
+      if (error instanceof WorkoutSeriesRangeError) throw new AuthApiError("validation", 400, error.message);
+      if (error instanceof WorkoutSeriesLocalTimeError) throw new AuthApiError("validation", 400, error.message);
+      throw error;
+    }
+  });
+
   app.get("/workout-sessions", async (request) => {
     const trainerId = await requireTrainerId(request);
     const query = readQuery(request);
@@ -221,7 +370,15 @@ export function registerTrainerDataRoutes({ app, authService, dataRepository }: 
     await assertClientBelongsToTrainer(dataRepository, trainerId, input.clientId);
     await assertTemplateBelongsToTrainer(dataRepository, trainerId, input.workoutTemplateId);
     await assertItemsVisible(dataRepository, trainerId, input.items);
-    const session = await dataRepository.updateWorkoutSession(trainerId, request.params.id, input);
+    let session;
+    try {
+      session = await dataRepository.updateWorkoutSession(trainerId, request.params.id, input);
+    } catch (error) {
+      if (error instanceof WorkoutSessionVersionConflictError) {
+        throw new AuthApiError("conflict", 409, "Тренировка уже изменена на другом устройстве");
+      }
+      throw error;
+    }
     if (!session) throw new AuthApiError("not_found", 404);
     await dataRepository.logActivity(trainerId, "workout_session.updated", "workout_session", session.id);
     return serializeSession(session);
@@ -278,13 +435,22 @@ export function registerTrainerDataRoutes({ app, authService, dataRepository }: 
       clients: bootstrap.clients.map(serializeClient),
       exercises: bootstrap.exercises.map(serializeExercise),
       workoutTemplates: bootstrap.workoutTemplates.map(serializeTemplate),
+      workoutSeries: bootstrap.workoutSeries.map(serializeSeries),
       workoutSessions: bootstrap.workoutSessions.map(serializeSession)
     };
   });
 
   async function setSessionStatus(request: FastifyRequest<{ Params: { id: string } }>, status: WorkoutSessionStatusRecord, eventType: string) {
     const trainerId = await requireTrainerId(request);
-    const session = await dataRepository.setWorkoutSessionStatus(trainerId, request.params.id, status);
+    let session;
+    try {
+      session = await dataRepository.setWorkoutSessionStatus(trainerId, request.params.id, status);
+    } catch (error) {
+      if (error instanceof WorkoutSessionTransitionError) {
+        throw new AuthApiError("conflict", 409, "Это действие недоступно в текущем состоянии тренировки");
+      }
+      throw error;
+    }
     if (!session) throw new AuthApiError("not_found", 404);
     await dataRepository.logActivity(trainerId, eventType, "workout_session", session.id);
     return serializeSession(session);
@@ -294,6 +460,11 @@ export function registerTrainerDataRoutes({ app, authService, dataRepository }: 
 async function assertClientBelongsToTrainer(repository: TrainerDataRepository, trainerId: string, clientId: string | null | undefined) {
   if (!clientId) return;
   if (!(await repository.getClient(trainerId, clientId))) throw new AuthApiError("forbidden", 403);
+}
+
+async function assertActiveClient(repository: TrainerDataRepository, trainerId: string, clientId: string) {
+  const client = await repository.getClient(trainerId, clientId);
+  if (!client || client.status !== "ACTIVE") throw new AuthApiError("validation", 400, "Нельзя создать серию для архивного клиента");
 }
 
 async function assertTemplateBelongsToTrainer(repository: TrainerDataRepository, trainerId: string, templateId: string | null | undefined) {
@@ -326,6 +497,7 @@ function assertWorkoutSessionPatchAllowed(session: WorkoutSessionRecord, input: 
     input.status === undefined &&
     input.scheduledAt === undefined &&
     input.timezone === undefined &&
+    input.labelSnapshot === undefined &&
     input.durationMinutes === undefined &&
     input.focus === undefined &&
     input.location === undefined &&
@@ -429,12 +601,14 @@ function readTemplateInput(body: Record<string, unknown>, requireTitle: boolean)
 
 function readSessionInput(body: Record<string, unknown>, requireTitle: boolean) {
   return {
+    expectedVersion: body.expectedVersion === undefined ? undefined : boundedInteger(body.expectedVersion, "expectedVersion", 1, Number.MAX_SAFE_INTEGER),
     clientId: nullableOptional(body.clientId, requireTitle, () => optionalString(body.clientId)),
     workoutTemplateId: nullableOptional(body.workoutTemplateId, requireTitle, () => optionalString(body.workoutTemplateId)),
     title: requireTitle ? boundedString(body.title, "title", 1, 160) : optionalBoundedString(body.title, "title", 1, 160),
     status: optionalSessionStatus(body.status),
     scheduledAt: nullableOptional(body.scheduledAt, requireTitle, () => optionalDate(body.scheduledAt)),
     timezone: nullableOptional(body.timezone, requireTitle, () => optionalBoundedString(body.timezone, "timezone", 1, 120)),
+    labelSnapshot: nullableOptional(body.labelSnapshot, requireTitle, () => optionalBoundedString(body.labelSnapshot, "labelSnapshot", 0, 160)),
     durationMinutes: nullableOptional(body.durationMinutes, requireTitle, () => optionalBoundedInteger(body.durationMinutes, "durationMinutes", 0, 24 * 60)),
     focus: nullableOptional(body.focus, requireTitle, () => optionalBoundedString(body.focus, "focus", 0, 500)),
     location: nullableOptional(body.location, requireTitle, () => optionalBoundedString(body.location, "location", 0, 500)),
@@ -447,13 +621,86 @@ function readSessionInput(body: Record<string, unknown>, requireTitle: boolean) 
   };
 }
 
+function readSeriesInput(body: Record<string, unknown>, creationKey: string, requireClient: boolean): WorkoutSeriesInput {
+  const clientId = requireClient
+    ? boundedString(body.clientId, "clientId", 1, 160)
+    : optionalBoundedString(body.clientId, "clientId", 1, 160) ?? "preview";
+  const timezone = boundedString(body.timezone, "timezone", 1, 120);
+  validateTimezone(timezone);
+  return {
+    clientId,
+    label: body.label === null ? null : optionalBoundedString(body.label, "label", 0, 160) ?? null,
+    startDate: readRequiredDateOnly(body.startDate, "startDate"),
+    timezone,
+    durationMinutes: body.durationMinutes === null ? null : optionalBoundedInteger(body.durationMinutes, "durationMinutes", 0, 24 * 60) ?? null,
+    focus: body.focus === null ? null : optionalBoundedString(body.focus, "focus", 0, 500) ?? null,
+    location: body.location === null ? null : optionalBoundedString(body.location, "location", 0, 500) ?? null,
+    notes: body.notes === null ? null : optionalBoundedString(body.notes, "notes", 0, 5000) ?? null,
+    creationKey,
+    slots: readSeriesSlots(body.slots)
+  };
+}
+
+function readSeriesUpdateInput(body: Record<string, unknown>, mutationKey: string) {
+  const timezone = optionalBoundedString(body.timezone, "timezone", 1, 120);
+  if (timezone) validateTimezone(timezone);
+  return {
+    label: body.label === undefined ? undefined : body.label === null ? null : boundedString(body.label, "label", 0, 160),
+    startDate: body.startDate === undefined ? undefined : readRequiredDateOnly(body.startDate, "startDate"),
+    timezone,
+    status: body.status === undefined ? undefined : readSeriesStatus(body.status),
+    durationMinutes:
+      body.durationMinutes === undefined
+        ? undefined
+        : body.durationMinutes === null
+          ? null
+          : boundedInteger(body.durationMinutes, "durationMinutes", 0, 24 * 60),
+    focus: body.focus === undefined ? undefined : body.focus === null ? null : boundedString(body.focus, "focus", 0, 500),
+    location: body.location === undefined ? undefined : body.location === null ? null : boundedString(body.location, "location", 0, 500),
+    notes: body.notes === undefined ? undefined : body.notes === null ? null : boundedString(body.notes, "notes", 0, 5000),
+    slots: body.slots === undefined ? undefined : readSeriesSlots(body.slots),
+    effectiveFrom: readRequiredDateOnly(body.effectiveFrom, "effectiveFrom"),
+    expectedVersion: boundedInteger(body.expectedVersion, "expectedVersion", 1, Number.MAX_SAFE_INTEGER),
+    mutationKey
+  };
+}
+
+function readSeriesSlots(input: unknown): WorkoutSeriesSlotInput[] {
+  if (!Array.isArray(input) || input.length < 1 || input.length > 7) {
+    throw new AuthApiError("validation", 400, "slots must contain 1 to 7 schedule entries");
+  }
+  const slots = input.map((rawSlot, index) => {
+    const slot = object(rawSlot, `slots[${index}]`);
+    const localTime = boundedString(slot.localTime, `slots[${index}].localTime`, 5, 5);
+    if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(localTime)) {
+      throw new AuthApiError("validation", 400, `slots[${index}].localTime is invalid`);
+    }
+    return {
+      id: optionalPersistedUuid(slot.id),
+      weekday: optionalRepeatDay(slot.weekday) ?? fail(`slots[${index}].weekday is required`),
+      localTime,
+      order: slot.order === undefined ? index : boundedInteger(slot.order, `slots[${index}].order`, 0, 1000),
+      items: readItems(slot.items, MAX_SERIES_SLOT_ITEMS)
+    };
+  });
+  if (new Set(slots.map((slot) => slot.weekday)).size !== slots.length) {
+    throw new AuthApiError("validation", 400, "slots must be unique by weekday");
+  }
+  if (slots.reduce((total, slot) => total + slot.items.length, 0) > MAX_SERIES_TOTAL_ITEMS) {
+    throw new AuthApiError("validation", 400, `series cannot contain more than ${MAX_SERIES_TOTAL_ITEMS} exercise assignments`);
+  }
+  return slots;
+}
+
 function nullableOptional<T>(input: unknown, defaultToNull: boolean, parse: () => T | undefined) {
   if (input === undefined) return defaultToNull ? null : undefined;
   return parse() ?? null;
 }
 
-function readItems(input: unknown): WorkoutItemInput[] {
-  if (!Array.isArray(input)) throw new AuthApiError("validation", 400, "items must be an array");
+function readItems(input: unknown, maxItems = MAX_WORKOUT_ITEMS): WorkoutItemInput[] {
+  if (!Array.isArray(input) || input.length > maxItems) {
+    throw new AuthApiError("validation", 400, `items must be an array with at most ${maxItems} entries`);
+  }
   return input.map((item) => {
     const value = object(item, "item");
     return {
@@ -549,10 +796,16 @@ function serializeSession(session: import("./types").WorkoutSessionRecord) {
     trainerId: session.trainerId,
     clientId: session.clientId,
     workoutTemplateId: session.workoutTemplateId,
+    seriesId: session.seriesId,
+    seriesSlotId: session.seriesSlotId,
     title: session.title,
     status: session.status.toLowerCase(),
+    occurrenceKey: session.occurrenceKey,
     scheduledAt: session.scheduledAt?.toISOString() ?? null,
+    scheduledLocalDate: session.scheduledLocalDate ? dateOnlyToLocalDate(session.scheduledLocalDate) : null,
+    scheduledLocalTime: session.scheduledLocalTime,
     timezone: session.timezone,
+    labelSnapshot: session.labelSnapshot,
     durationMinutes: session.durationMinutes,
     focus: session.focus,
     location: session.location,
@@ -561,6 +814,7 @@ function serializeSession(session: import("./types").WorkoutSessionRecord) {
     startedAt: session.startedAt?.toISOString() ?? null,
     finishedAt: session.finishedAt?.toISOString() ?? null,
     notes: session.notes,
+    version: session.version,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
     deletedAt: session.deletedAt?.toISOString() ?? null,
@@ -596,6 +850,59 @@ function serializeSession(session: import("./types").WorkoutSessionRecord) {
         updatedAt: result.updatedAt.toISOString()
       }))
     }))
+  };
+}
+
+function serializeSeries(series: import("./types").WorkoutSeriesRecord) {
+  return {
+    id: series.id,
+    trainerId: series.trainerId,
+    clientId: series.clientId,
+    label: series.label,
+    startDate: dateOnlyToLocalDate(series.startDate),
+    timezone: series.timezone,
+    status: series.status.toLowerCase(),
+    durationMinutes: series.durationMinutes,
+    focus: series.focus,
+    location: series.location,
+    notes: series.notes,
+    scheduleVersion: series.scheduleVersion,
+    version: series.version,
+    generationThrough: series.generationThrough ? dateOnlyToLocalDate(series.generationThrough) : null,
+    createdAt: series.createdAt.toISOString(),
+    updatedAt: series.updatedAt.toISOString(),
+    slots: series.slots.map((slot) => ({
+      id: slot.id,
+      seriesId: slot.seriesId,
+      weekday: slot.weekday,
+      localTime: slot.localTime,
+      revision: slot.revision,
+      order: slot.order,
+      items: slot.items.map((item) => ({
+        id: item.id,
+        seriesId: item.seriesId,
+        seriesSlotId: item.seriesSlotId,
+        exerciseId: item.exerciseId,
+        order: item.order,
+        titleSnapshot: item.titleSnapshot,
+        resultType: item.resultType,
+        supersetWithNext: item.supersetWithNext,
+        plannedSetTargets: item.plannedSetTargets,
+        plannedSets: item.plannedSets,
+        plannedReps: item.plannedReps,
+        plannedWeight: item.plannedWeight,
+        plannedDurationSec: item.plannedDurationSec,
+        restSeconds: item.restSeconds,
+        notes: item.notes
+      }))
+    }))
+  };
+}
+
+function serializeSeriesMutation(result: import("./types").WorkoutSeriesMutationResult) {
+  return {
+    series: serializeSeries(result.series),
+    workoutSessions: result.workoutSessions.map(serializeSession)
   };
 }
 
@@ -805,8 +1112,38 @@ function optionalClientStatus(input: unknown): "active" | "archived" | undefined
 function optionalSessionStatus(input: unknown): WorkoutSessionStatusRecord | undefined {
   const value = optionalString(input)?.toUpperCase();
   if (!value) return undefined;
-  if (value === "PLANNED" || value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELLED") return value;
+  if (value === "PLANNED" || value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELLED" || value === "SUPERSEDED") return value;
   throw new AuthApiError("validation", 400);
+}
+
+function readSeriesStatus(input: unknown): import("./types").WorkoutSeriesStatusRecord {
+  const value = requiredString(input, "status").toUpperCase();
+  if (value === "ACTIVE" || value === "PAUSED" || value === "ENDED") return value;
+  throw new AuthApiError("validation", 400, "status is invalid");
+}
+
+function readRequiredDateOnly(input: unknown, name: string) {
+  const value = boundedString(input, name, 10, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new AuthApiError("validation", 400, `${name} must use YYYY-MM-DD`);
+  try {
+    return localDateToDateOnly(value);
+  } catch {
+    throw new AuthApiError("validation", 400, `${name} is invalid`);
+  }
+}
+
+function validateTimezone(timezone: string) {
+  try {
+    assertTimezone(timezone);
+  } catch {
+    throw new AuthApiError("validation", 400, "timezone is invalid");
+  }
+}
+
+function readIdempotencyKey(request: FastifyRequest) {
+  const header = request.headers["idempotency-key"];
+  const value = Array.isArray(header) ? header[0] : header;
+  return boundedString(value, "Idempotency-Key", 8, 200);
 }
 
 function fail(message: string): never {
