@@ -11,7 +11,7 @@ RUN npm ci
 
 COPY server ./server
 COPY src ./src
-COPY tsconfig.json expo-env.d.ts ./
+COPY tsconfig.json ./
 
 RUN npm run api:prisma:generate
 
